@@ -36,7 +36,7 @@ After cloning the repo, perform the following steps:
 9.  Follow directions in README.1st
 10. cd ../../velvet/input
 11. Follow directions in README.1st
-12  cd ../../
+12. cd ../../
 13. sh ./buildBench.sh
 14. perl ./runBench.pl
 
