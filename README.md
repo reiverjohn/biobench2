@@ -12,18 +12,31 @@ INSTALLATION
 After cloning the repo, perform the following steps:
 
 1.  cd <biobench2 sourcedir>
+
 2.  cd HMMER/input
+
 3.  tar xvf inputData.tgz
+
 4.  cd ../../MUMmer/input
+
 5.  tar xvf inputData.tgz
+
 6.  cd ../../QuEST/input
+
 7.  Follow directions in README.1st
+
 8.  cd ../../BLAST/input
+
 9.  Follow directions in README.1st
+
 10. cd ../../velvet/input
+
 11. Follow directions in README.1st
+
 12  cd ../../
+
 13. sh ./buildBench.sh
+
 14. perl ./runBench.pl
 
 RESULTS
