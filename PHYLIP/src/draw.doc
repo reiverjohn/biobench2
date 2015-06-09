@@ -1,0 +1,693 @@
+
+                                                                   version 3.5c
+
+
+                             DRAWTREE and DRAWGRAM
+
+(c) Copyright  1986-1993  by  Joseph  Felsenstein  and  by  the  University  of
+Washington.  Written by Joseph Felsenstein.  Permission is granted to copy this
+document provided that no fee is charged for it and that this copyright  notice
+is not removed.
+
+     DRAWTREE and DRAWGRAM are interactive tree-plotting programs that  take  a
+tree  description  in  a  file and read it, and then let you interactively make
+various settings and then plot the tree on a laser  printer,  plotter,  or  dot
+matrix  printer.   In  many  cases  (with  IBM PC graphics, with a DEC graphics
+terminal or with a Tektronix-compatible graphics terminal) you can preview  the
+resulting  tree.  This allows you to modify the tree until you like the result,
+then plot the result.  DRAWTREE plots unrooted trees and DRAWGRAM plots  rooted
+cladograms and phenograms.  On good plotters or laser printers both can produce
+fully publishable results.  On dot matrix printers the results look grainy  but
+are good enough for overhead transparencies or slides for presentations.
+
+     These  programs  are  descended  from  PLOTGRAM  and  PLOTREE  written  by
+Christopher  Meacham.   I  have incorporated his code for fonts and his plotter
+drivers, and in DRAWTREE have used some of his code for drawing unrooted trees.
+In  both  programs  I  have  also  included  some  plotter driver code by David
+Swofford, Julian Humphries and George D.F. "Buz" Wilson, to all of  whom  I  am
+very  grateful.   Mostly, however, they consist of my own code.  The font files
+are printable-character recodings of the public-domain Hershey  fonts,  recoded
+by Christopher Meacham.
+
+     This document will describe the features common  to  both  programs.   The
+documents  for  DRAWTREE  and  DRAWGRAM describe the particular choices you can
+make in each of those  programs.   The  Appendix  to  this  documentation  file
+contains  some pieces of C code that can be inserted to make the program handle
+another plotting device -- the plotters by Calcomp.
+
+
+                             A Short Introduction
+
+     To use DRAWTREE and DRAWGRAM, you must have
+
+     (1) The compiled version of the program.   If  you  have  not  obtained  a
+version  of  PHYLIP  precompiled  for  your  machine, you will have to take the
+source code given here and modify it for your C compiler and then  compile  it.
+This is not too hard: it is discussed below.
+
+     (2) A tree file.  Trees are described in the  nested-parenthesis  notation
+used  throughout  PHYLIP  and  standardized  in  an informal meeting of program
+authors in Durham, New Hampshire in June, 1986.  Trees for both programs may be
+either  bifurcating  or  multifurcating, and may either have or not have branch
+lengths.  Tree files produced by the PHYLIP programs are in this form.
+
+     (3) A font file.  There are six font files distributed with PHYLIP:  these
+consist of three Roman, two Italic, and one Russian Cyrillic font, all from the
+public-domain Hershey Fonts, in ASCII  readable  form.   The  details  of  font
+representation  need  not  concern  you; all you need to do is to copy the font
+file corresponding to the font you want into the  appropriate  directory  under
+the  appropriate  file  name,  and let the program use it.   Or you can let the
+program ask you for the name of the font file, which it will do if it does  not
+find  one  itself.    The  six fonts are, respectively, a one- and a two-stroke
+sans-serif Roman font, a three-stroke serifed Roman font, a two- and  a  three-
+
+
+stroke  serifed  Italic  font,  and  a two-stroke Cyrillic font for the Russian
+language.  If this is not clear  just  try  them  all.   Note  that  for  Apple
+Laserwriters  (or other Postscript printers) several built-in fonts can be used
+too.
+
+     (4) A plotting device, and if possible a screen on which you  can  preview
+the  plot.   The programs work with Postscript-compatible laser printers, laser
+printers  compatible  with  the  Hewlett-Packard  Laserjet   series,   plotters
+including Hewlett-Packard models, dot matrix printers including models by Epson
+and Apple, graphics terminals from DEC and Tektronix, IBM PC graphics  screens,
+the PCX file format for the PC Paintbrush painting program, the PICT format for
+the MacDraw drawing program, the file format for the  public  domain  X-windows
+drawing  program  "xfig", the X Bitmap format for X-windows, and, strangest and
+most wonderful of all, the input format for the public-domain  ray-tracing  (3-
+dimensional  rendering)  program  "rayshade".   You  choose  the  plotting  and
+previewing devices from a menu at run time, and these can be different.   There
+are  places  in the source code for the program where you can insert code for a
+new plotter, should you want to do that.
+
+     Once you have all these the programs should be  fairly  self  explanatory,
+particular  if  you can preview your plots so that you can discover the meaning
+of the different options by trying them out.
+
+     Once you have a compiled version of the appropriate program, say DRAWGRAM,
+and  a  file  called  (say)  TREEFILE with the tree in it, and a font file (say
+FONT2 which you have copied as a file called FONTFILE), all you do is  run  the
+program  DRAWGRAM.   It  should automatically read the font and tree files, and
+will ask you to choose the graphics devices.  Then it  will  let  you  see  the
+options  it has chosen, and ask you if you want to change these.  Once you have
+modified those that you want to, you can tell it to accept those.  The  program
+will  then  allow  you  to preview the tree on your screen, if you have told it
+that you have an appropriate graphics screen (the PCDOS and 386 PCDOS  versions
+of  the  program  will  automatically  adapt  to  a  number of the commonest PC
+graphics boards, and the Macintosh version will adapt to the Macintosh screen).
+After  previewing  the tree, it will ask if you are ready to plot the tree.  If
+you say no, it will once again allow you to change options and will  the  allow
+you to preview the tree again, and so on as many times as you want.  If you say
+yes, then it will write a file called (say) PLOTFILE.  If this file  is  copied
+directly  to your plotter or printer, it should result in a beautifully plotted
+tree.  If the final plotting device is a DEC or PCDOS graphics screen,  it  may
+not write a plot file but will plot directly on the screen.
+
+     Having read the above, you may be ready to run  the  program.   Below  you
+Will  find  more information about representation of trees in the tree file, on
+the different kinds of graphics devices supported by this program, and  on  how
+to  recompile  these  programs.  If you have (for example) a PCDOS system and a
+compiled version of the program, then all you have to do is have  a  tree  file
+called  TREEFILE,  a font file called FONTFILE, and run the program.  Then copy
+PLOTFILE to your plotter or printer.
+
+
+                                     Trees
+
+     The New Hampshire Standard for  representing  trees  in  computer-readable
+form  makes  use  of  the  correspondence between trees and nested parentheses,
+noticed in 1857 by the famous English mathematician Arthur Cayley.  If we  have
+this rooted tree:
+
+
+
+
+
+
+                         A                 D
+                          \         E     /
+                           \   C   /     /
+                            \  !  /     /
+                             \ ! /     /
+                        B     \!/     /
+                         \     o     /
+                          \    !    /
+                           \   !   /
+                            \  !  /
+                             \ ! /
+                              \!/
+                               o
+                               !
+                               !
+
+then in the tree file it is represented by the following sequence of  printable
+characters, starting at the beginning of the file:
+
+(B,(A,C,E),D);
+
+The tree ends with a semicolon.  Everything after the semicolon  in  the  input
+file is ignored, including any other trees.  The bottommost node in the tree is
+an interior node, not a tip.  Interior nodes  are  represented  by  a  pair  of
+matched  parentheses.   Between  them are representations of the nodes that are
+immediately descended from that node, separated by commas.   In the above tree,
+the  immediate  descendants  are  B,  another  interior node, and D.  The other
+interior  node  is  represented   by   a   pair   of   parentheses,   enclosing
+representations of its immediate descendants, A, C, and E.
+
+     Tips are represented by  their  names.   A  name  can  be  any  string  of
+printable  characters except blanks, colons, semcolons, parentheses, and square
+brackets.  In the programs a maximum of 30 characters are  allowed  for  names:
+this  limit can easily be increased by recompiling the program and changing the
+constant declaration for "nch" at the beginning of the program.
+
+     Because you may want to include a blank in a name, it is assumed  that  an
+underscore  character  ("_") stands for a blank; any of these in a name will be
+converted to a blank when it is read in.  Any name may also be  empty:  a  tree
+like
+
+(,(,,),);
+
+is allowed.   Trees can be multifurcating at any level (while in  many  of  the
+programs multifurcations of user-defined trees are not allowed or restricted to
+a trifurcation at the  bottommost  level,  these  programs  do  make  any  such
+restriction).
+
+     Branch lengths can be incorporated into a tree by putting a  real  number,
+with  or  without  decimal  point,  after a node and preceded by a colon.  This
+represents the length of the branch immediately  below  that  node.   Thus  the
+above tree might have lengths represented as:
+
+(B:6.0,(A:5.0,C:3.0,E:4.0):5.0,D:11.0);
+
+These programs will be able to make use of this  information  only  if  lengths
+exist for every branch, except the one at the bottom of the tree.
+
+     The tree starts on the first  line  of  the  file,  and  can  continue  to
+subsequent  lines.  It is best to proceed to a new line, if at all, immediately
+after a comma.  Blanks can be inserted at any point except in the middle  of  a
+
+
+species name or a branch length.
+
+     The above description is of a subset of the New Hampshire  Standard.   For
+example,  interior  nodes  can  have  names  in  that  standard, but if any are
+included the present programs will omit them.
+
+     To help you understand this tree representation, here are  some  trees  in
+the above form:
+
+((raccoon:19.19959,bear:6.80041):0.84600,((sea_lion:11.99700,
+seal:12.00300):7.52973,((monkey:100.85930,cat:47.14069):20.59201,
+weasel:18.87953):2.09460):3.87382,dog:25.46154);
+
+(Bovine:0.69395,(Gibbon:0.36079,(Orang:0.33636,(Gorilla:0.17147,(Chimp:0.19268,
+Human:0.11927):0.08386):0.06124):0.15057):0.54939,Mouse:1.21460);
+
+(Bovine:0.69395,(Hylobates:0.36079,(Pongo:0.33636,(G._Gorilla:0.17147,
+(P._paniscus:0.19268,H._sapiens:0.11927):0.08386):0.06124):0.15057):0.54939,
+Rodent:1.21460);
+
+();
+
+((A,B),(C,D));
+
+(Alpha,Beta,Gamma,Delta,,Epsilon,,,);
+
+     The New Hampshire Standard was  adopted  June  26,  1986  by  an  informal
+committee  meeting  during  the  Society for the Study of Evolution meetings in
+Durham, New Hampshire and consisting of James Archie, William H.E.  Day,  Wayne
+Maddison, Christopher Meacham, F. James Rohlf, David Swofford, and myself.
+
+
+                                   Plotters
+
+     When the programs run they ask you to choose the final plotting device and
+to  indicate  whether  there  is  a  preview  screen and if so what it is.  The
+choices for previewing are a subset of those available for plotting,  and  they
+can  be  different  (the  most useful combination will be a previewing graphics
+screen with a hard-copy plotter or printer).
+
+     Here are the choices, with some comments on each:
+
+     Apple Laserwriter (with Postscript).  This means  that  the  program  will
+generate  a  file containing Postscript commands as its plot file.  This can be
+printed on any Postscript-compatible laser printer.  The page size  is  assumed
+to  be  8.5  by 11 inches, but as plotting is within this limit A4 metric paper
+should work well too.  This is  the  best  quality  output  option.   For  this
+printer  the menu options in DRAWGRAM and DRAWTREE that allow you to select one
+of the built-in fonts will work.  I  have  been  able  to  use  fonts  Courier,
+Times-Roman,  and  Helvetica.   The others have eluded me for some reason known
+only to those who really understand Postscript.
+
+     If your laser printer, supposedly Postcript-compatible, refuses  to  print
+the  plot  file,  you  might  consider whether the first line of the plot file,
+which starts with "%!" needs to be altered  somehow  or  eliminated.   If  your
+Laserwriter  is  hooked  to  a Macintosh it will be necessary to persuade it to
+print the plot file.  The public-domain utility SendPS enables one to do  that:
+it  is  provided by us with the Macintosh executable version of PHYLIP.  If you
+are compiling your own Macintosh version you should try to get  SendPS:  it  is
+available  in libraries of Macintosh public domain programs.  I have heard that
+it does not work with the new System 7 version of the Mac operating system, but
+
+
+that there is on the Printers diskette of the System 7 distribution diskettes a
+utility called Laserwriter Font Utility that can accomplish the same task.
+
+     Hewlett-Packard Laserjet laser printers.  This extremely popular  line  of
+laser printers is also emulated by many other brands of laser printer, in fact,
+most of those that do not have Postscript.  One limitation of the PCL4  command
+language  for  these printers is that they do not have primitive operations for
+drawing arbitrary diagonal lines.  This means that  they  must  be  treated  by
+these  programs  as  if  they  were dot matrix printers with a great many dots.
+This makes output slow.  The user will be asked to  choose  the  dot  resoluton
+(75,  150, or 300 dots per inch).  The 300 dot per inch setting is not possible
+unless you have expanded the laser printer's memory  beyond  512K  bytes.   The
+quality of output is also not as good as it might be (I hope to correct this in
+the future) so that the Postscript printers will produce better results even at
+the same resolution.  Note that there are cartridges that can be bought to make
+a  Laserjet  print  Postscript,  and  see  below  (under  Hewlett-Packard  7470
+plotters)  for  the  fact  that Laseret III's can emulate an HP plotter.   I am
+grateful to Kevin Nixon for inadvertantly pointing out that  on  Laserjets  one
+does not have to dump the complete bitmap of a page to plot a tree.
+
+     Tektronix 4010 graphics terminal.  The plot file will contain commands for
+driving  the  Tektronix  series  of  graphics  terminals.   Many other graphics
+terminals are compatible with the Tektronix 4010 and its immediate descendants.
+The  PCDOS version of the public domain communications program Kermit, versions
+2.30 and later, can emulate a Tektronix graphics terminal if the  command  "set
+terminal tek" is given.  Of course that assumes that you are communicating with
+another computer.  There are  also  similar  terminal  emulation  programs  for
+Macintoshes  that  emulate  Tektronix graphics.  On workstations with X windows
+you can use one option of the "xterm" utility to create a  Tektronix-compatible
+window.   On  Sun workstations there is a Tektronix emulator you can run called
+"tektool" which can be used to view the trees.  The Tektronix  option  is  also
+available  for  previewing,  in which case the plotting commands will be not be
+written into a file but will be sent directly to your terminal.
+
+     Hewlett-Packard 7470.  This means that the program will generate a file as
+its  plot  file  which  uses the HPGL graphics language.  Hewlett-Packard 7470,
+7475, and many other plotters are compatible with  this.   The  paper  size  is
+again  assumed  to be 8.5 by 11 inches (again, A4 should work well too).  It is
+assumed that there are two pens, a finer one for drawing names,  and  the  HPGL
+commands  will  call for switching between these.  The Hewlett-Packard Laserjet
+III printer can emulate an HP plotter, and this feature is included in its PCL5
+command  language  (but  not  in the PCL4 command languages of earlier Hewlett-
+Packard models).
+
+     IBM PC graphics screens.  The code for this in the programs  is  available
+in the precompiled PCDOS executables or if you compile the programs yourself in
+C.   The graphics  modes  supported  are  CGA,  EGA,  VGA,  Hercules,  and  ATT
+(Olivetti).   modes  if  you  want.    This  option is available for previewing
+plots, and in either previewing or final plotting  it  draws  directly  on  the
+screen and does not make a plot file.
+
+     Macintosh graphics screens.  Code  has  been  inserted  which  will,  when
+compiled  with  Think  C from Symantec, open a graphics window and draw preview
+trees in it.  At the moment I have not provided this option for final  plotting
+of  the  tree (this would add nothing).  The window is 500 x 342 pixels and has
+the tree drawn in black on a white background.  Once the preview is  drawn  the
+program  runs in a tight loop, waiting for you to press the mouse button.  When
+it is pressed, the text window is made active and comes to the front.
+
+     DEC ReGIS (VT 240 graphics terminal).  The DEC ReGIS standard is  used  by
+the  VT240  and  VT340 series terminals by DEC (Digital Equipment Corporation).
+
+
+There are many graphics terminals that emulate the VT240 or VT340 as well.  For
+example  the DECTerm windows in many versions of Digital's DECWindows windowing
+system do so.  This option is available  for  previewing  trees  as  well.   In
+preview  mode  it does not write a plot file but sends the commands directly to
+the screen; in final mode it writes a plot file.  In  DEC's  version  of  Unix,
+Ultrix version 4.1 and later, the windowing system allows DEC ReGIS graphics as
+a default.
+
+     Houston Instruments plotters.  The Houston Instruments  line  of  plotters
+has  also been known as Bausch and Lomb plotters.  The code in the programs for
+these has not been tested recently; I would appreciate someone  trying  it  out
+and  telling  me  whether  it  works.   I  do not have access to such a plotter
+myself.
+
+     Epson printers.  The dot-matrix printers by Epson (starting with the  MX80
+and  continuing on to many other models), as well as the IBM Graphics printers.
+The code here plots in double-density graphics mode.  Many of the later  models
+are  capable  of  higher-density graphics but not with every dot printed.  This
+density was chosen for reasonably wide compatibility.   Many  other  dot-matrix
+printers  on the market have graphics modes compatible with the Epson printers.
+I cannot guarantee that the plot files generated  by  these  programs  will  be
+compatible  with  all  of  these,  but  they do work on Epsons.  They have also
+worked, in our hands, on IBM Graphics Printers.  There are many  printers  that
+claim  compatibility  with these too, but I do not know whether it will work on
+all of them.  If you have trouble with any of these you might  consider  trying
+in the epson option of procedure initplotter to put in a fprintf statement that
+writes to plotfile an escape sequence that changes line spacing.
+
+     Prowriter/Imagewriter.  The trading firm C. Itoh distributes this line  of
+dot-matrix printers, which is made by Tokyo Electric (TEC) and also was sold by
+NEC under the product number PC8023.  These are 9-pin dot matrix printers.   In
+a  slightly  modified  form they are also the Imagewriter printer sold by Apple
+for their Macintosh line.  The same escape codes seem to work on both machines,
+the  Apple  version  being a serial interface version.  They are not related to
+the IBM Proprinter, despite the name.
+
+     Toshiba 24-pin printers.  The 24-pin printers from Toshiba are covered  by
+this  option.   These  include  the  P1340,  P1350, P1351, P351, 321, and later
+models.  For a 24-pin printer the plot file can get fairly large as it contains
+a  bit  map of the image and there are more bits with a 24-pin image.  Printing
+will be slow.
+
+     Okidata printers.  The ML81, 82, 83 and ML181, 182, 183 line of dot-matrix
+printers  from Okidata had their own graphics codes and those are dealt with by
+this option.  The later Okidata ML190 series emulates IBM Graphics Printers  so
+that you should not use this option for them but the option for that printer.
+
+     PC Paintbrush PCX files.  It is desirable to have the program output trees
+in  at  least  one  format  that  can  be  loaded into a paint program, so that
+additional symbols and labels can be added.  I have chosen the PCX file  format
+supported by the PC Paintbrush program.  This file format is simple and is read
+by many other programs as well.  The user must choose one of three  resolutions
+for  the  file,  640x480, 800x600, or 1024x768.  The file is a monochrome paint
+file.
+
+     Xfig files.  This is the file format of the public-domain drawing  program
+Xfig  available  for  X-windows  systems  on  Unix  workstations.   Xfig can be
+obtained by ftp from various network servers such as export.lcs.mit.edu in
+    /contrib/R5fixes/xfig-patches/xfig.2.1.6.tar.Z.
+You should also get transfig, which contains the fig2dev program which converts
+xfig  output to the various printer languages.  Transfig is on the same machine
+
+
+in
+    /contrib/R5fixes/transfig-patches/transfig.2.1.6.tar.Z.
+The present format does not write the species labels  in  fonts  recognized  by
+Xfig  but draws them with lines.  This often makes the names look rather bumpy.
+We hope to change this soon.
+
+     X Bitmap files.  This produces an X-bitmap  for  the  X  windowing  system
+which  can  be  displayed  on X screens.  You will be asked for the size of the
+bitmap (e.g., 16x16, or 256x256, etc.).  This  format  cannot  be  printed  out
+without  further  format  conversion  but is useable for backgrounds of windows
+("wallpaper").  This can be a very bulky format if you choose a large bitmap.
+
+     Rayshade files.  This is the most unusual format of all.  It is the  input
+format  for the public-domain ray-tracing program "rayshade" which is available
+for  Unix  systems  via  anonymous  ftp  at  princeton.edu  in  the   directory
+pub/Graphics  (note  the  capital letter).  Rayshade takes files of this format
+and turns them into color scenes in "raw"  raster  format  (also  called  "MTV"
+format  after  the common raytracing program of the same name).  If you get the
+pbmplus  package  (available  via  anonymous  ftp  from  gatekeeper.dec.com  in
+/.9/X11/contrib/ppbmplus10dec91.tar.Z)  and  compile  it on your system you can
+use the "mtvtoppm" and "ppmtogif" programs to convert this into the widely-used
+GIF  raster  format.  (the  pbmplus package will also allow you to convert into
+tiff, pcx and many other formats) The resultant image will show a tree floating
+above  a landscape, rendered in a real-looking 3-dimensional scene with shadows
+and illumination.  Rayshade is slow:  it  took  15  minutes  on  my  DECstation
+5000/200 to make one illustration at 512x512 resolution.  It is possible to use
+it to make two scenes that together are a stereo pair.  When  producing  output
+for  Rayshade you will be asked by the DRAWGRAM or DRAWTREE whether you want to
+reset the values for the colors you want for the tree, the species  names,  the
+background, and the desired resolution.
+
+     Conversion from these formats to others is also  possible.   The  graphics
+conversion  utility  HiJaak, from Inset Systems (71 Commerce Drive, Brookfield,
+Connecticut 06804, (203) 775-5866) is a PCDOS program  that  converts  numerous
+graphic  file formats on input and output.  It can read many formats, including
+the HPGL format and write many formats.  It is  available  from  many  software
+discount houses.  There is also a public-domain program by Jef Poskanzer called
+"PBMPLUS" that interconverts many bitmap formats.
+
+
+                      Problems Copying Files to Printers
+
+     A problem may arose in how to get the plot files to the plotting device or
+printer.   One  has to copy them directly, but one should be careful to not let
+your serial or parallel port strip off the high-order bits in the bytes if  you
+are  using one of the options that generate nonprintable characters.  This will
+be true for most of the dot matrix printers and for bitmaps  dumped  to  an  HP
+Laserjet.   This  can  be  a problem under Unix or PCDOS.  If, for example, you
+have a dot-matrix printer connected to a parallel port under PCDOS, to copy the
+file  PLOTFILE  to the printer without losing the high-order bits, you must use
+the /B switch on the COPY command:
+  COPY/B PLOTFILE PRN:
+
+
+                        The VAX VMS Line Length Problem
+
+     A problem that may occur under some operating  systems,  particularly  the
+VMS  operating  system  for  DEC  VAXes,  is having a plot file with lines that
+exceed some operating system limit such as 255 characters.  This can happen  if
+you  are  using  the Tektronix option.   You should set your terminal type with
+the command   $ SET TERM/NOWRAP/ESCAPE which will allow Tektronix and DEC ReGIS
+
+
+plots  to  successfully  appear  on  your  terminal.   That  way, if you have a
+terminal capable of plotting one of these kinds of plots, the operating  system
+will  not  interfere with the process.  It will not be possible to use files of
+Tektronix commands as final plot files, however, as the  TYPE  command  usually
+used  to get them to appear on the screen does not allow lines longer than 2048
+bytes, and Tektronix plots are single lines longer than that.
+
+
+                       Other problems and opportunities
+
+     Another problem is adding labels  (such  as  vertical  scales  and  branch
+lengths)  to  the  plots produced by this program.  This may require you to use
+the PCX, PICT, or Xfig file format and use a draw or paint program to add them.
+
+     I would like to add more fonts.  The present fonts are recoded versions of
+the  Hershey  fonts.  They are legally publicly distributable.  Most other font
+families on the market are not public domain and I  cannot  afford  to  license
+them  for distribution.  Some people have noticed that the Hershey fonts, which
+are drawn by a series of straight lines, have noticeable  angles  in  what  are
+supposed  to  be  curves,  when  they  are printed on modern laser printers and
+looked at closely.  This  is  less  a  problem  than  one  might  think  since,
+fortunately,  when  scientific  journals  print  a tree it is usually shrunk so
+small that these imperfections (and often the tree itself) are hard to see!
+
+     One more font that could be added from the Hershey font  collection  would
+be  a Greek font.  If Greek users would find that useful I could add it, but my
+impression is that they publish mostly in English anyway.
+
+
+            Writing Code for a new Plotter, Printer or File Format
+
+     The C version of these programs consists of two C  programs,  "drawgram.c"
+and  "drawtree.c".   Each  of  these  has  a  common  section  of  code  called
+"drawgrahics.c" and a common header file, "drawgraphics.h".   IN  addition  the
+Macintosh  version  requires  two  more files, "interface.c" and "interface.h".
+All of the graphics commands that are common to both programs will be found  in
+"drawgraphics.c".   The  following  instructions  for  writing your own code to
+drive a different kind of printer, plotter, or graphics  file  format,  require
+you  only  to  make  changes in "drawgraphics.c".  The two programs can then be
+recompiled.
+
+     If you want to write code for other printers,  plotters,  or  vector  file
+formats,  this  is not too hard.  The plotter option "U" is provided as a place
+for you  to  insert  your  own  code.   Chris  Meacham's  system  was  to  draw
+everything,  including the characters in the names and all curves, by drawing a
+series of straight lines.  Thus you need only master  your  plotter's  commands
+for  drawing  straight  lines.   In  procedure "plotrparms" you must set up the
+values of variables "xunitspercm" and "yunitspercm", which are  the  number  of
+units  in  the  x and y directions per centimeter, as well as variables "xsize"
+and "ysize" which are the size of the plotting area in  centimeters  in  the  x
+direction  and  the y direction.  A variable "penchange" of a user-defined type
+is set to "yes" or "no" depending on whether the commands  to  change  the  pen
+must  be  issued  when switching between plotting lines and drawing characters.
+Even though dot-matrix printers do not have pens, penchange should  be  set  to
+"yes"  for them.  In PROCEDURE plot you must issue commands to draw a line from
+the current position (which is at (xnow, ynow) in the plotter's units)  to  the
+position  (xabs,  yabs), under the convention that the lower-left corner of the
+plotting area is (0.0, 0.0).  In procedures "initplotter"  and  "finishplotter"
+you  must  issue  commands  to  initialize  the plotter and to finish plotting,
+respectively.  If the pen is to be changed an appropriate piece of code must be
+inserted in procedure "penchange".
+
+
+     For dot matrix printers  and  raster  graphics  matters  are  a  bit  more
+complex. The procedures "plotrparms", "initplotter", "finishplotter" and "plot"
+still respectively set up the parameters for the plotter, initialize it, finish
+a  plot, and plot one line.  But now the plotting consists of drawing dots into
+a two-dimensional array called "stripe".  Once the plot is finished this  array
+is printed out.  In most cases the array is not as tall as a full plot: instead
+it is a rectangular strip across it.  When the program has finished drawing  in
+ther  strip,  it  prints it out and then moves down the plot to the next strip.
+For example, for Hewlett-Packard Laserjets we have defined the  strip  as  2550
+dots  wide and 20 dots deep.  When the program goes to draw a line, it draws it
+into the strip and ignores any part of it that falls outside the  strip.   Thus
+the program does a complete plotting into the strip, then prints it, then moves
+down the diagram by (in this case) 20 dots, then does a complete plot into that
+strip, and so on.
+
+     To work with a new raster or dot matrix format, you will  have  to  define
+the  desired width of a strip ("strpwide"), the desired depth ("strpdeep"), and
+how many lines of bytes must be printed out to  print  a  strip.   For  example
+Toshiba  P351  printers in graphics mode print strips of dots 1350 bits wide by
+24 bits deep, each column of 24 bits printing out  as  consecutive  four  bytes
+with  6 bits each.  In that case, one prints out a strip by printing up to 1350
+groups of 4 bytes.  "strpdiv" is 4, and "strpwide" is 1350, and  "strpdeep"  is
+24.   procedure  "striprint"  is  the  one  that  prints  out  a strip, and has
+special-case code for the different  printers  and  file  formats.    For  file
+formats,  all  of  which print out a single row of dots at a time, the variable
+"strpdiv" is not used.  The variable "dotmatrix" is set to "true" or "false" in
+procedure  "plotrparms"  according  to whether or not "strpdiv" is to be used.
+procedure "plotdot" sets a single dot in the array "strip"  to  1  at  position
+(xabs,  yabs).   The  coordinates  run  from 1 at the top of the plot to larger
+numbers as we proceed down the page.  Again, there  is  special-case  code  for
+different printers and file formats in that procedure.   You will probably want
+to read the code for some of the dot matrix or file format options if you  want
+to  write  code for one of them.  Many of them have provision for printing only
+part of a line, ignoring parts of it that have no dots to print.
+
+     I would be happy to obtain the resulting code from you to consider  adding
+it  to  this listing so we can cover more kinds of plotters, printers, and file
+formats.
+
+===========================================================================
+
+     APPENDIX 1.  Code to drive some other graphics devices.   These pieces  of
+code are to be inserted in the places reserved for the "Y" plotter option.  The
+variables necessary to  run  this  have  already  been  incorporated  into  the
+programs.
+A global declaration needed near the front of drawtree.c:
+
+Char cchex[16];
+
+Code to be inserted into procedure plotrparms:
+
+  case 'Y':
+    plotter = other;
+    xunitspercm = 39.37;
+    yunitspercm = 39.37;
+    xsize = 25.0;
+    ysize = 25.0;
+    xposition = 12.5;
+    yposition = 0.0;
+    xoption = center;
+    yoption = above;
+
+
+    rotation = 0.0;
+    break;
+
+
+Code to be inserted into procedure plot:
+
+Declare these variables at the beginning of the procedure:
+
+long n, inc, xinc, yinc, xlast, ylast, xrel,
+   yrel, xhigh, yhigh, xlow, ylow;
+Char quadrant;
+
+and insert this into the switch statement:
+
+  case other:
+    if (penstatus == pendown)
+      putc('H', plotfile);
+    else
+      putc('D', plotfile);
+    xrel = (long)floor(xabs + 0.5) - xnow;
+    yrel = (long)floor(yabs + 0.5) - ynow;
+    xnow = (long)floor(xabs + 0.5);
+    ynow = (long)floor(yabs + 0.5);
+    if (xrel > 0) {
+      if (yrel > 0)
+        quadrant = 'P';
+      else
+        quadrant = 'T';
+    } else if (yrel > 0)
+      quadrant = 'X';
+    else
+      quadrant = '1';
+    xrel = labs(xrel);
+    yrel = labs(yrel);
+    if (xrel > yrel)
+      n = xrel / 255 + 1;
+    else
+      n = yrel / 255 + 1;
+    xinc = xrel / n;
+    yinc = yrel / n;
+    xlast = xrel % n;
+    ylast = yrel % n;
+    xhigh = xinc / 16;
+    yhigh = yinc / 16;
+    xlow = xinc & 15;
+    ylow = yinc & 15;
+    for (i = 1; i <= n; i++)
+      fprintf(plotfile, "%c%c%c%c%c",
+              quadrant, cchex[xhigh - 1], cchex[xlow - 1], cchex[yhigh - 1],
+              cchex[ylow - 1]);
+    if (xlast != 0 || ylast != 0)
+      fprintf(plotfile, "%c%c%c%c%c",
+              quadrant, cchex[-1], cchex[xlast - 1], cchex[-1],
+              cchex[ylast - 1]);
+    break;
+
+
+Code to be inserted into procedure initplotter:
+
+  case other:
+    cchex[-1] = 'C';
+
+
+    cchex[0] = 'D';
+    cchex[1] = 'H';
+    cchex[2] = 'L';
+    cchex[3] = 'P';
+    cchex[4] = 'T';
+    cchex[5] = 'X';
+    cchex[6] = '1';
+    cchex[7] = '5';
+    cchex[8] = '9';
+    cchex[9] = '/';
+    cchex[10] = '=';
+    cchex[11] = '#';
+    cchex[12] = '"';
+    cchex[13] = ''';
+    cchex[14] = '^';
+    xnow = 0.0;
+    ynow = 0.0;
+    fprintf(plotfile, "CCCCCCCCCC");
+    break;
+
+
+Code to be inserted into procedure finishplotter:
+
+  case other:
+    plot(penup, 0.0, yrange + 50.0);
+    break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

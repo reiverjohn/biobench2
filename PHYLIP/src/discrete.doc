@@ -1,0 +1,378 @@
+
+                                                                   version 3.5c
+
+
+              DOCUMENTATION FOR (0,1) DISCRETE CHARACTER PROGRAMS
+
+
+(c) Copyright  1986-1993  by  Joseph  Felsenstein  and  by  the  University  of
+Washington.  Written by Joseph Felsenstein.  Permission is granted to copy this
+document provided that no fee is charged for it and that this copyright  notice
+is not removed.
+
+     These programs are intended for the use of morphological systematists  who
+are  dealing  with  discrete  characters, or by molecular evolutionists dealing
+with presence-absence data on restriction sites.  The characters are assumed to
+be coded into a series of (0,1) two-state characters.  For most of the programs
+there are two other states  possible,  "P",  which  stands  for  the  state  of
+Polymorphism  for both states (0 and 1), and "?", which stands for the state of
+ignorance: it is the state "unknown", or "does not apply".  The state  "P"  can
+also be denoted by "B", for "both".
+
+     There is a method invented by Sokal and Sneath (1963) for linear sequences
+of  character  states, and fully developed for branching sequences of character
+states by Kluge and Farris (1969) for recoding a multistate  character  into  a
+series  of  two-state  (0,1)  characters.  Suppose we had a character with four
+states whose character-state tree had the rooted form:
+
+               1 ---> 0 ---> 2
+                      !
+                      !
+                      V
+                      3
+
+so that 1 is the ancestral state and  0,  2  and  3  derived  states.   We  can
+represent this as three two-state characters:
+
+                Old State           New States
+                --- -----           --- ------
+                    0                  001
+                    1                  000
+                    2                  011
+                    3                  101
+
+The three new states correspond to the three  arrows  in  the  above  character
+state  tree.  Possession of one of the new states corresponds to whether or not
+the old state had that arrow  in  its  ancestry.   Thus  the  first  new  state
+corresponds  to  the  bottommost arrow, which only state 3 has in its ancestry,
+the second state to the rightmost of the top arrows, and the third state to the
+leftmost  top  arrow.  This coding will guarantee that the number of times that
+states arise on the tree (in programs MIX, MOVE, PENNY and BOOT) or the  number
+of  polymorphic states in a tree segment (in the Polymorphism option of DOLLOP,
+DOLMOVE, DOLPENNY and DOLBOOT) will correctly correspond  to  what  would  have
+been  the  case  had  our programs been able to take multistate characters into
+account.  Although I have shown the above character state tree as  rooted,  the
+recoding method works equally well on unrooted multistate characters as long as
+the connections between the states are known and contain no loops.
+
+     However, in the default option of programs DOLLOP, DOLMOVE,  DOLPENNY  and
+DOLBOOT  the  multistate recoding does not necessarily work properly, as it may
+lead the program to reconstruct nonexistent state combinations such as 010.  An
+example  of  this  problem  is  given  in  my paper on alternative phylogenetic
+methods (1979).
+
+
+     If you have multistate character data, you  may  want  to  do  the  binary
+recoding  yourself.   Thanks to Christopher Meacham, the package now contains a
+program, FACTOR, which will do  the  recoding  itself.   For  details  see  the
+documentation file for FACTOR.
+
+     It ought to be mentioned that the discrete  characters  programs  in  this
+package do NOT allow one to deal with unordered multistate characters (the case
+where there are, say, six states 0, 1, 2, 3, 4 and where we want to  allow  any
+state  to  change  to any other with one step).  The best that one can do about
+this is the rather unsatisfactory practice of pretending that  the  states  are
+nucleotides  and  using  the  parsimony  and  compatibility  programs  from the
+molecular seqences programs.  This works only for 5 or fewer states  which  can
+be  recoded  to  A,  C,  G,  T  or  "-".  I hope at some point to rewrite these
+programs to deal with unordered states.  So far this has been deferred as a low
+priority.
+
+
+                             COMPARISON OF METHODS
+
+     The methods used  in  these  programs  make  different  assumptions  about
+evolutionary  rates,  probabilities  of  different  kinds  of  events,  and our
+knowledge about the characters or  about  the  character  state  trees.   Basic
+references   on  these  assumptions  are  my  1979,  1981b  and  1983b  papers,
+particularly the latter.  The assumptions of each method are briefly  described
+in  the  documentation  file  for  the corresponding program.  In most cases my
+assertions about what are the assumptions of these methods  are  challenged  by
+others,  whose  papers  I  also cite at that point.  Personally, I believe that
+they  are  wrong  and  I  am  right.   I  must  emphasize  the  importance   of
+understanding  the assumptions underlying the methods you are using.  No matter
+how fancy the algorithms, how maximum the likelihood or how minimum the  number
+of  steps,  your  results  can  only  be  as good as the correspondence between
+biological reality and your assumptions!
+
+
+                                 INPUT FORMAT
+
+     The input format is as described in the general documentation  file.   The
+input  starts  with  a  line containing the number of species and the number of
+characters, then continues with the option information, and  then  the  species
+information.  One option, the U (user tree) option, will require information to
+follow the species information.
+
+     The allowable states are, as just mentioned, 0, 1, P, B,  and  ?.   Blanks
+may  be included between the states (i. e. you can have a species whose data is
+DISCOGLOSS0 1 1 0 1 1 1).  It is possible for extraneous information to  follow
+the  end  of  the character state data on the same line.  For example, if there
+were 7 characters  in  the  data  set,  a  line  of  species  data  could  read
+"DISCOGLOSS0110111 Hello there").
+
+     The binary character data can continue to a new line whenever needed.  The
+characters  are  not  in  the  "aligned"  or  "interleaved"  format used by the
+molecular sequence programs: they have the name and entire  set  of  characters
+for  one  species, then the name and entire set of characters for the next one,
+and so on.  This is known as the sequential format.   Be  particularly  careful
+when  you use restriction sites data, which can be in either the aligned or the
+sequential format for use in RESTML but must be in the  sequential  format  for
+these discrete character programs.
+
+     Errors in the input data will often be detected by the programs, and  this
+will  cause  them  to  issue  an  error message such as 'BAD OUTGROUP NUMBER: '
+together with information as to which  species,  character,  or  in  this  case
+
+
+outgroup  number  is  the  incorrect one.  The program will them terminate; you
+will have to look at the data and figure out what went wrong and fix it.  Often
+an  error  in  the data causes a lack of synchronization between what is in the
+data file and what the program thinks is to be there.  Thus a missing character
+may  cause the program to read part of the next species name as a character and
+complain about its value.  In this type of case you should look for  the  error
+earlier in the data file than the point about which the program is complaining.
+
+
+                          OPTIONS GENERALLY AVAILABLE
+
+     Specific information on options will be given in  the  documentation  file
+associated  with  each  program.  However, some options occur in many programs.
+Many options are selected from the menu  in  each  program,  but  some  require
+information  to  be  put into the beginning of the input file (Particularly the
+Ancestors, Factors, Weights, and Mixtures options).
+
+     Three that require information in the input file are:
+
+1. The A (ancestral states) option.  This indicates that we are specifying  the
+ancestral  states for each character. In the menu the ancestors (A) option must
+be selected.  There should also be, in the input  file  after  the  numbers  of
+species  and  characters,  an A on the first line of the file.  There must also
+be, before the character data, a line or lines giving the ancestral states  for
+each  character.   It will look like the data for a species (the ancestor).  It
+must start with the letter A in the first column.   There  then  follow  enough
+characters  or  blanks  to  complete  the  full length of a species name (e. g.
+"ANCESTOR  ").   Then  the  states  which  are  ancestral  for  the  individual
+characters  follow.   These  may  be  0, 1 or ?, the latter indicating that the
+ancestral state is unknown.
+
+Examples:
+
+ANCESTOR  001??11
+
+or:
+
+A         001??11
+
+The ancestor information can be continued to a new line  and  can  have  blanks
+between  any of the characters in the same way that species character data can.
+When the ancestor option is used, the ancestor is not counted  as  one  of  the
+species in stating the number of species in the data.  The exception is program
+CLIQUE where the ancestor is to be included as  a  regular  species  and  no  A
+option  is available.  (This can also be done in programs MIX, MOVE, and PENNY,
+although I do not advise doing this since it is only correct if the  characters
+are  all following the Wagner Parsimony rules, and the same end can be achieved
+by using the A option).
+
+2. The M (Mixture) option.  In the programs MIX, MOVE, and PENNY the  user  can
+specify  for  each character which parsimony method is in effect.  This is done
+by selecting menu option X (not M) and having on the first line  of  the  input
+file, after the number of species and the number of characters the character M,
+to signal that the Mixture information follows.  There then follows, before the
+species  data,  a  line  or  lines, the first character the first line being M.
+There then follow as many characters as are needed to fill out the length of  a
+species  name, and one letter for each for each character.  These letters are C
+or S  if  the  character  is  to  be  reconstructed  according  to  Camin-Sokal
+parsimony,  W  or ? if the character is to be reconstructed according to Wagner
+parsimony.  So if there are 20 characters the line  giving  the  mixture  might
+look like this:
+
+
+Mixture   WWWCC WWCWC
+
+Note that blanks in the seqence of characters (after the first ones that are as
+long  as the species names) will be ignored, and the information can go on to a
+new line at any point.  So this could equally well have been specified by
+
+Mixture   WW
+CCCWWCWC
+
+3. The  W  (Weights)  option.   This  allows  us  to  specify  weights  on  the
+characters, including the possibility of omitting characters from the analysis.
+It has already been described in the main documentation file.  If  the  Weights
+option is used there must be a W on the first line of the input file.
+
+4. The F (Factors) option.  This is used in programs MOVE, DOLMOVE, and FACTOR.
+It specifies which binary characters correspond to which multistate characters.
+To use the F option you should put F on the first line of the input file (after
+the  number  of species and the number of characters).  Before the species data
+you need one line of auxiliary information.  This starts with an F and is  then
+followed  by  enough characters to fill out the length of a species name.  Then
+for each binary character you specify a symbol.  The symbol  can  be  anything,
+provided  that it is the same for binary characters that correspond to the same
+multistate character,  and  changes  between  multistate  characters.   A  good
+practice  is  to  make it the lower-order digit of the number of the multistate
+character.
+
+     For example, if there were 20 binary characters that had been generated by
+nine  multistate  characters  having respectively 4, 3, 3, 2, 1, 2, 2, 2, and 1
+binary factors you would make the auxiliary information be:
+
+F         11112223334456677889
+
+although it could equivalently be:
+
+Factors   aaaabbbaaabbabbaabba
+
+All that is important is that the first character be an F, that the  length  of
+species  name  be filled out with characters or blanks, and that the symbol for
+each binary character change only when adjacent binary characters correspond to
+different mutlistate characters.  The F auxiliary information can continue to a
+new line at any time except during  the  initial  characters  filling  out  the
+length of a species name.
+
+The following options are common options that can be selected from the menu:
+
+1. The O (outgroup) option.  This  has  also  already  been  discussed  in  the
+general  documentation file.  It specifies the number of the particular species
+which will be used as the outgroup in rerooting  the  final  tree  when  it  is
+printed out.  It will not have any effect if the tree is already rooted or is a
+user-defined tree.  This  option  is  not  available  in  DOLLOP,  DOLMOVE,  or
+DOLPENNY,  which  always  infer a rooted tree, or CLIQUE, which requires you to
+work out the rerooting by hand.  The  menu  selection  will  cause  you  to  be
+prompted for the number of the outgroup.
+
+2. The T (threshold) option.  This sets a threshold such that if the number  of
+steps  counted in a character is higher than the threshold, it will be taken to
+be the threshold value rather than the actual number of  steps.    This  option
+has  already  been  described  in  the  main  documentation  file.  The user is
+prompted for the threshold value.  My 1981 paper (Felsenstein, 1981b)  explains
+the  logic  behind  the Threshold option, which is an attarctive alternative to
+successive weighting of characters.
+
+
+3. The U (User tree) option.  This has  already  been  described  in  the  main
+documentation  file.   For all of these programs user trees are to be specified
+as bifurcating trees, even in the cases where the tree that is inferred by  the
+programs is to be regarded as unrooted.
+
+4. The J (Jumble) option.  This causes the species to be entered into the  tree
+in  a  random  order rather than in their order in the input file.  The program
+prompts you for a random number seed.  This option is  described  in  the  main
+documentation file.
+
+5. The M (Multiple data sets) option.  This has also been described in the main
+documentation  file.   It  is not to be confused with the M option specified in
+the input file, which is the Mixture of methods option (yes,  I  know  this  is
+confusing).
+
+     Note that the A (Ancestors), F  (Factors),  and  M  (Mixture  of  methods)
+options  not only have information that must be entered in the input file, they
+also require you to select options from the interactive  menu.   The  selection
+for  the  mixture  option  is  actually X rather than M because M in most menus
+means "multiple data sets".
+
+     By  intelligent  use  of  the  options  these   programs   acquire   great
+flexibility.   The  available  options  are indicated in the document files for
+each program.
+
+
+                                 OUTPUT FORMAT
+
+     After each tree is printed out, its numerical evaluation (number of  steps
+required,  for  instance)  is  also  given.   A  table  of the number of events
+required in each character is also  printed,  to  help  in  reconstructing  the
+placement of changes on the tree.
+
+     This table may not be obvious at first.   A  typical  example  looks  like
+this:
+
+ steps in each character:
+         0   1   2   3   4   5   6   7   8   9
+     *-----------------------------------------
+    0!       2   2   2   2   1   1   2   2   1
+   10!   1   2   3   1   1   1   1   1   1   2
+   20!   1   2   2   1   2   2   1   1   1   2
+   30!   1   2   1   1   1   2   1   3   1   1
+   40!   1
+
+The numbers across the top and down the side indicate which character is  being
+referred  to.   Thus  character 23 is column "3" of row "20" and has 2 steps in
+this case.
+
+     I cannot emphasize too strongly that just because the tree  diagram  which
+the  program prints out contains a particular branch DOES NOT MEAN THAT WE HAVE
+EVIDENCE THAT THE BRANCH IS OF NONZERO LENGTH.  The procedure which prints  out
+the  tree cannot cope with a trifurcation, nor can the internal data structures
+used in my programs.   Therefore,  even  when  we  have  no  resolution  and  a
+multifurcation,  successive  bifurcations will be printed out, although some of
+the branches shown will in fact actually be of zero length.  To find out which,
+you  will  have  to work out character by character where the placements of the
+changes on the tree are, under all possible ways that the changes can be placed
+on that tree.
+
+
+
+
+     In MIX, PENNY, DOLLOP, and DOLPENNY the trees will be (if the user selects
+the  option to see them) accompanied by tables showing the reconstructed states
+of the characters in the hypothetical ancestral nodes in the  interior  of  the
+tree.   This  will  enable you to reconstruct where the changes were in each of
+the characters.  In some cases the state shown in an interior node will be "?",
+which  means that either 0 or 1 would be possible at that point.  In such cases
+you have to work out the ambiguity by hand.  A unique assignment  of  locations
+of  changes  is  often not possible in the case of the Wagner parsimony method.
+There may be multiple ways of assigning changes to segments of  the  tree  with
+that  method.   Printing  only  one would be misleading, as it might imply that
+certain segments of  the  tree  had  no  change,  when  another  equally  valid
+assignment  would  put  changes  there.   It  must be emphasized that all these
+multiple assignments have exactly equal numbers of total changes, so that  none
+is preferred over any other.
+
+     I have followed the convention of having a "." printed out in the table of
+character states of the hypothetical ancestral nodes whenever a state is 0 or 1
+and its immediate ancestor is the same.  This has the  effect  of  highlighting
+the places where changes might have occurred and making it easy for the user to
+reconstruct all the alternative  patterns  of  the  characters  states  in  the
+hypothetical ancestral nodes.
+
+     On the line in that table corresponding to each branch of  the  tree  will
+also  be printed "yes", "no" or "maybe" as an answer to the question of whether
+this branch is of nonzero length.  If there is no evidence that  any  character
+has  changed  in  that branch, then "no" will be printed.  If there is definite
+evidence that one has changed, then "yes" will be printed.  If  the  matter  is
+ambiguous,  then  "maybe" will be printed.  You should keep in mind that all of
+these conclusions assume that we are  only  interested  in  the  assignment  of
+states  that  requires  the least amount of change.  In reality, the confidence
+limit  on  tree  topology  usually  includes  many  different  topologies,  and
+presumably also then the confidence limits on amounts of change in branches are
+also very broad.
+
+     In addition to the table showing numbers of events, a table may be printed
+out  showing which ancestral state causes the fewest events for each character.
+This will not always be done, but  only  when  the  tree  is  rooted  and  some
+ancestral  states  are unknown.  This can be used to infer states of ancestors.
+For example, if you use the O  (Outgroup)  and  A  (Ancestral  states)  options
+together,  with  at least some of the ancestral states being given as "?", then
+inferences will be made for those characters, as the outgroup  makes  the  tree
+rooted if it was not already.
+
+     In programs MIX and PENNY, if you  are  using  the  Camin-Sokal  parsimony
+option with ancestral state "?" and it turns out that the program cannot decide
+between ancestral states 0 and 1, it will fail to even  attempt  reconstruction
+of states of the hypothetical ancestors, printing them all out as "." for those
+characters.  This is done for internal bookkeeping reasons  --  to  reconstruct
+their  changes  would  require  a fair amount of additional code and additional
+data structures.  It is not too hard to  reconstruct  the  internal  states  by
+hand,  trying the two possible ancestral states one after the other.  A similar
+comment applies to the use of ancestral state "?" in the Dollo or  Polymorphism
+parsimony  methods  (programs  DOLLOP  and DOLPENNY) which also can result in a
+similar hesitancy to print the estimate  of  the  states  of  the  hypothetical
+ancestors.   In  all of these cases the program will print "?" rather than "no"
+when it describes whether there are any changes in a branch, since there  might
+or might not be changes in those characters which are not reconstructed.
+
+     For further information see the documentation  files  for  the  individual
+programs.
+
+

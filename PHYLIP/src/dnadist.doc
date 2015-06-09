@@ -1,0 +1,441 @@
+
+                                                                   version 3.5c
+
+    DNADIST -- Program to compute distance matrix from nucleotide sequences
+
+
+(c) Copyright  1986-1993  by  Joseph  Felsenstein  and  by  the  University  of
+Washington.  Written by Joseph Felsenstein.  Permission is granted to copy this
+document provided that no fee is charged for it and that this copyright  notice
+is not removed.
+
+     This program uses nucleotide sequences to compute a distance matrix, under
+three  different models of nucleotide substitution.  The distance for each pair
+of species estimates the total branch length between the two species,  and  can
+be  used in the distance matrix programs FITCH, KITSCH or NEIGHBOR.  This is an
+alternative to use of the  sequence  data  itself  in  the  maximum  likelihood
+program DNAML or the parsimony program DNAPARS.
+
+     The program reads in  nucleotide  sequences  and  writes  an  output  file
+containing  the  distance  matrix.  The three models of nucleotide substitution
+are those of Jukes and Cantor (1969), Kimura (1980) and a the model used in  my
+maximum likelihood phylogeny program DNAML.  The modification of Kimura's model
+to allow for unequal rates of substitution at different sites by  Jin  and  Nei
+(1990)  is  also  available  as another variation.  The program correctly takes
+into account a variety of sequence ambiguities, although in  cases  where  they
+exist it can be slow.
+
+     Jukes and Cantor's (1969) model assumes that there is  independent  change
+at all sites, with equal probability.  Whether a base changes is independent of
+its identity, and when it changes there is an equal probability  of  ending  up
+with  each  of  the  other three bases.  Thus the transition probability matrix
+(this is a technical term from probability theory and has nothing  to  do  with
+transitions as opposed to transversions) for a short period of time dt is:
+
+              To:    A        G        C        T
+                   ---------------------------------
+               A  | 1-3a      a         a       a
+       From:   G  |  a       1-3a       a       a
+               C  |  a        a        1-3a     a
+               T  |  a        a         a      1-3a
+
+where a is  u dt, the product of the rate of substitution per unit time (u) and
+the  length  dt  of the time interval.  For longer periods of time this implies
+that the probability that two sequences will differ at a given site is:
+
+                                        - 4/3 u t
+               p   =    3/4 ( 1   -    e           )
+
+and hence that if we observe p, we can compute an estimate of the branch length
+ut by inverting this to get
+
+                ut   =   - 3/4 log  ( 1  -  4/3 p )
+                                  e
+
+The Kimura "2-parameter" model is almost as symmetric as this, but allows for a
+difference   between   transition   and  transversion  rates.   Its  transition
+probability matrix for a short interval of time is:
+
+
+
+
+
+
+
+              To:     A        G        C        T
+                   ---------------------------------
+               A  | 1-a-2b     a         b       b
+       From:   G  |   a      1-a-2b      b       b
+               C  |   b        b       1-a-2b    a
+               T  |   b        b         a     1-a-2b
+
+where a is u dt, the product of the rate of transitions per unit time and dt is
+the length dt of the time interval, and b is v dt, the product of half the rate
+of transversions (i.e., the rate of a specific transversion) and the length  dt
+of the time interval.
+
+     The  third  model  used  is  a  model  incorporating  different  rates  of
+transition and transversion, but also allowing for different frequencies of the
+four nucleotides.  It is  the  model  which  is  used  in  DNAML,  the  maximum
+likelihood  nucelotide  sequence phylogenies program in this package.  You will
+find the model described in the document  for  that  program.   The  transition
+probabilities for this model are also given by Kishino and Hasegawa (1989).
+
+     The three models are closely related.  The DNAML model reduces to Kimura's
+two-parameter  model  if we assume that the equilibrium frequencies of the four
+bases are equal.  The Jukes-Cantor model in turn  is  a  special  case  of  the
+Kimura 2-parameter model where a = b.  Thus each model is a special case of the
+ones that follow it, Jukes-Cantor being a special case of both of the others.
+
+     The Jin and Nei (1990) distance uses Kimura's model of base  substitution,
+but assumes that the rate of substitution varies from site to site according to
+a gamma distribution, with a coefficient of variation that is specified by  the
+user.  The user is asked for it when choosing this option in the menu.
+
+     Each distance that is calculated is an estimate, from that particular pair
+of  species,  of the divergence time between those two species.  For the Jukes-
+Cantor model, the estimate is computed using the formula for ut given above, as
+long  as the nucleotide symbols in the two sequences are all either A, C, G, T,
+U, N, X, ?, or - (the latter four indicate a deletion or an unknown nucleotide.
+This  estimate is a maximum likelihood estimate for that model.  For the Kimura
+2-parameter model, with only these nucleotide symbols, formulas special to that
+estimate  are  also computed.  These are also, in effect, computing the maximum
+likelihood estimate for that model.  In the  Kimura  case  it  depends  on  the
+observed  sequences only through the sequence length and the observed number of
+transition and transversion differences  between  those  two  sequences.    The
+calculation  in  that  case  is  a  maximum likelihood estimate and will differ
+somewhat from the estimate obtained from  the  formulas  in  Kimura's  original
+paper.   That  formula  was  also  a  maximum likelihood estimate, but with the
+transition/transversion ratio estimated empirically, separately for  each  pair
+of  sequences.  In the present case, one overall preset transition/transversion
+ratio is  used  which  makes  the  computations  harder  but  achieves  greater
+consistency between different comparisons.
+
+     For the DNAML model, or for any of the models where one or both  sequences
+contain  at  least  one  of  the  other  ambiguity codons such as Y, R, etc., a
+maximum likelihood calculation is also done using  code  which  was  originally
+written  for  DNAML.   Its  disadvantage  is  that  it  is slow.  The resulting
+distance is in effect a maximum likelihood estimate  of  the  diveregence  time
+(total  branch  length between) the two sequences.  However the present program
+will be much faster than versions earlier than 3.5, because I have  speeded  up
+the iterations.
+
+     Note that there is an  assumption  that  we  are  looking  at  all  sites,
+including  those that have not changed at all.  It is important not to restrict
+attention to some sites based on whether or not they have changed;  doing  that
+
+
+would bias the distances by making them too large, and that in turn would cause
+the distances to misinterpret the meaning of those sites that had changed.
+
+     A major innovation in this program is that,  for  all  of  these  distance
+methods,  the  program  allows us to specify that "third position" bases have a
+different rate of substitution than first and second  positions,  that  introns
+have  a  different rate than exons, and so on.  The Categories option allows us
+to make up to 9 categories of sites and specify different rates of  change  for
+them.  Note that this Categories option is different from the one used in DNAML
+and DNAMLK where  you  do  not  have  to  specify  which  sites  are  in  which
+categories.
+
+
+                           INPUT FORMAT AND OPTIONS
+
+     Input is fairly standard, with one addition.  As usual the first  line  of
+the  file  gives  the number of species and the number of sites.  There follows
+the characters C or W if the Categories or Weights options are being used.
+
+     Next come the species data.  Each sequence starts on a  new  line,  has  a
+ten-character  species  name  that  must  be blank-filled to be of that length,
+followed immediately by the species data in the one-letter code.  The sequences
+must  either  be  in the "interleaved" or "sequential" formats described in the
+Molecular Sequence Programs document.  The I option selects between them.   The
+sequences  can  have internal blanks in the sequence but there must be no extra
+blanks at the end of the terminated line.  Note that a blank  is  not  a  valid
+symbol for a deletion.
+
+     After that are the lines (if any) containing the information  for  the  C,
+and W options, as described below.
+
+     The options are selected using an interactive menu.  The menu  looks  like
+this:
+
+
+Nucleic acid sequence Distance Matrix program, version 3.5c
+
+Settings for this run:
+  D  Distance (Kimura, Jin/Nei, ML, J-C)?  Kimura 2-parameter
+  T        Transition/transversion ratio?  2.0
+  C   One category of substitution rates?  Yes
+  L              Form of distance matrix?  Square
+  M           Analyze multiple data sets?  No
+  I          Input sequences interleaved?  Yes
+  0   Terminal type (IBM PC, VT52, ANSI)?  ANSI
+  1    Print out the data at start of run  No
+  2  Print indications of progress of run  Yes
+
+Are these settings correct? (type Y or letter for one to change)
+
+The user either types "Y" (followed, of course, by a  carriage-return)  if  the
+settings  shown  are to be accepted, or the letter or digit corresponding to an
+option that is to be changed.
+
+     The options M and 0 are the usual ones.  They are described  in  the  main
+documentation file of this package.  Option I is the same as in other molecular
+sequence programs and is described in the documentation file for  the  sequence
+programs.
+
+     The D option selects one of the four distance methods.  It  toggles  among
+the  three  methods. The default method, if none is specified, is the Kimura 2-
+
+
+parameter model.  If the Nei/Jin distance is selected the user will be asked to
+supply  the  coefficient  of variation of the rate of substitution among sites.
+This is different from the parameters used by Nei and Jin but related to  them:
+their parameters a are related to the coefficient of variation by
+
+                         1/2
+               CV = 1 / a
+or
+                            2
+                a = 1 / (CV)
+
+(their parameter b is absorbed here by the requirement that time is  scaled  so
+that  the  mean  rate of evolution is 1 per unit time, which means that a = b).
+As we consider cases in which the rates are  less  variable  we  should  set  a
+larger and larger, as CV gets smaller and smaller.
+
+     The F (Frequencies) option appears when the Maximum Likelihood distance is
+selected.   This  distance  requires  that  the  program  be  provided with the
+equilibrium frequencies of the four bases A, C, G, and T (or U).   Its  default
+setting  is  one  which  may  save  users  much  time.   If you want to use the
+empirical frequencies of the bases, observed in the  input  sequences,  as  the
+base  frequencies,  you  simply use the default setting of the F option.  These
+empirical frequencies are not really the maximum likelihood  estimates  of  the
+base  frequencies,  but they will often be close to those values (what they are
+is maximum likelihood estimates under a "star" or "explosion"  phylogeny).   If
+you change the setting of the F option you will be prompted for the frequencies
+of the four bases.  These must add to 1  and  are  to  be  typed  on  one  line
+separated by blanks, not commas.
+
+     The T option in this program does not stand for Threshold, but instead  is
+the  Transition/transversion  option.   The  user is prompted for a real number
+greater than 0.0, as the expected ratio of transitions to transversions.   Note
+that  this is not the ratio of the first to the second kinds of events, but the
+resulting  expected  ratio  of  transitions  to   transversions.    The   exact
+relationship  between  these  two  quantities depends on the frequencies in the
+base pools.  The default value of the T parameter if  you  do  not  use  the  T
+option is 2.0.
+
+     The C (Categories) option is the one which species the relative  rates  of
+substitution  at  different  sites.   The  sites  are organized into up to nine
+categories.  You are supposed to specify the relative rates of substitution  in
+these  categories.  The category option asks you to specify how many categories
+there are to be (up to a maximum of 9) and then to enter the relative rates  of
+change  in  the  categories, as nonnegative real numbers typed on the same line
+separated by blanks, not commas.  If you do not use the C option then there  is
+in effect one category with rate 1.0.
+
+     In addition to this line, use of  the  C  option  requires  one  piece  of
+information,  which  associates  sites  with  categories.   That is one or more
+lines, which are placed after the initial line of  the  input  file,  and  also
+after  the  lines containing the Weights, if any, but before the sequences.  It
+consists of a line whose first characters are ignored, until the maximum length
+of  a  species  name  has  been reached (it is therefore convenient, if species
+names are a maximum of ten characters as in the program as distributed, to  put
+CATEGORIES  in  the  first ten characters of that line, just to remind yourself
+what it is).  The line then contains single digits  (1  through  9)  indicating
+which  category  each  site  is in.  The information can continue to a new line
+anytime in the middle of these digits.  For example the line may read:
+
+CATEGORIES 5555555555 5123123123 1231231231 2344444444 4441231235 5555
+
+
+
+(that is an example imagining five categories for the  three  codon  positions,
+intron  positions,  and  flanking sequence positions).  A site may in effect be
+dropped from the analysis by placing it in a category which  has  an  extremely
+high rate of expected change.
+
+     The L option specifies that the output file is to have the distance matrix
+in lower triangular form.
+
+     The W (Weights) option is invoked in the usual way, with  only  weights  0
+and  1 allowed.  It selects a set of sites to be analyzed, ignoring the others.
+The sites selected are those with weight 1.  If the W option  is  not  invoked,
+all sites are analyzed.
+
+
+                                 OUTPUT FORMAT
+
+     As the distances are computed,  the  program  prints  on  your  screen  or
+terminal  the  names of the species in turn, followed by one dot (".") for each
+other species for which the distance to that species has been  computed.   Thus
+if  there  are  ten species, the first species name is printed out, followed by
+nine dots, then on the next line the next species name is printed out  followed
+by eight dots, then the next followed by seven dots, and so on.  The pattern of
+dots should form a triangle.  When the distance matrix has been written out  to
+the output file, the user is notified of that.
+
+     The output file contains on its first line  the  number  of  species.  The
+distance matrix is then printed in standard form, with each species starting on
+a new line with the species name, followed by the distances to the  species  in
+order.   These  continue  onto a new line after every nine distances.  If the L
+option is used, the matrix or distances is in lower triangular  form,  so  that
+only  the distances to the other species that precede each species are printed.
+Otherwise the distance matrix is square with zero distances  on  the  diagonal.
+In general the format of the distance matrix is such that it can serve as input
+to any of the distance matrix programs.
+
+     If the option to print out the data is  selected,  the  output  file  will
+precede  the  data  by  more  complete  information  on  the input and the menu
+selections.  The output file begins by giving the number  of  species  and  the
+number  of  characters,  and the identity of the distance measure that is being
+used.
+
+     If the C (Categories) option is used a table  of  the  relative  rates  of
+expected  substitution  at  each category of sites is printed, and a listing of
+the categories each site is in.
+
+     There will then follow the equilibrium frequencies of the four bases.   If
+the Jukes-Cantor or Kimura distances are used, these will necessarily be 0.25 :
+0.25 : 0.25 : 0.25.  The output then shows  the  transition/transversion  ratio
+that  was  specified  or  used  by  default.   In  the case of the Jukes-Cantor
+distance this will always be 0.5.  The  transition-transversion  parameter  (as
+opposed  to the ratio) is also printed out: this is used within the program and
+can be ignored.  There then follow the data sequences, with the base  sequences
+printed in groups of ten bases along the lines of the Genbank and EMBL formats.
+
+     The distances printed out are scaled  in  terms  of  expected  numbers  of
+substitutions, counting both transitions and transversions but not replacements
+of a base by itself, and scaled so that the average rate  of  change,  averaged
+over  all  sites  analyzed,  is  set to 1.0 if there are multiple categories of
+sites.  This means that whether or not there are multiple categories of  sites,
+the  expected fraction of change for very small branches is equal to the branch
+length.  Of course, when a branch is twice as long  this  does  not  mean  that
+
+
+there  will  be  twice  as much net change expected along it, since some of the
+changes may occur in the same site and overlie or even reverse each other.  The
+branch  lengths  estimates here are in terms of the expected underlying numbers
+of changes.  That means that a branch of length 0.26 is 26 times as long as one
+which  would  show  a  1%  difference  between  the nucleotide sequences at the
+beginning and end of the branch.  But we would not expect the sequences at  the
+beginning  and  end  of  the branch to be 26% different, as there would be some
+overlaying of changes.
+
+     One problem that can arise is that two or more of the species  can  be  so
+dissimilar  that  the  distance  between them would have to be infinite, as the
+likelihood rises indefinitely as the estimated divergence time increases.   For
+example,  with  the  Jukes-Cantor  model, if the two sequences differ in 75% or
+more of their positions then the estimate of dovergence time would be infinite.
+Since there is no way to represent an infinite distance in the output file, the
+program regards this as an error, issues an error message indicating which pair
+of  species  are  causing  the  problem,  and  stops.  It might be that, had it
+continued running, it would have also run into  the  same  problem  with  other
+pairs  of  species.  If the Kimura distance is being used there may be no error
+message; the program may simply give a large distance value  (it  is  iterating
+towards  infinity and the value is just where the iteration stopped).  Likewise
+some maximum likelihood estimates may also become large  for  the  same  reason
+(the  sequences  showing  more  divergence  than is expected even with infinite
+branch length).  I hope in the future to add more warning messages  that  would
+alert the user the this.
+
+
+                               PROGRAM CONSTANTS
+
+     The constants that are  available  to  be  changed  by  the  user  at  the
+beginning  of  the  program include "maxcategories", the maximum number of site
+categories, "iterations", which  controls  the  number  of  times  the  program
+iterates  the  EM algorithm that is used to do the maximum likelihood distance,
+"namelength", the length of species  names  in  characters,  and  "epsilon",  a
+parameter  which  controls  the accuracy of the results of the iterations which
+estimate the distances.  Making "epsilon" smaller will increase run  times  but
+result in more decimal places of accuracy.  This should not be necessary.
+
+     The program spends most of its time doing real arithmetic.   Any  software
+or  hardware changes that speed up that arithmetic will speed it up by a nearly
+proportional amount.  For example,  microcomputers  that  have  a  numeric  co-
+processor  (such  as  an 8087, 80287, or 80387 chip) will run this program much
+faster than ones that do not, if the software calls it.   The  algorithm,  with
+separate  and independent computations occurring for each pattern, lends itself
+readily to parallel processing.
+
+--------------------------------TEST DATA SET--------------------------
+
+   5   13
+Alpha     AACGTGGCCACAT
+Beta      AAGGTCGCCACAC
+Gamma     CAGTTCGCCACAA
+Delta     GAGATTTCCGCCT
+Epsilon   GAGATCTCCGCCC
+
+------ CONTENTS OF OUTPUT FILE (with all numerical options on ) -----------
+
+Nucleic acid sequence Distance Matrix program, version 3.5c
+
+  5 species,   13 sites
+
+
+
+  Kimura 2-parameter Distance
+
+ Base Frequencies:
+    A       0.25000
+    C       0.25000
+    G       0.25000
+   T(U)     0.25000
+
+Transition/transversion ratio =   2.000000
+
+(Transition/transversion parameter =   1.500000)
+
+
+Name            Sequences
+----            ---------
+
+Alpha        AACGTGGCCA CAT
+Beta         ..G..C.... ..C
+Gamma        C.GT.C.... ..A
+Delta        G.GA.TT..G .C.
+Epsilon      G.GA.CT..G .CC
+
+
+    5
+Alpha       0.0000  0.2997  0.7820  1.1716  1.4617
+Beta        0.2997  0.0000  0.3219  0.8997  0.5653
+Gamma       0.7820  0.3219  0.0000  1.4481  1.0726
+Delta       1.1716  0.8997  1.4481  0.0000  0.1679
+Epsilon     1.4617  0.5653  1.0726  0.1679  0.0000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

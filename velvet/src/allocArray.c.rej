@@ -1,0 +1,17 @@
+***************
+*** 212,218 ****
+  
+  	allocArray = callocOrExit (n + 1, AllocArray);
+  	nbBlocks = (1 << (32 - BLOCKS_ALLOC_SHIFT));
+- 	blocks = callocOrExit(nbBlocks, void*);
+  	for (i = 0; i < n; i++)
+  		initAllocArrayArray(allocArray + i,
+  				    blocks,
+--- 212,218 ----
+  
+  	allocArray = callocOrExit (n + 1, AllocArray);
+  	nbBlocks = (1 << (32 - BLOCKS_ALLOC_SHIFT));
++ 	blocks = callocorexit(nbblocks, void*);
+  	for (i = 0; i < n; i++)
+  		initAllocArrayArray(allocArray + i,
+  				    blocks,

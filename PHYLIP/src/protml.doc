@@ -1,0 +1,728 @@
+
+
+                             PROTML:
+        Maximum Likelihood Inference of Protein Phylogeny
+
+
+             Jun Adachi 1)  and  Masami Hasegawa 2)
+
+
+              1) Department of Statistical Science,
+           The Graduate University for Advanced Study
+         4-6-7 Minami-Azabu, Minato-ku, Tokyo 106, Japan
+
+           2) The Institute of Statistical Mathematics
+         4-6-7 Minami-Azabu, Minato-ku, Tokyo 106, Japan
+
+
+
+                          INTRODUCTION
+
+
+     PROTML is a PASCAL program for inferring evolutionary  trees
+from protein (amino acid) sequences by using maximum likelihood.
+
+     A maximum likelihood method for inferring trees from DNA  or
+RNA  sequences  was  developed  by Felsenstein (1981). The method
+does not impose any constraint on the constancy  of  evolutionary
+rate  among lineages. He wrote a program (DNAML) implementing the
+method, and included it  in  his  program  package,  PHYLIP.  The
+program  has been used extensively and has proved of great use in
+phylogenetic studies (Hasegawa and Yano, 1984a; Hasegawa et  al.,
+1985,  1990a;  Hasegawa  and Kishino, 1989; Kishino and Hasegawa,
+1989; Zillig et al., 1989; Hasegawa,  1990,  1991;  Golenberg  et
+al.,  1990;  Adkins  and  Honeycutt,  1991; Doebley et al., 1991;
+Edwards et al., 1991; Les et al.,  1991;  Ruvolo  et  al.,  1991;
+Disotell   et   al.,  1992;  Lockhart  et  al.,  1992).  Computer
+simulations have demonstrated that the method is highly efficient
+in  estimating  a  true  tree  under various situations such as a
+violation of rate constancy among lineages  (Hasegawa  and  Yano,
+1984b; Hasegawa et al., 1991).
+
+     DNAML, however, is confined to DNA or RNA sequence data, and
+is  not  applicable  to  protein  sequence  data. In phylogenetic
+studies of deep branchings, such as those among the  three  major
+kingdoms  of eukaryotes, archaebacteria and eubacteria, and those
+in the early evolution of eukaryotes, ribosomal RNA sequence data
+has  been used widely (e.g., Woese, 1989; Sogin et al., 1989). In
+spite of many works on the ribosomal RNAs, the universal root  of
+all  contemporary  organisms  on  the earth including eukaryotes,
+archaebacteria and eubacteria remained uncertain. Miyata and  his
+coworkers   demonstrated  the  usefulness  of  using  amino  acid
+sequence data encoded by duplicated genes  (duplicated  prior  to
+the  divergence  among  the  major  kingdoms) in establishing the
+universal root (Iwabe et  al.,  1989;  Hasegawa  et  al.,  1990b;
+Miyata  et al., 1991). Furthermore, an evolutionary tree inferred
+from  ribosomal  RNA  data  is  sometimes  misleading  when  base
+composition  differs  widely  among lineages, and a tree inferred
+from protein sequences is more reliable in such cases (Loomis and
+Smith, 1990; Hasegawa et al., 1993).
+
+     Because no program was available  for  inferring  a  protein
+tree  by  maximum likelihood based on a reasonable model of amino
+acid  substitutions,  many  authors  used  DNAML   in   analyzing
+protein-encoding  DNA  sequences.  As  is  well  known, the third
+position of codons evolve more rapidly than other positions,  and
+therefore  DNAML  was  designed  so that a user could specify the
+relative  rates  of  substitutions  in  several   categories   of
+positions.  This approach seems to be good in many cases when one
+is interested in phylogenetic relationships among closely related
+species.
+
+     Even if the rate difference among positions in a  codon  are
+taken  into account, however, inclusion of the third positions in
+the analysis can sometimes be  misleading  when  the  pattern  of
+codon  usage  differs among lineages. Furthermore, the assumption
+(in DNAML) of independent evolution among three  positions  of  a
+codon  can  be a serious defect when one is interested in tracing
+deep branchings, because a (negative) selection is likely  to  be
+operating at the codon level, rather than at the individual sites
+in the codon. Even if nucleotide frequencies of  protein-encoding
+genes  differ  among  lineages,  amino  acid  frequencies may not
+differ significantly (Adachi and Hasegawa, 1992).  Therefore,  if
+the  amino  acid  substitution  process  can be represented by an
+appropriate model, it seems to be better  to  handle  amino  acid
+sequences  rather  than nucleotide sequences in estimating orders
+of deep branchings from data  of  a  protein-encoding  gene,  and
+there is an increasing demand for a maximum likelihood program to
+infer protein phylogenies.
+
+     Kishino et al. (1990) developed a maximum likelihood  method
+for  inferring  protein phylogenies that takes account of unequal
+transition probabilities among pairs of amino acids by  using  an
+empirical  transition  matrix  compiled by Dayhoff et al. (1978),
+and the model is called  the  Dayhoff  model  (Hasegawa  et  al.,
+1992).  Although  the  transition  matrix  was constructed from a
+limited data set (accumulated up to 1978) of proteins encoded  in
+nuclear  DNA,  the Dayhoff model is not necessarily specific only
+to those proteins, but is appropriate in approximating the  amino
+acid   substitutions   of   wider   protein   species   including
+mitochondrial ones (Hasegawa et al., 1993; Adachi  and  Hasegawa,
+1992; Adachi et al., 1992).
+
+     The original program for  private  use  in  Kishino  et  al.
+(1990), Mukohata et al. (1990), Hasegawa et al. (1990b), Iwabe et
+al. (1991), and Miyata et al. (1991) was written in  FORTRAN  and
+the  number  of  species  in  the maximum likelihood analysis was
+confined to five. In writing this  program  "PROTML"  for  public
+use,  we  took advantage of another computer language, PASCAL, to
+represent the tree structure of the data. In this program,  there
+is  no  limit  on the number of species, provided the computer is
+big enough.
+
+     Since the  number  of  possible  tree  topologies  increases
+explosively  as  the  number  of  species increases (Felsenstein,
+1978a), it is a serious problem to find the best tree  among  the
+huge  number of alternatives. We have developed a novel algorithm
+for searching tree topologies, called "star decomposition", which
+seems to be effective in finding the best tree.
+
+     The parsimony method  has  been  used  widely  in  molecular
+phylogenetics,  but  it  may  be  positively  misleading when the
+evolutionary rate differs among  lineages  (Felsenstein,  1978b).
+PROTML  has  proved  of great use in inferring evolutionary trees
+even in such situations (Hasegawa et al.,  1992),  and  has  been
+applied  to several phylogenetic problems (Hasegawa et al., 1993;
+Adachi and Hasegawa, 1992; Adachi et al., 1992; Hashimoto et al.,
+1993).
+
+     The overall structure  of  PROTML  is  similar  to  that  of
+Felsenstein's  DNAML.  We  owe  very much to DNAML in the writing
+PROTML, and have adopted several fundamental  routines  from  the
+DNAML  program.  Furthermore, the input format of PROTML is quite
+similar to that of DNAML.  Features  where  PROTML  differs  from
+DNAML (up to version 3.4) are as follows:
+
+   (1) Amino acid sequence data are analyzed based  on  Dayhoff's
+   model(1978).
+   (2) The likelihood of multifurcating trees can be estimated.
+   (3) A novel method of topology search  ("star  decomposition")
+   is adopted.
+   (4) The Newton  method  is  adopted  in  the  maximization  of
+   likelihood.
+   (5)  Bootstrap  probabilities  of  candidate  trees   can   be
+   estimated.
+
+
+
+                  ALGORITHM FOR TOPOLOGY SEARCH
+
+   Topological Data Structure
+
+     Felsenstein considered a  data  structure  representing  the
+unrooted tree, where each internal node (excluding external nodes
+or tips)  is  decomposed  into  elements,  the  number  of  which
+coincides  with  those  of  branches  stemming from the node. The
+elements are connected circularly through the pointers.
+
+     By adopting such a data structure, we can  store  a  partial
+likelihood of a sub-tree stemming from the node. This means that,
+when we  estimate  the  likelihood  of  the  tree,  we  need  not
+calculate  likelihood through iteration of a loop by the times of
+the number of nodes in  revising  the  estimate  of  each  branch
+length, but need only revise the partial likelihoods of two nodes
+of each branch.
+
+     We extend this data structure so that a multifurcating  tree
+can  be  represented. Since branches are connected dynamically by
+pointers, the  data  structure  can  easily  be  revised  when  a
+different  tree  topology  is  adopted,  and furthermore not only
+bifurcating  trees  but  also   multifurcating   trees   can   be
+represented  quite  easily. The extreme limit of a multifurcating
+tree is the star-like tree.
+
+
+   Automatic Topology Search by Star Decomposition
+
+     The straightforward approach to inferring a tree would be to
+evaluate  all possible tree topologies one after another and pick
+the one which gives the highest likelihood.  This  would  not  be
+possible  for  more  than  a  small  number of species, since the
+number of possible  tree  topologies  is  enormous  (Felsenstein,
+1978a).
+
+     The strategy that Felsenstein's DNAML employs is as follows:
+the  species  are  taken in the order in which they appear in the
+input file. The first three are taken and  an  unrooted  tree  is
+constructed containing only those three. Then, the fourth species
+is taken, and it is evaluated to see where it might best be added
+to the tree. All possibilities (bifurcating trees) for adding the
+fourth species are examined. The best one  under  the  likelihood
+criterion  is chosen to be the basis for further operations. Then
+the fifth species is added, and again the best placement of it is
+chosen,  and  so on. At each step, local rearrangements of a tree
+are examined. This procedure is  continued  until  a  bifurcating
+tree connecting all the species is obtained (Felsenstein, 1992).
+
+     The resulting tree from this procedure generally depends  on
+the  order  of  the  input species. Hence, Felsenstein recommends
+performing a number of runs with different orderings of the input
+species.
+
+     The alternative strategy which we employ  in  the  automatic
+and  semi-automatic  search  options  of  PROTML  is called "star
+decomposition". This is similar to the procedure employed in  the
+neighbor-joining  method using a distance matrix (Saitou and Nei,
+1987). This method starts with a star-like tree. Decomposing  the
+star-like tree step by step, we finally obtain a bifurcating tree
+if  all  multifurcations  can  be   resolved   with   statistical
+confidence.  Since  the information from all of the species under
+analysis is used from the beginning, the inference  of  the  tree
+topology is likely to be stable by this procedure.
+
+     Let be the number of species under  analysis.  At  first,  a
+star-like tree containing species is constructed. Then, a pair of
+species is separated from others.  Among  all  possible  pairwise
+combinations  of  species,  a  pairing  that  gives  the  highest
+likelihood is chosen. The resulting tree can  be  regarded  as  a
+star-like  tree  with groups (a single species may form a group),
+if the selected pair is regarded to form a group. This  procedure
+is  continued  until  all  multifurcating nodes are resolved into
+bifurcating ones.
+
+     When the information content of the data is not large enough
+to  discriminate  among alternative branching orders, it might be
+misleading to resolve all the multifurcations into  bifurcations.
+Hence,  by  using  "Akaike  Information  Criteria (AIC)" (Akaike,
+1974), the program  decides  whether  the  multifurcation  should
+further be resolved or not.
+
+
+
+                       PROTML USER'S GUIDE
+
+   Options
+
+     The program allows various options that alter the amount  of
+information the program is provided or what it is to be done with
+the information. The program is notified that an option has  been
+invoked  by  the  presence  of one or more letters after the last
+number on the first line of the input file. These letters may  or
+may  not  be  separated  from  each other by blanks, though it is
+usually necessary to separate them from the number  by  a  blank.
+They  can be in any order. Thus to invoke options U, W and B, the
+input file starts with the line:
+
+ 19 409 UWB
+
+or
+
+   19  409   W  U  B
+
+     This program  has  three  mode  of  topology  search;  i.e.,
+Automatic mode, Semi-automatic mode and User tree (manual) mode.
+
+   Automatic mode.
+   Unless specified otherwise, the procedure uses automatic mode,
+   so it starts with a star-like tree.
+
+   "S" : Semi-automatic mode.
+   Semi-automatic mode starts with a multifurcating tree  that  a
+   user designates.
+
+   "U" : User tree mode.
+   User tree (manual) mode  is  similar  to  the  "U"  option  in
+   Felsenstein's  DNAML.  This  mode calculates the likelihood of
+   all  user  defined  topologies.  Different  from  DNAML,  this
+   program allows multifurcating trees as user trees.
+
+   "W" : Write option.
+   Using this option, the program will produce  more  information
+   than it dose for standard output.
+
+   "B" : Bootstrap option.
+   This option gives the approximate bootstrap  probabilities  of
+   candidate trees by a resampling of estimated likelihood (RELL)
+   method (Kishino et al., 1990).
+
+
+   Format of input data file
+
+     We have tried to adhere to a rather stereotyped input format
+similar  to  that of Felsenstein's programs. The simplest version
+of the input file looks something like this:
+
+     4   40   W
+ species1 ARNDCQEGHILKAFPMTWYVARNDCQEGHISKMFGWTWYV
+ species2 ARNHNQCGHILKMFPMTSYVARNCCAEHHILKHFPSTWIV
+ species3 AINDCQEGHHLKMFPMTMYSVRNRIQEMHIQKHCPHTHYV
+ species4 AINHCQCEHILWMFPSTPYVARNDIQNYHILKMPPSTWWV
+
+     The first line of the input  file  contains  the  number  of
+species  and  the length of amino acid sequences, in free format,
+separated by blanks. The information for  each  species  follows,
+starting  with  a  ten-character  species name (which can include
+punctuation marks), and continuing with the characters  for  that
+species.
+
+     An input file has three  parts  of  data;  i.e.,  arguments,
+sequences and topologies.
+
+   1. Arguments
+   The first line of the file gives number of  species,  sequence
+   length, and options.
+
+   2. Sequences
+   The following lines give species names and amino acid sequence
+   data.  The  amino  acids  must  be specified by the one letter
+   codes  adopted  by   IUPAC-IUB   Commission   on   Biochemical
+   Nomenclature  (1968).  The  amino acid code must be one of the
+   twenty.
+
+   3. Topologies
+   If one specifies User  or  Semi-automatic  options,  one  mast
+   specify  the  number  of topologies followed by the topologies
+   themselves.
+
+     This program allows the option U, which signals  that  user-
+defined  tree(s)  are provided. The topologies of these trees are
+supplied AFTER the species and sequence data, rather than  before
+them.  The  letter U appears on the first line of the file. After
+the species and sequence data, a line containing  the  number  of
+user-defined  trees  appears.  Each user-defined tree starts on a
+new line. Here is an example with three user-defined trees:
+
+     5   40   U   B
+ species1 ARNDCQEGHILKAFPMTWYVARNDCQEGHISKMFGWTWYV
+ species2 ARNHNQCGHILKMFPMTSYVARNCCAEHHILKHFPSTWIV
+ species3 AINDCQEGHHLKMFPMTMYSVRNRIQEMHIQKHCPHTHYV
+ species4 AINHCQCEHILWMFPSTPYVARNDIQNYHILKMPPSTWWV
+ species5 AINDCSCGHHLWMFPSLCYVRRNECQGGHIWKMFPLTVCA
+     3
+ (((species1,species2),species3),species4,species5)
+ ((species1,species2),(species3,species4),species5)
+ (species1,(species2,species3),(species4,species5))
+
+     An example of semi-auto mode is as follows:
+
+     5   40   S
+ species1 ARNDCQEGHILKAFPMTWYVARNDCQEGHISKMFGWTWYV
+ species2 ARNHNQCGHILKMFPMTSYVARNCCAEHHILKHFPSTWIV
+ species3 AINDCQEGHHLKMFPMTMYSVRNRIQEMHIQKHCPHTHYV
+ species4 AINHCQCEHILWMFPSTPYVARNDIQNYHILKMPPSTWWV
+ species5 AINDCSCGHHLWMFPSLCYVRRNECQGGHIWKMFPLTVCA
+
+ ((species1,species2,species3),species4,species5)
+
+     The  tree  topology  is  specified  by   nested   pairs   of
+parentheses,  enclosing  species  names  and separated by commas.
+Trailing blanks in the name may be omitted. The  pattern  of  the
+parentheses indicates the pattern of the tree by having each pair
+of parentheses enclose all the members of a  monophyletic  group.
+The  entire tree is enclosed in an outermost pair of parentheses.
+Note that the tree is an unrooted one,  and  therefore  its  base
+must  be  multifurcation  with  a multiplicity of greater than or
+equal to three. A specification of a tree ends with  a  semicolon
+which may be omitted.
+
+
+   Program Constants
+
+     The CONSTants in program that may be changed by a user are:
+
+ CONST
+ maxsp     : maximum number of species
+ maxnode   : maxsp * 2 - 3
+ maxpair   : maxsp * (maxsp-1) / 2
+ maxsite   : maximum number of sites
+ maxptrn   : maximum number of different site patterns
+ maxtree   : maximum number of user trees
+ maxsmooth : number of smoothing algorithm
+ maxiterat : number of iterates of Newton method
+ epsilon   : stopping value of error
+ minarc    : lower limit on number of substitutions per branch
+ maxarc    : upper limit on number of substitutions per branch
+ prprtn    : proprtion of branch length
+ maxboot   : number of bootstrap replications
+ maxexe    : number of jobs
+ maxline   : length of sequence output per line
+ maxname   : maximum number of characters in species name
+ maxami    : number of amino acids
+ minreal   : if job is in underflow error, increase this value
+ seqfname  : input file of sequence data
+ tpmfname  : input file of transition probability
+ lklfname  : output file of log-likelihood
+
+
+   Output Format
+
+     The output usually consists of
+   (1) the name of the program and its version number,
+   (2) the input information printed out, and
+   (3) a series of trees,
+some with associated information indicating how much change there
+was in each character or on each part of the tree.
+
+     The tree grows from left to right and has branches that  are
+approximately  proportional  in  length  to  the lengths that the
+program estimates. In some cases when branches are  estimated  to
+be  very  short,  the output makes them three spaces long so that
+the topology is clearly shown. Here is what a typical tree  looks
+like:
+
+   :-----------1.Tabac.chl
+  0:
+   :        :-------2.Prochloro
+   :   :----6
+   :   :    :---3.Anacystis
+   :---7
+   :   :------------------5.Synechocy
+   :
+   :------4.Fremyella
+
+  No.            number   Length       S.E.
+  ----------------------------------------------
+      Tabac.chl     1     9.44861  (  1.63423 )
+      Prochloro     2     5.69634  (  1.30862 )
+      Anacystis     3     1.57704  (  0.74325 )
+      Fremyella     4     4.92061  (  1.24297 )
+      Synechocy     5    16.05818  (  2.24639 )
+                    6     2.13260  (  0.86082 )
+                    7     1.01070  (  0.63908 )
+  ----------------------------------------------
+   ln L : -1813.614 (  66.205 )  AIC : 3641.229
+  ----------------------------------------------
+
+     Length refers to the estimated number of  substitutions  per
+100  amino  acid  sites  along the branch leading to the node (or
+leaf) indicated by the number, and S.E. refers  to  its  standard
+error estimated by the formula of Kishino and Hasegawa (1989).
+
+
+
+           Installing PROTML and Executive Environment
+
+
+     Personal computer with MS-DOS + Turbo Pascal(Borland):  e.g.
+IBM  PCs  and  compatibles,  NEC  PC-98x. Please remove or change
+comments marked as shown below:
+
+ (*  <statements>  TURBO Pascal *)
+
+     UNIX Workstation  +  standard  Pascal  compiler:  e.g.  SUN.
+Please remove or change comments marked as shown below:
+
+ (*  <statements>  SUN Pascal *)
+
+     Mainframe computer (IBM and compatibles) +  standard  Pascal
+compiler. For example, JCL (Job Control Language) of batch job.
+
+ //USERIDB    JOB  PATHWORD
+ //STEP       EXEC OPASCLG
+ //PASC.SYSIN DD   DSN='USERID.PROTML.PASCAL',DISP=SHR
+ //GO.SEQFILE DD   DSN='USERID.SEQFILE.DATA',DISP=SHR
+
+
+
+                    How to contact developers
+
+
+     The best way to contact developers is to send an E-mail.
+
+          E-mail: adachi@ism.ac.jp
+
+If you prefer, write a letter with your comments and send it to
+
+          Jun Adachi
+          Department of Statistical Science,
+          The Graduate University for Advanced Study,
+          4-6-7 Minami-Azabu, Minato-ku, Tokyo 106, Japan
+          FAX: +81-3-3446-1695
+
+     Please send a mail with the following information
+
+          1. Computer brand, model.
+          2. The brand and version number of Pascal compiler.
+          3. Operating system and version number.
+          4. The input file of sequence data.
+          5. The output file.
+
+
+
+                        Acknowledgements
+
+
+     We  are  particularly  grateful  to  Dr.  H.   Kishino   for
+invaluable  advices during the course of this work, and to Dr. J.
+Felsenstein for generously  permitting  us  to  use  routines  in
+DNAML. We also thank Drs. T. Hashimoto, T. Miyata and T. Yano for
+discussions and comments. This work was  carried  out  under  the
+Institute of Statistical Mathematics Cooperative Research Program
+(90-ISM-57, 91-ISM-69), and was  supported  by  grants  from  the
+Ministry of Education, Science, and Culture of Japan.
+
+
+
+                           References
+
+
+Adachi, J., Hasegawa, M. (1992)
+ Amino acid substitution of proteins coded for  in  mitochondrial
+DNA during mammalian evolution. Jpn. J. Genet., 67:187-197.
+
+Adachi, J., Cao, Y., Hasegawa, M. (1993)
+ Tempo and mode of mitochondrial DNA evolution in vertebrates  at
+the  amino  acid  sequence level: rapid evolution in warm-blooded
+vertebrates. J. Mol. Evol., (in press).
+
+Adkins, R.M., Honeycutt, R.L. (1991)
+ Molecular phylogeny of  the  superorder  Archonta.  Proc.  Natl.
+Acad. Sci. US., 88:10317-10321.
+
+Akaike, H. (1974)
+ A new look at the statistical model identification. IEEE  Trans.
+Autom. Contr., 19:716-723.
+
+Dayhoff, M.O., Schwartz, R.M., Orcutt, B.C. (1978)
+ A model of evolutionary change in proteins.  In:  Dayhoff,  M.O.
+(ed.)  Atlas  of  Protein  Sequence  Structur.,  Vol~5,  Suppl~3.
+National Biomedical Research Foundation, Washington DC,  pp.~345-
+352.
+
+Disotell, T.R., Honeycutt, R.L., Ruvolo, M. (1992)
+ Mitochondrial  DNA  phylogeny  of  the  Old-World  monkey  tribe
+Papionini. Mol. Biol. Evol., 9:1-13.
+
+Doebley, J., Durbin, M., Golenberg, E.M., Clegg, M.T.,  Ma  D.-P.
+(1990)
+ Evolutionary analysis of the large subunit of carboxylase (  rbc
+L)  nucleotide sequence among the grasses (Gramineae). Evolutio.,
+44:1097-1108.
+
+Edwards, S.V., Arctander, P., Wilson, A.C. (1991)
+ Mitochondrial resolution of a deep branch  in  the  genealogical
+tree for perching birds. Proc. Roy. Soc. Londo., B243:99-107.
+
+Felsenstein. J. (1978a)
+ The number of evolutionary trees. System. Zool., 27:27-33.
+
+Felsenstein. J. (1978b)
+ Cases in which  parsimony  and  compatibility  methods  will  be
+positively misleading. System. Zool., 27:401-410
+
+Felsenstein, J. (1981)
+ Evolutionary trees from  DNA  sequences:  a  maximum  likelihood
+approach. J. Mol. Evol., 17:368-376
+
+Felsenstein, J. (1985)
+ Confidence  limits  on  phylogenies:  an  approach   using   the
+bootstrap. Evolutio., 39:783-791.
+
+Felsenstein, J. (1992)
+ Phylogenies  from  restriction   sites:   a   maximum-likelihood
+approach. Evolutio., 46:159-173.
+
+Golenberg, E.M.,  Giannasi,  D.E.,  Clegg,  M.T.,  Smiley,  C.J.,
+Durbin, M., Henderson, D., Zurawski, G. (1990)
+ Chlorolplast DNA  sequence  from  a  Miocene  Magnolia  species.
+Natur., 344:656-658.
+
+Hasegawa, M., Yano, T. (1984a)
+ Phylogeny and classification of Hominoidea as inferred from  DNA
+sequence data. Proc. Japan Acad., B60:389-392.
+
+Hasegawa, M., Yano, T. (1984b)
+ Maximum likelihood method of  phylogenetic  inference  from  DNA
+sequence data. Bull. Biomet. Soc. Jp., 5:1-7.
+
+Hasegawa, M., Iida, Y.,  Yano,  T.,  Takaiwa,  F.,  Iwabuchi,  M.
+(1985)
+ Phylogenetic relationships among  eukaryotic  kingdoms  inferred
+from ribosomal RNA sequences. J. Mol. Evol., 22:32-38.
+
+Hasegawa, M., Kishino, H. (1989)
+ Confidence limits on  the  maximum-likelihood  estimate  of  the
+hominoid  tree  from  mitochondrial-  DNA  sequences.  Evolutio.,
+43:672-677.
+
+Hasegawa, M. (1990)
+ Phylogeny and molecular evolution in primates. Jpn.  J.  Genet.,
+65:243-265.
+
+Hasegawa, M. (1991)
+ Molecular phylogeny and man's place in Hominoidea.  J.  Anthrop.
+Soc. Nippo., 99:49-61.
+
+Hasegawa, M., Kishino, H., Hayasaka, K., Horai, S. (1990a)
+ Mitochondrial DNA evolution in  primates:  Transition  rate  has
+been extremely low in lemur. J. Mol. Evol., 31:113-121.
+
+Hasegawa, M., Iwabe, N., Mukohata, Y., Miyata, T. (1990b)
+ Close evolutionary relatedness of archaebacteria,  Methanococcus
+and   Halobacteriu.,  to  eukaryotes  demonstrated  by  composite
+phylogenetic trees of elongation factors EF-Tu and  EF-G:  eocyte
+tree is unlikely. Jpn. J. Genet., 65:109-114.
+
+Hasegawa, M., Kishino, H., Saitou, N. (1991)
+ On the maximum likelihood method in molecular phylogenetics.  J.
+Mol. Evol., 32:443-445.
+
+Hasegawa, M., Cao, Y., Adachi, J., Yano, T. (1992)
+ Rodent polyphyly? Natur., 355:595-595.
+
+Hasegawa, M., Hashimoto, T., Adachi, J., Iwabe,  N.,  Miyata,  T.
+(1993)
+ Early  divergences  in  the  evolution  of  eukaryotes:  ancient
+divergence  of  Entamoeba  that  lacks  mitochondria  revealed by
+protein sequence data. J. Mol. Evol., (in press).
+
+Hashimoto, T., Otaka, E., Adachi, J., Mizuta,  K.,  Hasegawa,  M.
+(1993)
+ The giant panda is most  close  to  a  bear,  judged  by  -  and
+-hemoglobin sequences. J Mol Evol. (in press).
+
+IUPAC-IUB Commission on Biochemical Nomenclature (1968)
+ A one-letter notation for amino acid sequences, tentative rules.
+J. Biol. Chem., 243:3557-3559.
+
+
+Iwabe, N., Kuma, K., Hasegawa, M., Osawa, S., Miyata, T. (1989)
+ Evolutionary relationship  of  archaebacteria,  eubacteria,  and
+eukaryotes  inferred from phylogenetic trees of duplicated genes.
+Proc. Natl. Acad. Sci. US., 86:9355-9359.
+
+Iwabe, N., Kuma, K., Kishino, H., Hasegawa, M., Miyata, T. (1991)
+ Evolution of RNA polymerases and branching patterns of the three
+major groups of archaebacteria. J. Mol. Evol., 32:70-78.
+
+Kishino, H., Hasegawa, M. (1989)
+ Evaluation  of  the   maximum   likelihood   estimate   of   the
+evolutionary  tree  topologies  from  DNA  sequence data, and the
+branching order in Hominoidea. J. Mol. Evol., 29:170-179.
+
+Kishino, H., Miyata, T., Hasegawa, M. (1990)
+ Maximum likelihood inference of protein phylogeny and the origin
+of chloroplasts. J. Mol. Evol., 30:151-160.
+
+Les, D.H., Garvin, D.K., Wimpee, C.F. (1991)
+ Molecular evolutionary history of ancient  aquatic  angiosperms.
+Proc. Natl. Acad. Sci. US., 88:10119-10123.
+
+Lockhart, P.J., Howe, C.J., Bryant, D.A., Beanland, T.J., Larkum,
+A.W.D. (1992)
+ Substitutional bias confounds inference of cyanelle origins from
+sequence data. J. Mol. Evol., 34:153-162.
+
+Loomis, W.F., Smith, D.W. (1990)
+ Molecular  phylogeny  of  Dictyostelium  discoideum  by  protein
+sequence comparison. Proc. Natl. Acad. Sci. US., 87:9093-9097.
+
+Miyata, T., Iwabe, N., Kuma, K.,  Kawanishi,  Y.,  Hasegawa,  M.,
+Kishino, H., Mukohata, Y., Ihara, K., Osawa, S. (1991)
+ Evolution of archaebacteria:  Phylogenetic  relationships  among
+archaebacteria, eubacteria, and eukaryotes. In: Osawa, S., Honjo,
+T. (eds.) Evolution of Life: Fossils, Molecules,  and  Culture  .
+Springer-Verlag, Tokyo, pp. 337-351.
+
+Mukohata, Y., Ihara, K., Kishino, H., Hasegawa,  M.,  Iwabe,  N.,
+Miyata, T. (1990)
+ Close   evolutionary   relatedness   of   archaebacteria    with
+eukaryotes. Proc. Japan Acad., B66:63-67.
+
+Saitou, N, Nei, M. (1987)
+ The neighbor-joining method: a  new  method  for  reconstructing
+phylogenetic trees. Mol. Biol. Evol., 4:406-425.
+
+Ruvolo, M., Disotell, T.R., Allard, M.W., Brown, W.M., Honeycutt,
+R.L. (1991)
+ Resolution of the  African  hominoid  trichotomy  by  use  of  a
+mitochondrial   gene   sequence.  Proc.  Natl.  Acad.  Sci.  US.,
+88:1570-1574.
+
+Sogin, M.L., Edman, U., Elwood, H. (1989)
+ A single kingdom of eukaryotes.
+ In: Fernholm, B., Bremer, K., J rnvall, H. (eds.) The  Hierarchy
+of Life . Elsevier Science Publisher, Amsterdam, pp. 133-143.
+
+Woese, C.R. (1989)
+ Bacterial evolution. Microbiol. Rev., 51:221-271.
+
+Zillig, W., Klenk, H.-P., Palm, P.,  Leffers,  H.,  P  hler,  G.,
+Gropp, F., Garrett, R.A. (1989)
+ Did eukaryotes originate by a fusion event? Endocytobiosis  Cell
+Res., 6:1-25
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

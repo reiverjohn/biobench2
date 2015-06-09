@@ -1,0 +1,192 @@
+
+           %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+           %%                                                     %%
+           %%  PHYLIP (Phylogeny Inference Package) Version 3.5c  %%
+           %%                                                     %%
+           %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+                               COPYRIGHT NOTICE
+
+(c) Copyright 1986-1995 by Joseph Felsenstein and the University of Washington.
+Permission is granted to copy this document provided that no fee is charged for
+it and that this copyright notice is not removed.
+
+
+
+                           CONTENTS OF THIS PACKAGE
+
+     The source code and documentation of the package  consists  of  87  files,
+plus  4  more  for the programs in the Unsupported Division.  In the electronic
+mail version some of these files may be split into parts, so there may be more.
+The  package  is  organized  into  three  major  parts,  the  source  code, the
+documentation, and the unsupported programs.  The  documentation  is  organized
+hierarchically,  with groups of documentation files for different kinds of data
+each preceded by a documentation file for the group as well.  The  "unsupported
+division"  of PHYLIP contains programs contributed by others (and not supported
+by us) that we feel may of use to you.
+
+  Files               Contents
+  ----                --------
+    1    README          -- this description of the contents of the package
+    2    main.doc        -- the general documentation file
+The Source code
+    3    Makefile        -- the "Makefile" to be used by C's that have "make"
+    4    Makefile.qc     -- the Makefile for Microsoft C and Quick C
+    5    Makefile.tc     -- the Makefile for Borland Turbo C and Borland C
+    6    phylip.h        -- the PHYLIP "header file"
+    7    compile.com     -- a VAX VMS command file to compile all of PHYLIP
+    8    vaxfix.c        -- procedures needed to fix VAX VMS printf(" %hd ")
+    9    protpars.c      -- parsimony for protein sequence data
+   10    dnapars.c       -- DNA parsimony program
+   11    dnamove.c       -- interactive DNA parsimony
+   12    dnapenny.c      -- branch and bound method for DNA
+   13    dnacomp.c       -- DNA compatibility program
+   14    dnainvar.c      -- computation of Lake's and Cavender's invariants
+   15    dnaml.c         -- DNA maximum likelihood program, part 1
+   16    dnaml2.c        -- DNA maximum likelihood program, part 2
+   17    dnamlk.c        -- DNA maximum likelihood with molecular clock
+   18    dnamlk2.c       -- DNA maximum likelihood with clock, part 2
+   19    dnadist.c       -- computes distance matrix from sequences
+   20    protdist.c      -- computes distance matrix from sequences
+   21    restml.c        -- maximum likelihood for restriction sites
+   22    restml2.c       -- maximum likelihood for restriction sites, part 2
+   23    seqboot.c       -- makes multiple data sets by bootstrap resampling
+   24    fitch.c         -- Fitch-Margoliash and least-squares methods
+   25    kitsch.c        -- F-M, L-S methods with evolutionary clock
+   26    neighbor.c      -- neighbor-joining and UPGMA methods
+   27    contml.c        -- maximum likelihood program
+   28    gendist.c       -- computes genetic distances
+
+
+
+   29    contrast.c      -- contrasts etc. for comparative method studies
+   30    mix.c           -- Wagner, Camin-Sokal parsimony and mixtures, part 1
+   31    mix2.c          -- Wagner, Camin-Sokal parsimony and mixtures, part 2
+   32    move.c          -- interactive Wagner, Camin-Sokal and mixed parsimony
+   33    penny.c         -- finds all most parsimonious trees
+   34    dollop.c        -- Dollo and polymorphism parsimony methods
+   35    dolmove.c       -- interactive Dollo and polymorphism parsimony
+   36    dolpenny.c      -- branch and bound for Dollo, polymorphism
+   37    clique.c        -- compatibility program
+   38    factor.c        -- recode multistate to binary characters
+   39    drawgraphics.h  -- header file for drawgraphics.c
+   40    drawgraphics.c  -- routines used in both drawgram.c and drawtree.c
+   41    interface.h     -- header for Mac interface
+   42    interface.c     -- Mac routines used in Mac interface
+   43    drawgram.c      -- makes plots of cladograms, phenograms
+   44    drawtree.c      -- makes plots of unrooted phylogenies
+   45    font1           -- digitized font (simple sans-serif Roman)
+   46    font2           -- digitized font (medium quality sans-serif Roman)
+   47    font3           -- digitized font (high quality serifed Roman)
+   48    font4           -- digitized font (medium quality sans-serif Italic)
+   49    font5           -- digitized font (high quality serifed Italic)
+   50    font6           -- digitized font (Russian Cyrillic)
+   51    consense.c      -- majority-rule and strict consensus trees
+   52    retree.c        -- reroots, rearranges and changes lengths on trees
+The Documentation
+   53    sequence.doc    -- documentation for molecular sequence programs
+   54    protpars.doc      -- documentation for protpars.c
+   55    dnapars.doc       -- documentation for dnapars.c
+   56    dnamove.doc       -- documentation for dnamove.c
+   57    dnapenny.doc      -- documentation for dnapenny.c
+   58    dnacomp.doc       -- documentation for dnacomp.c
+   59    dnainvar.doc      -- documentation for dnainvar.c
+   60    dnaml.doc         -- documentation for dnaml.c and dnaml2.c
+   61    dnamlk.doc        -- documentation for dnamlk.c and dnamlk2.c
+   62    dnadist.doc       -- documentation for dnadist.c
+   63    protdist.doc      -- documentation for protdist.c
+   64    restml.doc        -- documentation for restml.c and restml2.c
+   65    seqboot.doc       -- documentation for seqboot.c
+   66    distance.doc   -- documentation for distance matrix programs
+   67    fitch.doc         -- documentation for fitch.c
+   68    kitsch.doc        -- documentation for kitsch.c
+   69    neighbor.doc      -- documentation for neighbor.c
+   70    contchar.doc   -- documentation for gene frequency
+                             and continuous character programs
+   71    contml.doc        -- documentation for contml.c
+   72    gendist.doc       -- documentation for gendist.c
+   73    contrast.doc      -- documentation for contrast.c
+   74    discrete.doc    -- documentation for discrete character programs
+   75    mix.doc           -- documentation for mix.c
+   76    move.doc          -- documentation for move.c
+   77    penny.doc         -- documentation for penny.c
+   78    dollop.doc        -- documentation for dollop.c
+   79    dolmove.doc       -- documentation for dolmove.c
+   80    dolpenny.doc      -- documentation for dolpenny.c
+   81    clique.doc        -- documentation for clique.c
+   82    factor.doc        -- documentation for factor.c
+   83    draw.doc       -- documentation for tree plotting programs
+   84    drawgram.doc      -- documentation for drawgram.c
+   85    drawtree.doc      -- documentation for drawtree.c
+   86    consense.doc   -- documentation for consense.c
+   87    retree.doc     -- documentation for retree.c
+
+
+
+ The Unsupported Division
+   88    makeinf.doc    -- documentation for makeinf (by Arend Sidow)
+   89    makeinf.c      -- C source for makeinf
+   90    protml.doc     -- documentation for ProtML (by Adachi and Hasegawa)
+   91    protml.pas     -- Pascal source for ProtML
+
+
+
+
+
+
+Before using any of the programs you should read the main documentation
+file main.doc, the documentation file for that group of programs, and
+the documentation file for the program.
+
+
+                                                  Joe Felsenstein
+
+Electronic mail address (Internet):           joe@genetics.washington.edu
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,355 @@
+
+__________________________
+
+MANUAL FOR PROGRAM MAKEINF
+__________________________
+
+
+
+INTRODUCTION
+____________
+
+MAKEINF (for "MAKE INFile") reads an amino acid or nucleic acid
+alignment of the format of Jotun Hein's ALIGN program (MBE 1989,
+6:649-668) and then outputs an aligned set of nucleic acid sequences in
+the sequential format used by the PHYLIP package. Please note that if
+you don't use ALIGN, you can easily edit your alignments so that they
+can be used with MAKEINF.
+
+WHEN do I want to use this program?
+
+It is particularly useful for the analysis of protein-coding genes at
+the nucleic acid level. It may also be used on nucleic acid sequences
+which do not encode proteins. I wrote it because I analyze first plus
+second position changes which result in amino acid replacements.
+Editing such sequences can be extremely time-consuming when it is done
+by hand.
+
+a) Given an alignment, MAKEINF puts the gaps in the right places by
+using the alignment (usually an amino acid alignment, but nucleic acids
+are ok as well) as a template on which to align the corresponding
+nucleic acid sequences. The resulting output file is directly PHYLIP-
+readable.
+
+b) If you have an amino acid alignment, the program asks you which
+codon position you will analyze. There are five choices: first only,
+second only, third only, first plus second, or all positions. The
+program will only output the positions you want to analyze.
+
+c) You can exclude as many sequences as you want. The program will only
+output the sequences you want to analyze.
+
+d) You can exclude blocks in which homology is uncertain. The program
+will not output those positions.
+
+e) For protein coding sequences, the progam allows you to convert first
+positions of Leucine codons to a degenerate 'Y' (T or C), and those of
+Arginine codons to a degenerate 'M' (A or C). This eliminates the noise
+and the heterogeneity of rates which is introduced by silent changes in
+these two classes of codons. If you analyze mitochondrial sequences, it
+will only do this with first positions of leucine codons.
+
+f) The program counts the number of A's, C's, G's, and T's, and also
+Y's and M's, and allocates two-thirds of them to C, and one-third to T
+or A, respectively, consistent with the number of codons encoding
+leucine and arginine in the genetic code. It does this only if first
+positions are included; if they are not, one can more easily have
+PHYLIP calculate empirical base frequencies.
+
+
+SUMMARY OF STEPS INVOLVED (illustrated with protein-coding sequences)
+_________________________
+
+Please note that if you don't use ALIGN, you can easily edit your
+alignment so that it can be used with MAKEINF. See the next section for
+the format of the alignment.
+
+(1) Translate your protein-coding nucleic acid sequences.
+
+(2) Prepare a file of the translated, unaligned, amino acid sequences
+  for your alignment program.
+
+(3) Apply ALIGN to the amino acid sequences, or another alignment
+  algorithm. In the latter case you'll have to edit your alignment to
+  make it MAKEINF-compatible.
+
+(4) If desired, exclude sequences or blocks of uncertain homology.
+
+(5) Prepare a file of the original nucleic acid sequences for program
+  MAKEINF.
+
+(6) Apply MAKEINF, which gives you a file with the nucleotide sequences
+  in the sequential format used by PHYLIP. This file can be directly
+  used as 'infile'.
+
+(7) Apply DNAML (or another program of PHYLIP).
+
+
+
+THE FORMAT OF THE ALIGNMENT FILE
+________________________________
+
+If you use ALIGN, you'll be familiar with the format of the alignment file.
+
+If you don't use ALIGN, you can edit your alignment so that it can be used
+with MAKEINF. This section tells you how to do that.
+
+The following lines represent all the features in the alignment file which
+are necessary for application of MAKEINF:
+
+0 xen
+1 wnt1
+2 wnt2
+3 wnt3
+4 wnt4
+
+ALIGNMENT
+
+SGSCEVKTCWWAQPDFRAIGDFLKDKYDSASEMVVEKH---R-ESRGWVETLRAKYALFKPPTERDLVYY 66 3
+SGSCSLRTCWMRLPPFRSVGDALKDRFDGASKVTYSNNGSNRWGSRSDPPHLEPENPTHALPSSQDLVYF 70 0
+SGSCTVRTCWMRLPTLRAVGDVLRDRFDGASRVLYGNRGSNR-ASRAELLRLEPEDPAHKPPSPHDLVYF 69 1
+SGSCTLRTCWLAMADFRKTGDYLWRKYNGAIQVVMNQD---G-TGFTVA------NERFKKPTKNDLVYF 60 2
+SGSCEVKTCWRAVPPFRQVGHALKEKFDGATEVEPRRV---G-SSRALVPR----NAQFKPHTDEDLVYL 62 4
+****   ***      *  *  *      *                                   ****
+
+
+ENSPNFCEPNPETGSFGTRDRTCNVTSHGIDGCDLLCCGRGHNTRTEKRKEKCHCVF 123 3
+EKSPNFCSPSEKNGTPGTTGRICNSTSLGLDGCELLCCGRGYRSLAEKVTERCHCTF 127 0
+EKSPNFCTYSGRLGTAGTAGRACNSSSPALDGCELLCCGRGHRTRTQRVTERCNCTF 126 1
+ENSPDYCIRDREAGSLGTAGRVCNLTSRGMDSCEVMCCGRGYDTSHVTRMTKCGCKF 117 2
+EPSPDFCEQDIRSGVLGTRGRTCNKTSKAIDGCELLCCGRGFHTAQVELAERCHCRF 119 4
+* **  *      *  **  * **  *   * *   *****           * * *
+
+
+The features of the alignment format that are used as landmarks by
+MAKEINF are the following:
+
+(a) A list, of the numbers (starting with 0) and names of all
+sequences, in order, without interrupting empty lines.
+
+(b) The word 'ALIGNMENT' in capital letters, after the list of
+sequences and before the alignment.
+
+(c) The actual alignment with amino acids in capital letters. It
+requires the following features:
+
+ (i) It is in any number of blocks (the above example has two).
+
+ (ii) EACH BLOCK NEEDS TO BE FOLLOWED BY AT LEAST ONE ASTERISK anywhere
+   on the line immediately following the sequences. (ALIGN puts in these
+   asterisks to indicate conserved residues.)
+
+ (iii) NO EMPTY LINES MAY OCCUR WITHIN A BLOCK, but the number of lines
+   between blocks does not matter. (Align sometimes puts certain characters
+   between blocks; they do not interfere with MAKEINF.)
+
+ (iv) The order of sequences within each block must be the same and all
+   sequences listed on top must occur in the alignment.
+
+ (v) Within the alignment, SEQUENCES ARE IDENTIFIED BY THEIR NUMBER.
+   Note that there are two numbers at the end of each line. The first
+   is the number of the last residue on that line. The second number is
+   the ID number of the sequence on that line. (E.g., the first sequence
+   in the above alignment is wnt3.) Both numbers must be there, but the
+   value of only the second number (the sequence ID) is important. If you
+   do not use ALIGN, and you want to leave out the first number, edit
+   makeinf.c in the following manner: Delete the line
+     fscanf( sourceali, "%d", &taxnum );     /* dumps the length number */
+   in function 'findname'.
+
+ (vi) The length of the sequences in each block must be the same (which they
+   will be if the sequences are aligned) but the blocks can be of different
+   lengths.
+
+ (vii) GAP CHARACTERS ARE ALWAYS HYPHENS ('-'; ASCII 45).
+
+ (viii) NO SPACES are allowed at the beginning of the lines with sequence
+   information. They must begin with a capital letter, a hyphen, a square
+   bracket, or a curly bracket.
+
+ (ix) Any number of sequences may be excluded. Excluding sequences
+   is done with CURLY brackets:
+
+ SGSCEVKTCWWAQPDFRAIGDFLKDKYDSASEMVVEKH---R-ESRGWVETLRAKYALFKPPTERDLVYY 66 3
+ {SGSCSLRTCWMRLPPFRSVGDALKDRFDGASKVTYSNNGSNRWGSRSDPPHLEPENPTHALPSSQDLVYF 70 0}
+ SGSCTVRTCWMRLPTLRAVGDVLRDRFDGASRVLYGNRGSNR-ASRAELLRLEPEDPAHKPPSPHDLVYF 69  1
+ SGSCTLRTCWLAMADFRKTGDYLWRKYNGAIQVVMNQD---G-TGFTVA------NERFKKPTKNDLVYF 60  2
+ SGSCEVKTCWRAVPPFRQVGHALKEKFDGATEVEPRRV---G-SSRALVPR----NAQFKPHTDEDLVYL 62  4
+ ****   ***      *  *  *      *                                   ****
+
+ ENSPNFCEPNPETGSFGTRDRTCNVTSHGIDGCDLLCCGRGHNTRTEKRKEKCHCVF 123  3
+ {EKSPNFCSPSEKNGTPGTTGRICNSTSLGLDGCELLCCGRGYRSLAEKVTERCHCTF 127  0}
+ EKSPNFCTYSGRLGTAGTAGRACNSSSPALDGCELLCCGRGHRTRTQRVTERCNCTF  126  1
+ ENSPDYCIRDREAGSLGTAGRVCNLTSRGMDSCEVMCCGRGYDTSHVTRMTKCGCKF  117  2
+ EPSPDFCEQDIRSGVLGTRGRTCNKTSKAIDGCELLCCGRGFHTAQVELAERCHCRF  119  4
+ * **  *      *  **  * **  *   * *   *****           * * *
+
+ In this example, sequence number 0 will not be written to the output file.
+ Several sequences can be excluded according to the following format:
+
+ SGSCEVKTCWWAQPDFRAIGDFLKDKYDSASEMVVEKH---R-ESRGWVETLRAKYALFKPPTERDLVYY 66 3
+ {SGSCSLRTCWMRLPPFRSVGDALKDRFDGASKVTYSNNGSNRWGSRSDPPHLEPENPTHALPSSQDLVYF 70 0
+ SGSCTVRTCWMRLPTLRAVGDVLRDRFDGASRVLYGNRGSNR-ASRAELLRLEPEDPAHKPPSPHDLVYF 69 1}
+ SGSCTLRTCWLAMADFRKTGDYLWRKYNGAIQVVMNQD---G-TGFTVA------NERFKKPTKNDLVYF 60 2
+ SGSCEVKTCWRAVPPFRQVGHALKEKFDGATEVEPRRV---G-SSRALVPR----NAQFKPHTDEDLVYL 62 4
+ ****   ***      *  *  *      *                                   ****
+
+ ENSPNFCEPNPETGSFGTRDRTCNVTSHGIDGCDLLCCGRGHNTRTEKRKEKCHCVF 123 3
+ {EKSPNFCSPSEKNGTPGTTGRICNSTSLGLDGCELLCCGRGYRSLAEKVTERCHCTF 127 0
+ EKSPNFCTYSGRLGTAGTAGRACNSSSPALDGCELLCCGRGHRTRTQRVTERCNCTF 126 1}
+ ENSPDYCIRDREAGSLGTAGRVCNLTSRGMDSCEVMCCGRGYDTSHVTRMTKCGCKF 117 2
+ EPSPDFCEQDIRSGVLGTRGRTCNKTSKAIDGCELLCCGRGFHTAQVELAERCHCRF 119 4
+ * **  *      *  **  * **  *   * *   *****           * * *
+
+ or, if they are interspersed, like this:
+
+ SGSCEVKTCWWAQPDFRAIGDFLKDKYDSASEMVVEKH---R-ESRGWVETLRAKYALFKPPTERDLVYY 66 3
+ {SGSCSLRTCWMRLPPFRSVGDALKDRFDGASKVTYSNNGSNRWGSRSDPPHLEPENPTHALPSSQDLVYF 70 0}
+ SGSCTVRTCWMRLPTLRAVGDVLRDRFDGASRVLYGNRGSNR-ASRAELLRLEPEDPAHKPPSPHDLVYF 69 1
+ SGSCTLRTCWLAMADFRKTGDYLWRKYNGAIQVVMNQD---G-TGFTVA------NERFKKPTKNDLVYF 60 2
+ {SGSCEVKTCWRAVPPFRQVGHALKEKFDGATEVEPRRV---G-SSRALVPR----NAQFKPHTDEDLVYL 62 4}
+ ****   ***      *  *  *      *                                   ****
+
+ ENSPNFCEPNPETGSFGTRDRTCNVTSHGIDGCDLLCCGRGHNTRTEKRKEKCHCVF 123 3
+ {EKSPNFCSPSEKNGTPGTTGRICNSTSLGLDGCELLCCGRGYRSLAEKVTERCHCTF 127 0}
+ EKSPNFCTYSGRLGTAGTAGRACNSSSPALDGCELLCCGRGHRTRTQRVTERCNCTF 126 1
+ ENSPDYCIRDREAGSLGTAGRVCNLTSRGMDSCEVMCCGRGYDTSHVTRMTKCGCKF 117 2
+ {EPSPDFCEQDIRSGVLGTRGRTCNKTSKAIDGCELLCCGRGFHTAQVELAERCHCRF 119 4}
+ * **  *      *  **  * **  *   * *   *****           * * *
+
+ KEEP TRACK OF HOW MANY SEQUENCES ARE COMMENTED OUT, SINCE THE PROGRAM WILL
+ ASK YOU FOR THE NUMBER OF SEQUENCES TO BE ALIGNED.
+
+ (x) Any number of positions in which alignment is uncertain can be excluded.
+   This is done with SQUARE brackets. In the above example, the gapped
+   region in the first block ought to be omitted:
+
+ SGSCEVKTCWWAQPDFRAIGDFLKDKYDSASEMVVEKH[---R-ESRGWVETLRAK]YALFKPPTERDLVYY 66 3
+ {SGSCSLRTCWMRLPPFRSVGDALKDRFDGASKVTYSNNGSNRWGSRSDPPHLEPENPTHALPSSQDLVYF 70 0}
+ SGSCTVRTCWMRLPTLRAVGDVLRDRFDGASRVLYGNR[GSNR-ASRAELLRLEPE]DPAHKPPSPHDLVYF 69  1
+ SGSCTLRTCWLAMADFRKTGDYLWRKYNGAIQVVMNQD[---G-TGFTVA------]NERFKKPTKNDLVYF 60  2
+ SGSCEVKTCWRAVPPFRQVGHALKEKFDGATEVEPRRV[---G-SSRALVPR----]NAQFKPHTDEDLVYL 62  4
+ ****   ***      *  *  *      *                                   ****
+
+ ENSPNFCEPNPETGSFGTRDRTCNVTSHGIDGCDLLCCGRGHNTRTEKRKEKCHCVF 123  3
+ {EKSPNFCSPSEKNGTPGTTGRICNSTSLGLDGCELLCCGRGYRSLAEKVTERCHCTF 127  0}
+ EKSPNFCTYSGRLGTAGTAGRACNSSSPALDGCELLCCGRGHRTRTQRVTERCNCTF  126  1
+ ENSPDYCIRDREAGSLGTAGRVCNLTSRGMDSCEVMCCGRGYDTSHVTRMTKCGCKF  117  2
+ EPSPDFCEQDIRSGVLGTRGRTCNKTSKAIDGCELLCCGRGFHTAQVELAERCHCRF  119  4
+ * **  *      *  **  * **  *   * *   *****           * * *
+
+ Note that a sequence that is excluded need not get square brackets.
+
+
+THE FORMAT OF THE NUCLEOTIDE FILE
+_________________________________
+
+The format of the file with the nucleotide sequences is the same as
+that used by ALIGN. THE ORDER OF THE SEQUENCES IN THIS FILE MUST
+CORRESPOND TO THE NUMBERING OF THE SEQUENCES IN THE ALIGNMENT. (I.e.,
+in the above example, the order of nucleotide sequences is xen, wnt1,
+wnt2, wnt3, wnt4.) Obviously, they have to be the sequences from which
+the amino acid translation was derived. The nucleotide sequences must
+correspond exactly to the amino acid sequences used for the amino acid
+alignment. No extra or missing nucleotides are allowed. If the program
+misses nucleotides, it will crash and give you an error message. If it
+sees additional nucleotides it will give you a warning. Here is the
+first sequence of the above alignment in correct format (the length of
+each line is irrelevant):
+
+>
+xen
+TCAGGATCCTGCTCCCTCAGGACGTGCTGGATGCGGCTTCCCCCCTTCCGTTCAGTTGGG
+GATGCTTTGAAGGATCGTTTTGATGGAGCCTCTAAAGTGACCTACAGCAACAATGGCAGC
+AATCGATGGGGTTCTCGCAGTGACCCACCTCACCTAGAACCTGAAAACCCCACACATGCT
+CTGCCATCATCCCAGGATCTTGTCTATTTTGAGAAGTCTCCTAACTTCTGCAGCCCTAGT
+GAAAAGAATGGAACTCCTGGAACCACAGGGCGAATATGTAACAGCACTTCATTGGGACTA
+GATGGATGTGAACTCTTGTGCTGTGGTAGAGGATACCGGAGTCTGGCTGAAAAAGTCACT
+GAACGGTGCCATTGCACATTT*
+
+
+The salient features of this format are the 'GREATER THAN' symbol > ,
+the NAME ON THE LINE FOLLOWING IT, the SEQUENCE (in capital or
+lowercase characters), and the TERMINATION-SYMBOL ('*').
+THESE FEATURES ARE ESSENTIAL.
+
+
+
+APPLYING MAKEINF TO YOUR SEQUENCES AND ALIGNMENTS
+_________________________________________________
+
+Compile makeinf.c with your favorite C compiler and execute it. The
+program is semi-interactive in that it asks you a bunch of questions,
+one by one. The user is prompted first for the names of the files to be
+used, then for the number of sequences in the alignment, and then for
+various options.
+
+The following lines are what the screen of your computer looks like after
+you answer all questions; this example is specific to the example files
+provided with the program and this manual.
+
+
+Alignment file to be read:      ex.ali
+Nucleotide file to be read:     ex.nuc
+Destination file to be written: infile
+
+Total number of sequences in alignment: 5
+Number of sequences to be used:         4
+Nucleic acid or Protein coding sequence?          (n/p): p
+Nuclear or mitochondrial genetic code?            (n/m): n
+
+Enter a number between 1 and 5, for the
+   codon position you wish to analyze:
+   1 for first, 2 for second, 3 for third
+   4 for first plus second, 5 for all.            (1-5): 4
+Conversion of first positions to degenerate base? (y/n): y
+Use nAmes or nUmbers as identifiers?              (a/u): a
+
+
+
+Let's go through this one by one:
+
+The program starts by writing 'Alignment file to be read:   ', i.e. it asks
+you for the name of the file which holds the amino acid alignment. The user,
+in this case, specified the name 'ex.ali', and hit <return>; ex.nuc holds
+the nucleotide sequences; infile is the name of the file to which the
+nucleotide alignment will be written. 5 is the number of sequences in
+the alignment, but the number of sequences to be used is only 4 since
+one (number 0, or 'xen') is commented out. In this example, we are dealing
+with protein coding sequences (hence the 'p') of the nuclear code ('n').
+
+Since we are dealing with protein coding sequences, the next question is
+about which positions we want to use. Option 4 means: first plus second
+positions. As we want to eliminate silent changes in first positions of
+arginine and leucine codons, we anser yes ('y'); and we want to have the
+program use the names ('a') in the output file.
+When you've entered all these options, the program bounces the following
+back at you:
+
+Nucleotide sequences in:                 ex.nuc
+Amino acid alignment source:             ex.ali
+Nucleotide alignment destination:        infile
+First plus second codon positions will be used.
+L and R 1st positions will be converted to Y and M.
+Names will be used to identify sequences.
+
+Frequencies of A, C, G, T:
+   0.26529   0.24032   0.27189   0.22250
+
+The last two lines appear if you are using first positions of protein
+coding sequences, and you requested that first positions of leucine
+and/or arginine codons be converted to their degenerate base. When you use
+PHYLIP, you should input these numbers, rather than use empirical base
+frequencies, especially if silent positions in your sequences are not at
+compositional equilibrium.
+
+That's it. If you have questions that this manual does not answer, send
+e-mail to
+
+arend@mendel.berkeley.edu
+
+Yours,
+
+Arend Sidow
+
+

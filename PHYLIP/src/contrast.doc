@@ -1,0 +1,189 @@
+
+                                                                   version 3.5c
+
+             CONTRAST -- Computes contrasts for comparative method
+
+
+(c) Copyright  1991-1993  by  Joseph  Felsenstein  and  by  the  University  of
+Washington.  Written by Joseph Felsenstein.  Permission is granted to copy this
+document provided that no fee is charged for it and that this copyright  notice
+is not removed.
+
+     This program implements the contrasts calculation  described  in  my  1985
+paper  on  the comparative method (Felsenstein, 1985d).  It reads in a data set
+of the standard  quantitative  characters  sort,  and  also  a  tree  from  the
+treefile.   It then forms the contrasts between species that, according to that
+tree, are statistically independent.  This is done  for  each  character.   The
+contrasts  are  all  standardized  by branch lengths (actually, square roots of
+branch lengths).
+
+     The method is explained in the 1985 paper.  It assumes a  Brownian  motion
+model.   This  model  was  introduced  by  Edwards  and  Cavalli-Sforza  (1964;
+Cavalli-Sforza and Edwards, 1967) as an approximation to the evolution of  gene
+frequencies.   I  have  discussed (Felsenstein, 1973b, 1981c, 1985d, 1988b) the
+difficulties inherent in using it as a model for the evolution of  quantitative
+characters.  Chief among these is that the characters do not necessarily evolve
+independently or at equal rates.  This program allows one to evaluate this,  if
+there  is  independent  information  on  the  phylogeny.   You  can compute the
+variance of the contrasts for each character, as  a  measure  of  the  variance
+accumulating  per  unit  branch  length.   You  can  also  test  covariances of
+characters.
+
+     The input file is as described in the continuous characters  documentation
+file  above,  for  the  case  of  continuous  quantitative characters (not gene
+frequencies).  Options are selected using a menu:
+
+
+Continuous character Contrasts, version 3.5c
+
+Settings for this run:
+  R     Print out correlations and regressions?  Yes
+  M                     Analyze multiple trees?  No
+  0         Terminal type (IBM PC, VT52, ANSI)?  ANSI
+  1          Print out the data at start of run  No
+  2        Print indications of progress of run  Yes
+
+Are these settings correct? (type Y or the letter for one to change)
+
+M is similar to the usual multiple data sets input option, but is used here  to
+allow multiple trees to be read from the treefile, not multiple data sets to be
+read from the input file.  In this way you can use bootstrapping  on  the  data
+that  estimated  these trees, get multiple bootstrap estimates of the tree, and
+then use the M option to make  multiple  analyses  of  the  contrasts  and  the
+covariances,  correlations,  and regressions.  In this way (Felsenstein, 1988b)
+you can assess the effect of the inaccuracy of the trees on your  estimates  of
+these statistics.
+
+R allows you to turn off or on the printing out of the statistics.   If  it  is
+off only the contrasts will be printed out (unless option 1 is selected).  With
+only the contrasts printed out, they are in a simple array that is  in  a  form
+that  many statistics packages should be able to read.  The contrasts are rows,
+and each row has one contrast for each character.  Any multivariate  statistics
+package  should  be  able to analyze these (but keep in mind that the contrasts
+
+
+have, by virtue of the  way  they  are  generated,  expectation  zero,  so  all
+regressions must pass through the origin).
+
+     The tree file should contain the desired tree  or  trees.   These  can  be
+either  in  bifurcating form, or may have the bottommost fork be a trifurcation
+(it should not matter which of these ways you  present  the  tree).   The  tree
+must, of course, have branch lengths.
+
+     If you have a molecular data set (for  example)  and  also,  on  the  same
+species,  quantitative  measurements,  here  is  how  you  can  allow  for  the
+uncertainty of yor estimate of the tree.  Use SEQBOOT to generate multiple data
+sets  from  your  molecular data.  Then, whichever method you use to analyze it
+(the relevant ones are those that produce  estimates  of  the  branch  lengths:
+DNAML,  DNAMLK,  FITCH, KITSCH, and NEIGHBOR -- the latter three require you to
+use DNADIST to turn the bootstrap data sets into multiple  distance  matrices),
+you should use the Multiple Data Sets option of that program.  This will result
+in a tree file with many trees on it.  Then use this tree file with  the  input
+file  containing your continuous quantitative characters, choosing the Multiple
+Trees (M) option.  You will get one set of contrasts and  statistics  for  each
+tree  in  the  tree  file.  At the moment there is no overall summary: you will
+have to tabulate these by hand.  A similar process can be followed if you  have
+restriction sites data (using RESTML) or gene frequencies data.
+
+     The statistics that are printed out include the  covariances  between  all
+pairs  of characters, the regressions of each character on each other (column j
+is regressed on row i), and the correlations between all pairs  of  characters.
+In  assessing  degress of freedom it is important to realize that each contrast
+was taken to have expectation zero, which is known because each contrast  could
+as  easily have been computed xi-xj instead of xj-xi.  Thus there is no loss of
+a degree of freedom for estimation of a mean.  The degrees of freedom  is  thus
+the same as the number of contrasts, namely one less than the number of species
+(tips).  If you feed these contrasts into  a  multivariate  statistics  program
+make sure that it knows that each variable has expectation exactly zero.
+
+     A limitation of these programs is that they use  species  means  for  each
+quantitative  character without attempting to correct for the finiteness of the
+sample size in the estimation of this mean.  Thus the  variability  taken  into
+account  in  the  model  is  randomness  of change in evolution, but not random
+sampling in the estimation of the species means.  I hope to remedy this in  the
+future.   At  the  moment  I  do not have a good method of inputting individual
+measurements, just species means.  Another  limitation  is  the  absence  of  a
+method for indicating missing data.  The current program assumes all characters
+have been measured in all species.
+
+     The constants available for modification at the beginning of  the  program
+include the usual boolean contants for the terminal type plus "namelength", the
+length of species names.
+
+     The data set used as an example below is  the  example  from  a  paper  by
+Michael Lynch (1990), his characters having been log-transformed.
+
+--------------------- TEST SET INPUT ------------------------------------
+
+    5   2
+Homo        4.09434  4.74493
+Pongo       3.61092  3.33220
+Macaca      2.37024  3.36730
+Ateles      2.02815  2.89037
+Galago     -1.46968  2.30259
+
+--------------------- TEST SET INPUT TREEFILE ---------------------------
+
+
+((((Homo:0.21,Pongo:0.21):0.28,Macaca:0.49):0.13,Ateles:0.62):0.38,Galago:1.00);
+
+--------------- TEST SET OUTPUT (with all numerical options on ) -------------
+
+Continuous character Contrasts, version 3.5c
+
+   5 Populations,    2 Characters
+
+Name                       Phenotypes
+----                       ----------
+
+Homo         4.09434   4.74493
+Pongo        3.61092   3.33220
+Macaca       2.37024   3.36730
+Ateles       2.02815   2.89037
+Galago      -1.46968   2.30259
+
+
+Contrasts (columns are different characters)
+--------- -------- --- --------- -----------
+
+   0.74593   2.17989
+   1.58474   0.71761
+   1.19293   0.86790
+   3.35832   0.89706
+
+Covariance matrix
+---------- ------
+
+    3.9423    1.7028
+    1.7028    1.7062
+
+Regressions (columns on rows)
+----------- -------- -- -----
+
+    1.0000    0.4319
+    0.9980    1.0000
+
+Correlations
+------------
+
+    1.0000    0.6566
+    0.6566    1.0000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

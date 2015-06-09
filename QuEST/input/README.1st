@@ -1,0 +1,7 @@
+To replicate the original BioBench2 configuration,
+download QuEST input data from the following:
+
+http://mendel.stanford.edu/SidowLab/downloads/quest/GABP.align_25.hg18.gz
+http://mendel.stanford.edu/SidowLab/downloads/quest/Jurkat_RX_noIP.align_25.hg18.gz
+http://mendel.stanford.edu/SidowLab/downloads/quest/genome_table.gz
+

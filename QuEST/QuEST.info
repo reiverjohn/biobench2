@@ -1,0 +1,12 @@
+QuEST ChIP-Seq analysis pipeline version 2.42
+Last modified on 6-16-2010
+
+For questions, suggestions, bugs please contact 
+Anton Valouev valouev@stanford.edu
+
+Please cite the following publication when using QuEST:
+
+Valouev A, Johnson DS, Sundquist A, Medina C, Anton E, Batzoglou S,
+Myers RM, Sidow A (2008). Genome-wide analysis of transcription
+factor binding sites based on ChIP-Seq data.
+Nat Methods 5, 829-834 (2008)

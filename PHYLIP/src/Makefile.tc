@@ -1,0 +1,114 @@
+CC      = tcc -mh
+BGIDIR  = $(INCLUDE)\..\bgi
+BGIOBJ  = $(BGIDIR)\bgiobj.exe
+GFX 	= GRAPHICS.LIB
+DRIVERS = egavga.obj cga.obj herc.obj
+all	:	dos
+	@echo done.
+
+
+dos:   protpars.exe dnapars.exe dnamove.exe dnapenny.exe dnacomp.exe \
+       dnainvar.exe dnadist.exe protdist.exe dnaml.exe dnamlk.exe restml.exe \
+       seqboot.exe fitch.exe kitsch.exe neighbor.exe contml.exe gendist.exe \
+       contrast.exe mix.exe move.exe penny.exe dollop.exe dolmove.exe \
+       dolpenny.exe clique.exe factor.exe drawgram.exe drawtree.exe \
+       consense.exe retree.exe
+
+
+protpars.exe: protpars.c
+	$(CC) protpars.c
+dnapars.exe: dnapars.c
+	$(CC) dnapars.c
+dnamove.exe: dnamove.c
+	$(CC) dnamove.c
+dnapenny.exe: dnapenny.c
+	$(CC) dnapenny.c
+dnacomp.exe: dnacomp.c
+	$(CC) dnacomp.c
+dnainvar.exe: dnainvar.c
+	$(CC) dnainvar.c
+dnadist.exe: dnadist.c
+	$(CC) dnadist.c
+protdist.exe: protdist.c
+	$(CC) protdist.c
+dnaml.exe: dnaml.obj dnaml2.obj
+	$(CC) dnaml.obj dnaml2.obj
+dnaml.obj: dnaml.c
+	$(CC) -c dnaml.c
+dnaml2.obj: dnaml2.c
+	$(CC) -c dnaml2.c
+dnamlk.exe: dnamlk.obj dnamlk2.obj
+	$(CC) dnamlk.obj dnamlk2.obj
+dnamlk.obj: dnamlk.c
+	$(CC) -c dnamlk.c
+dnamlk2.obj: dnamlk2.c
+	$(CC) -c dnamlk2.c
+restml.exe: restml.obj restml2.obj
+	$(CC) restml.obj restml2.obj
+restml.obj: restml.c
+	$(CC) -c restml.c
+restml2.obj: restml2.c
+	$(CC) -c restml2.c
+seqboot.exe: seqboot.c
+	$(CC) seqboot.c
+fitch.exe: fitch.c
+	$(CC) fitch.c
+kitsch.exe: kitsch.c
+	$(CC) kitsch.c
+neighbor.exe: neighbor.c
+	$(CC) neighbor.c
+contml.exe: contml.c
+	$(CC) contml.c
+gendist.exe: gendist.c
+	$(CC) gendist.c
+contrast.exe: contrast.c
+	$(CC) contrast.c
+mix.exe: mix.obj mix2.obj
+	$(CC) mix.obj mix2.obj
+mix.obj: mix.c
+	$(CC) -c mix.c
+mix2.obj: mix2.c
+	$(CC) -c mix2.c
+move.exe: move.c
+	$(CC) move.c
+penny.exe: penny.c
+	$(CC) penny.c
+dollop.exe: dollop.c
+	$(CC) dollop.c
+dolmove.exe: dolmove.c
+	$(CC) dolmove.c
+dolpenny.exe: dolpenny.c
+	$(CC) dolpenny.c
+clique.exe: clique.c
+	$(CC) clique.c
+factor.exe: factor.c
+	$(CC) factor.c
+drawgram.exe: drawgram.obj phylip.h drawgraphics.obj $(DRIVERS)
+	$(CC)  drawgram.obj drawgraphics.obj  $(GFX) $(DRIVERS)
+drawtree.exe: drawtree.obj phylip.h drawgraphics.obj $(DRIVERS)
+        cd $(TCPATH)
+	$(CC) drawtree.obj drawgraphics.obj $(GFX) $(DRIVERS)
+drawgraphics.obj: drawgraphics.c phylip.h
+	$(CC) -c drawgraphics.c
+drawtree.obj: drawtree.c phylip.h
+	$(CC) -c drawtree.c
+drawgram.obj: drawgram.c phylip.h
+	$(CC) -c  drawgram.c
+consense.exe: consense.c
+	$(CC) consense.c
+retree.exe: retree.c
+	$(CC) retree.c
+
+
+# BGI DRIVERS:
+
+cga.obj:
+	copy $(BGIDIR)\cga.bgi  .
+	$(BGIOBJ) cga
+egavga.obj:
+	copy $(BGIDIR)\egavga.bgi .
+	$(BGIOBJ) egavga
+herc.obj:
+	copy $(BGIDIR)\herc.bgi .
+	$(BGIOBJ) herc
+

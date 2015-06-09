@@ -1,0 +1,5 @@
+To replicate the BioBench2 package setup exactly,
+download the "nt" BLAST database to this folder.
+
+See: ftp://ftp.ncbi.nlm.nih.gov/blast/db/
+

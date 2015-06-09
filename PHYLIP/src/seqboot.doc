@@ -1,0 +1,315 @@
+
+                                                                   version 3.5c
+
+         SEQBOOT -- Bootstrap, Jackknife, or Permutation Resampling of
+    Molecular Sequence, Restriction Site, Gene Frequency or Character Data
+
+
+(c)  Copyright  1991-1993  by  the  University  of  Washington  and  by  Joseph
+Felsenstein.   Written  by  Joseph  Felsenstein.  Permission is granted to copy
+this document provided that no fee is charged for it and  that  this  copyright
+notice is not removed.
+
+     SEQBOOT is a general boostrapping tool.  It is intended to  allow  you  to
+generate  multiple data sets that are resampled versions of the input data set.
+Since almost all programs in the package can analyze these multiple data  sets,
+this  allows almost anything in this package to be bootstrapped, jackknifed, or
+permuted.   SEQBOOT  can  handle  molecular   sequences,   binary   characters,
+restriction sites, or gene frequencies.
+
+     To carry out a bootstrap (or jackknife, or  permutation  test)  with  some
+method  in the package, you may need to use three programs.  First, you need to
+run SEQBOOT to take the original data set and produce a large number (say  100)
+of  bootstrapped  data  sets.  Then you need to find the phylogeny estimate for
+each of these, using the particular method of interest.  For  example,  if  you
+were  using  DNAPARS  you  would  first  run  SEQBOOT  and make a file with 100
+bootstrapped data sets.  Then you would give this file the proper name to  have
+it  be  the  input file for DNAPARS.  Running DNAPARS with the M (Multiple Data
+Sets) menu choice and informaing it to expect 100 data sets, you would generate
+a  big output file as well as a treefile with the trees from the 100 data sets.
+This treefile could be renamed  so  that  it  would  serve  as  the  input  for
+CONSENSE.   When  CONSENSE is run the majority rule consensus tree will result,
+showing the outcome of the analysis.
+
+     This may sound tedious, but the run of  CONSENSE  is  fast,  and  that  of
+SEQBOOT is fairly fast, so that it will not actually take any longer than a run
+of a single bootstrap program with the same original data and the  same  number
+of  replicates.   It  is  not very hard and allows bootstrapping on many of the
+methods in this package.  The same steps are necessary with all of them.  Doing
+things  this way some of the intermediate files (the tree file from the DNAPARS
+run, for example) can be used to summarize the  results  of  the  bootstrap  in
+other ways than the majority rule consensus method does.
+
+     If you are using the Distance Matrix programs, you will have  to  add  one
+extra  step  to  this, calculating distance matrices from each of the replicate
+data sets, using DNADIST or GENDIST.  So (for example) you would  run  SEQBOOT,
+then  run  DNADIST  using  the  output  of SEQBOOT as its input, then run (say)
+NEIGHBOR using the output of DNADIST as its input, and then run CONSENSE  using
+the tree file from NEIGHBOR as its input.
+
+     The resampling methods available are three:
+
+1.  The bootstrap.  Bootstrapping was invented by Bradley Efron  in  1979,  and
+its  use in phylogeny estimation was introduced by me (Felsenstein, 1985b).  It
+involves creating a new  data  set  by  sampling  N  characters  randomly  with
+replacement,  so that the resulting data set has the same size as the original,
+but some characters have been left out and others are duplicated.   The  random
+variation  of  the  results  from analyzing these bootstrapped data sets can be
+shown statistically to be typical of the variation  that  you  would  get  from
+collecting  new  data  sets.   The  method  assumes  that the characters evolve
+independently, an assumption that may not be realistic for many kinds of data.
+
+2.  Delete-half-jackknifing.   This  alternative  to  the  bootstrap   involves
+
+
+sampling  a  random  half of the characters, and including them in the data but
+dropping the others.  The  resulting  data  sets  are  half  the  size  of  the
+original,  and  no  characters are duplicated.  The random variation from doing
+this should be very similar to that obtained from the bootstrap.  The method is
+advocated by Wu (1986).
+
+3. Permuting species within characters.  This method of resampling  (well,  OK,
+it  may  not be best to call it resampling) was introduced by Archie (1989) and
+Faith (1990; see also Faith and Cranston, 1991).   It  involves  permuting  the
+columns  of  the data matrix separately.  This produces data matrices that have
+the same number and kinds of characters but no taxonomic structure.  It is used
+for different purposes than the bootstrap, as it tests not the variation around
+an estimated tree but the hypothesis that there is no  taxonomic  structure  in
+the  data:  if  a statistic such as number of steps is significantly smaller in
+the actual data than it is in replicates that are permuted, then we  can  argue
+that  there is some taxonomic structure in the data (though perhaps it might be
+just a pair of sibling species).
+
+     The data input file is of standard form for molecular sequences (either in
+interleaved or sequential form), restriction sites, gene frequencies, or binary
+morphological characters.  The only options that can be present  in  the  input
+file  are  W  (Weights)  and F (Factors), the latter only in the case of binary
+(0,1) characters.  The Weights can only be 0  or  1,  and  act  to  select  the
+characters  (or  sites)  that  will be used in the resampling, the others being
+ignored and always omitted from the  output  data  sets.   The  Factors  option
+allows  us to specify that groups of binary characters represent one multistate
+character.  When sampling is done they will be sampled or omitted together, and
+when  permutations of species are done they will all have the same permutation,
+as would happen if they really were just one column in the  data  matrix.   For
+futher  description  of  the  F  (Factors)  option  see the Discrete Characters
+Programs documentation file.
+
+     When the program runs it first asks you for a random  number  seed.   This
+should be an integer greater than zero (and probably less than 32767) and which
+is of the form 4n+1, that is, it leaves a remainder of 1  when  divided  by  4.
+This  can  be  judged  by  looking  at  the last two digits of the integer (for
+instance 7651 is not of form  4n+1  as  51,  when  divided  by  4,  leaves  the
+remainder 3).
+
+     Then the program shows you a menu to allow you  to  choose  options.   The
+menu looks like this:
+
+Bootstrapped sequences algorithm, version 3.5c
+
+Settings for this run:
+  D   Sequence, Morph, Rest., Gene Freqs?  Molecular sequences
+  J     Bootstrap, Jackknife, or Permute?  Bootstrap
+  R                  How many replicates?  100
+  I          Input sequences interleaved?  Yes
+  0   Terminal type (IBM PC, VT52, ANSI)?  ANSI
+  1    Print out the data at start of run  No
+  2  Print indications of progress of run  Yes
+
+Are these settings correct? (type Y or the letter for one to change)
+
+The user selects options by typing D, J, R, I, 0, 1, or 2, and continues to  do
+so  until all options are correctly set.  Then the program can be run by typing
+Y.  The 0 (Terminal type) option is the usual one.
+
+     It is important to select the correct data type (the D  selection).   Each
+time  D  is  typed  the  program will change data type, proceeding successively
+
+
+through Molecular Sequences,  Discrete  Morphological  Characters,  Restriction
+Sites,  and  Gene  Frequencies.  Some of these will cause additional entries to
+appear in the menu.  If Molecular Sequences or Restriction Sites settintgs  and
+chosen  the  I  (Interleaved)  option  appears  in  the  menu (and as Molecular
+Sequences are also the default, it appears in the first menu).  It is the usual
+I  option  discussed  in  the Molecular Sequences document file and in the main
+documentation files for the package.
+
+     If the Restriction Sites option is chosen the menu option E appears, which
+asks  whether  the  input file contains a third number on the first line of the
+file, for the number of restriction enzymes used to detect these  sites.   This
+is  necessary  because  data  sets for RESTML need this third number, but other
+programs do not, and SEQBOOT needs to know what to expect.
+
+     If the Gene Frequencies option is chosen an menu option  A  appears  which
+allows  the  user  to  specify  that all alleles at each locus are in the input
+file.  The default setting is that one allele is absent at each locus.
+
+     The J  option  allows  the  user  to  select  Bootstrapping,  Delete-Half-
+Jackknifing,  or the Archie-Faith permutation of species within characters.  It
+changes successively among these three each time J is typed.
+
+     The R option allows the user to set the number  of  replicate  data  sets.
+This defaults to 100.  Most statisticians would be happiest with 1000 to 10,000
+replicates in a bootstrap, but 100 gives a good rough picture.  You  will  have
+to decide this based on how long a running time you want.
+
+
+Input File
+
+     The data files read by SEQBOOT are the standard ones for the various kinds
+of  data.   For  molecular sequences the sequences may be either interleaved or
+sequential, and similarly for restriction sites.  Restriction  sites  data  may
+either  have  or not have the third argument, the number of restriction enzymes
+used.  Discrete morphological characters are always assumed to be in sequential
+format.   Gene frequencies data start with the number of species and the number
+of loci, and then follow that by a line with the  number  of  alleles  at  each
+locus.   The  data for each locus may either have one entry for each allele, or
+omit one allele at each locus.  The details of the formats  are  given  in  the
+main  documentation  file,  and  in  the  documentation files for the groups of
+programs.
+
+     There are relatively few options specified in the input file.  The Weights
+option  is  allowed  (in  all  cases).   So  is the Factors option for Discrete
+Morphological Characters.  Other options are not allowed.  This  is  a  serious
+limitation  of  the  program, as users may want to pass other options on to the
+output data files, for use in the programs.   In  future  versions  I  hope  to
+gradually  add  some  of  the options, particulary the A (Ancestors) option for
+discrete morphological characters.  For the moment if you want to put any  such
+options  in  you would have to edit them into the output by hand, which will be
+difficult since the identities of the characters in different  columns  of  the
+output file will vary as a result of the bootstrapping or jackknifing process.
+
+
+Output
+
+     The output file will contain the data sets  generated  by  the  resampling
+process.   Note  that,  when  Gene  Frequencies  data  is used or when Discrete
+Morphological characters with the  Factors  option  are  used,  the  number  of
+characters  in  each  data  set may vary.  It may also vary if there are an odd
+number of characters or sites and the Delete-Half-Jackknife  resampling  method
+
+
+is used, for then there will be a 50% chance of choosing (n+1)/2 characters and
+a 50% chance of choosing (n-1)/2 characters.
+
+     The numerical options 1 and 2 in the menu also affect the output file.  If
+1  is  chosen  (it is off by default) the program will print the original input
+data set on the output file before the resampled data sets.  I cannot  actually
+see  why  anyone  would  want  to do this.  Option 2 toggles the feature (on by
+default) that  prints  out  up  to  20  times  during  the  resampling  process
+notification  that  the  program  has  completed a certain number of data sets.
+Thus if 100 resampled data sets are being produced, every 5 data sets a line is
+printed  saying  which data set has just been completed.  This option should be
+turned off if the program is running in background and  silence  is  desirable.
+At the end of execution the program will always (whatever the setting of option
+2) print a couple of lines saying that output has been written  to  the  output
+file.
+
+
+Size and Speed
+
+     The  program  runs  moderately  quickly,  though  more  slowly  when   the
+Permutation  resampling  method  is  used  than  with  the  others.   Constants
+available are "nmlngth",  the  length  of  a  species  name,  and  the  boolean
+constants  "ibmpc0:,  "ansi0", and "vt520" if that terminal type (IBM PC, VT52,
+or ANSI) is to be the default when the program first runs and false otherwise.
+
+
+Future
+
+     I hope in the future  to  include  code  to  pass  on  the  Ancestors  and
+Categories  options  from the input file to the output file, a serious omission
+in the current version.  Already, this program has made the bootstrap  programs
+DNABOOT,  BOOT,  and  DOLBOOT  obsolete,  and  they  have been dropped from the
+package.  SEQBOOT's use results in a result  identical  to  those  programs  if
+DNAPARS,  MIX and DOLLOP are run on the output from SEQBOOT, except for getting
+a different sequence of random numbers.
+------------------ TEST DATA SET --------------------------
+
+    5    6
+Alpha     AACAAC
+Beta      AACCCC
+Gamma     ACCAAC
+Delta     CCACCA
+Epsilon   CCAAAC
+
+--- CONTENTS OF OUTPUT FILE IF REPLICATES ARE SET TO 10 AND SEED TO 4331 ---
+    5    6
+Alpha        ACCCAC
+Beta         ACCCCC
+Gamma        CCCCAC
+Delta        CAAACA
+Epsilon      CAAAAC
+    5    6
+Alpha        AAAACC
+Beta         AACCCC
+Gamma        ACAACC
+Delta        CCCCAA
+Epsilon      CCAACC
+    5    6
+Alpha        AAAAAC
+Beta         AACCCC
+Gamma        CCAAAC
+
+
+Delta        CCCCCA
+Epsilon      CCAAAC
+    5    6
+Alpha        AAAAAA
+Beta         AACCCC
+Gamma        ACAAAA
+Delta        CCCCCC
+Epsilon      CCAAAA
+    5    6
+Alpha        ACCCAA
+Beta         ACCCCC
+Gamma        CCCCAA
+Delta        CAAACC
+Epsilon      CAAAAA
+    5    6
+Alpha        AAACCC
+Beta         AAACCC
+Gamma        AACCCC
+Delta        CCCAAA
+Epsilon      CCCACC
+    5    6
+Alpha        AACAAC
+Beta         AACCCC
+Gamma        ACCAAC
+Delta        CCACCA
+Epsilon      CCAAAC
+    5    6
+Alpha        ACCCAA
+Beta         ACCCCC
+Gamma        ACCCAA
+Delta        CAAACC
+Epsilon      CAAAAA
+    5    6
+Alpha        AACACC
+Beta         AACCCC
+Gamma        ACCACC
+Delta        CCACAA
+Epsilon      CCAACC
+    5    6
+Alpha        AAAACA
+Beta         AAAACC
+Gamma        AAAACA
+Delta        CCCCAC
+Epsilon      CCCCAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

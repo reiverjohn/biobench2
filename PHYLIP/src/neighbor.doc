@@ -1,0 +1,189 @@
+
+                                                                   version 3.5c
+
+
+                NEIGHBOR -- Neighbor-Joining and UPGMA methods
+
+
+(c) Copyright  1991-1993  by  Joseph  Felsenstein  and  by  the  University  of
+Washington.  Written by Joseph Felsenstein.  Permission is granted to copy this
+document provided that no fee is charged for it and that this copyright  notice
+is not removed.
+
+     This program implements the Neighbor-Joining  method  of  Nei  and  Saitou
+(1987)  and  the  UPGMA  method of clustering.  The program was written by Mary
+Kuhner and Jon Yamato, using some code from program FITCH.  An  important  part
+of  the code was translated from FORTRAN code from the neighbor-joining program
+written by Naruya Saitou and by Li Jin, and is used with the kind permission of
+Dr. Saitou.
+
+     NEIGHBOR constructs a tree by successive clustering of  lineages,  setting
+branch  lengths  as  the lineages join.  The tree is not rearranged thereafter.
+The tree does not assume an evolutionary clock, so that  it  is  in  effect  an
+unrooted  tree.   It  should be somewhat similar to the tree obtained by FITCH.
+The program cannot evaluate a User tree, nor can it prevent branch lengths from
+becoming  negative.   However the algorithm is far faster than FITCH or KITSCH.
+This will make it particularly effective in their place for  large  studies  or
+for  bootstrap  or  jackknife resampling studies which require runs on multiple
+data sets.
+
+     The  UPGMA  option  constructs  a  tree  by   successive   (agglomerative)
+clustering  using  an  average-linkage  method  of  clustering.   It  has  some
+relationship to KITSCH, in that when the tree topology turns out the same,  the
+branch lengths with UPGMA will turn out to be the same as with the P = 0 option
+of KITSCH.
+
+     The options for NEIGHBOR are selected through the menu, which  looks  like
+this:
+
+
+Neighbor-Joining/UPGMA method version 3.5
+
+Settings for this run:
+  N       Neighbor-joining or UPGMA tree?  Neighbor-joining
+  O                        Outgroup root?  No, use as outgroup species  1
+  L         Lower-triangular data matrix?  No
+  R         Upper-triangular data matrix?  No
+  S                        Subreplicates?  No
+  J     Randomize input order of species?  No. Use input order
+  M           Analyze multiple data sets?  No
+  0   Terminal type (IBM PC, VT52, ANSI)?  ANSI
+  1    Print out the data at start of run  No
+  2  Print indications of progress of run  Yes
+  3                        Print out tree  Yes
+  4       Write out trees onto tree file?  Yes
+
+Are these settings correct? (type Y or the letter for one to change)
+
+Most of the input options (L, R, S, J, and M) are  as  given  in  the  Distance
+Matrix  Programs  documentation  file, that file, and their input format is the
+same as given there.   The  O  (Outgroup)  option  is  described  in  the  main
+documentation  file of this package.  It is not available when the UPGMA option
+is selected.  The Jumble option (J) does not allow multiple jumbles (as most of
+
+
+the  other  programs that have it do), as there is no objective way of choosing
+which of the multiple results is best, there being no  explicit  criterion  for
+optimality of the tree.
+
+
+     Option N chooses between the Neighbor-Joining and UPGMA methods. Option  S
+is the usual Subreplication option.  Here, however, it is present only to allow
+NEIGHBOR to read the input data: the number of replicates is actually  ignored,
+even though it is read in.  Note that this means that one cannot use it to have
+missing data in the input file, if NEIGHBOR is to be used.
+
+     The output consists of an tree (rooted if  UPGMA,  unrooted  if  Neighbor-
+Joining)  and  the  lengths  of  the  interior  segments.   The Average Percent
+Standard Deviation is not computed or  printed  out.   If  the  tree  found  by
+Neighbor is fed into FITCH as a User Tree, it will compute this quantity if one
+also selects the N option of FITCH to ensure that none of the branch lengths is
+re-estimated.
+
+     As NEIGHBOR runs it prints out an account  of  the  successive  clustering
+levels,  if  you  allow  it  to.   This  is  mostly  for reassurance and can be
+suppressed using menu option 2.  In this printout of cluster  levels  the  word
+"OTU"  refers  to a tip species, and the word "NODE" to an interior node of the
+resulting tree.
+
+     The constants available for modification at the beginning of  the  program
+are  "namelength"  which  gives  the  length  of  a species name, and the usual
+boolean constants that initiliaze the  terminal  type.   There  is  no  feature
+saving multiply trees tied for best, partly because we do not expect exact ties
+except in cases where the branch lengths make the nature of the tie obvious, as
+when a branch is of zero length.
+
+     The major advantage of NEIGHBOR is its speed:  it  requires  a  time  only
+proportional  to  the  square  of the number of species.  By contrast FITCH and
+KITSCH require a time that rises as the fourth power of the number of  species.
+Thus  NEIGHBOR  is well-suited to bootstrapping studies and to analysis of very
+large trees.  Our  simulation  studies  (Kuhner,  Yamato  and  Felsenstein,  in
+preparation)  show  that,  contrary  to statements in the literature by others,
+NEIGHBOR does not get as accurate an estimate of the phylogeny as  does  FITCH.
+However  it  does  nearly as well, and in view of its speed this will make it a
+quite useful program.
+
+-----------------------------TEST DATA SET------------------------------
+
+    5
+Alpha      0.000 1.000 2.000 3.000 3.000
+Beta       1.000 0.000 2.000 3.000 3.000
+Gamma      2.000 2.000 0.000 3.000 3.000
+Delta      3.000 3.000 3.000 0.000 1.000
+Epsilon    3.000 3.000 3.000 1.000 0.000
+
+------ OUTPUT FROM TEST DATA SET (with all numerical options on) -----------
+
+   5 Populations
+
+Neighbor-Joining/UPGMA method version 3.5
+
+
+ Neighbor-joining method
+
+ Negative branch lengths allowed
+
+
+
+Name                       Distances
+----                       ---------
+
+Alpha         0.00000   1.00000   2.00000   3.00000   3.00000
+Beta          1.00000   0.00000   2.00000   3.00000   3.00000
+Gamma         2.00000   2.00000   0.00000   3.00000   3.00000
+Delta         3.00000   3.00000   3.00000   0.00000   1.00000
+Epsilon       3.00000   3.00000   3.00000   1.00000   0.00000
+
+
+  +-------------------Gamma
+  !
+  !                             +---------Delta
+--3-----------------------------1
+  !                             +---------Epsilon
+  !
+  !         +---------Alpha
+  +---------2
+            +---------Beta
+
+
+remember: this is an unrooted tree!
+
+Between        And            Length
+-------        ---            ------
+   3          Gamma             1.00000
+   3             1              1.50000
+   1          Delta             0.50000
+   1          Epsilon           0.50000
+   3             2              0.50000
+   2          Alpha             0.50000
+   2          Beta              0.50000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
