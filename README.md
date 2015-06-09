@@ -24,7 +24,7 @@ After cloning the repo, perform the following steps:
 11. Follow directions in README.1st
 12  cd ../../
 13. sh ./buildBench.sh
-14. per ./runBench.pl
+14. perl ./runBench.pl
 
 RESULTS
 
