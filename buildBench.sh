@@ -12,7 +12,7 @@ echo
 echo "Building QuEST..."
 sleep 3
 cd QuEST
-,/configure.pl
+./configure.pl
 make clean
 make
 cd ..
