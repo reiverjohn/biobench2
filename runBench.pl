@@ -133,6 +133,7 @@ print MYFILE "$hostName,mummer,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning QuEST, replicate # $i...\n\n";
 system("sleep 6");
+system("rm -Rf ./QuEST/input/QuEST_analysis");
 @timeResults = `(time -p ./QuEST/generate_QuEST_parameters.pl -solexa_align_ChIP ./QuEST/input/GABP.align_25.hg18 -solexa_align_RX_noIP ./QuEST/input/Jurkat_RX_noIP.align_25.hg18 -gt ./QuEST/input/genome_table -ap ./QuEST/input/QuEST_analysis -ChIP_name GABP_Jurkat < ./QuEST/input/progCMD 1> ./QuEST/output/results.txt 2>> benchResults.txt) 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
