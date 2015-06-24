@@ -25,45 +25,26 @@ TabFile::TabFile(const string &tabFile)
 TabFile::~TabFile(void) {
 }
 
-
 void TabFile::Open(void) {
-    if (_tabFile == "stdin") {
+    if (_tabFile == "stdin" || _tabFile == "-") {
         _tabStream = &cin;
     }
     else {
-        size_t foundPos;
-        foundPos = _tabFile.find_last_of(".gz");
-        // is this a GZIPPED TAB file?
-        if (foundPos == _tabFile.size() - 1) {
-            igzstream tabs(_tabFile.c_str(), ios::in);
-            if ( !tabs ) {
-                cerr << "Error: The requested file (" << _tabFile << ") could not be opened. Exiting!" << endl;
-                exit (1);
-            }
-            else {
-                // if so, close it (this was just a test)
-                tabs.close();
-                // now set a pointer to the stream so that we
-                // can read the file later on.
-                _tabStream = new igzstream(_tabFile.c_str(), ios::in);
-            }
+        _tabStream = new ifstream(_tabFile.c_str(), ios::in);
+        
+        if( isGzipFile(_tabStream) ) {
+            delete _tabStream;
+            _tabStream = new igzstream(_tabFile.c_str(), ios::in);
         }
-        // not GZIPPED.
-        else {
-
-            ifstream tabs(_tabFile.c_str(), ios::in);
-            // can we open the file?
-            if ( !tabs ) {
-                cerr << "Error: The requested file (" << _tabFile << ") could not be opened. Exiting!" << endl;
-                exit (1);
-            }
-            else {
-                // if so, close it (this was just a test)
-                tabs.close();
-                // now set a pointer to the stream so that we
-                // can read the file later on.
-                _tabStream = new ifstream(_tabFile.c_str(), ios::in);
-            }
+        if ( _tabStream->fail() ) {
+            cerr << "Error: The requested file (" 
+                 << _tabFile
+                 << ") " 
+                 << "could not be opened. "
+                 << "Error message: ("
+                 << strerror(errno)
+                 << "). Exiting!" << endl;
+            exit (1);
         }
     }
 }
@@ -71,7 +52,7 @@ void TabFile::Open(void) {
 
 // Close the TAB file
 void TabFile::Close(void) {
-    if (_tabFile != "stdin") delete _tabStream;
+    if (_tabFile != "stdin" && _tabFile != "-") delete _tabStream;
 }
 
 
@@ -85,6 +66,11 @@ TabLineStatus TabFile::GetNextTabLine(TAB_FIELDS &tabFields, int &lineNum) {
 
         // parse the tabStream pointer
         getline(*_tabStream, tabLine);
+        
+        if (tabLine[tabLine.size()-1] == '\r') {
+            tabLine.resize(tabLine.size()-1);
+        }
+        
         lineNum++;
 
         // split into a string vector.

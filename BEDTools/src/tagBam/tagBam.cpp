@@ -15,20 +15,24 @@
 // build
 TagBam::TagBam(const string &bamFile, const vector<string> &annoFileNames,
             const vector<string> &annoLables, const string &tag,
-            bool forceStrand, float overlapFraction) :
+            bool useNames, bool useScores, bool useIntervals, 
+            bool sameStrand, bool diffStrand, float overlapFraction):
 
     _bamFile(bamFile),
     _annoFileNames(annoFileNames),
     _annoLabels(annoLables),
     _tag(tag),
-    _forceStrand(forceStrand),
+    _useNames(useNames),
+    _useScores(useScores),
+    _useIntervals(useIntervals),
+    _sameStrand(sameStrand),
+    _diffStrand(diffStrand),
     _overlapFraction(overlapFraction)
 {}
 
 
 // destroy and delete the open file pointers
 TagBam::~TagBam(void) {
-    delete _bed;
     CloseAnnoFiles();
 }
 
@@ -50,10 +54,6 @@ void TagBam::CloseAnnoFiles() {
     }
 }
 
-bool TagBam::FindOneOrMoreOverlap(const BED &a, BedFile *bedFile) {
-    return bedFile->FindOneOrMoreOverlapsPerBin(a.chrom, a.start, a.end, a.strand,
-                                                _forceStrand, _overlapFraction);
-}
 
 void TagBam::Tag() {
 
@@ -63,7 +63,11 @@ void TagBam::Tag() {
     // open the BAM file
     BamReader reader;
     BamWriter writer;
-    reader.Open(_bamFile);
+	if (!reader.Open(_bamFile)) {
+        cerr << "Failed to open BAM file " << _bamFile << endl;
+        exit(1);
+    }
+    
     // get header & reference information
     string bamHeader  = reader.GetHeaderText();
     RefVector refs = reader.GetReferenceData();
@@ -77,14 +81,16 @@ void TagBam::Tag() {
 
     // rip through the BAM file and test for overlaps with each annotation file.
     BamAlignment al;
+    vector<BED> hits;
+
     while (reader.GetNextAlignment(al)) {
         if (al.IsMapped() == true) {
             BED a;
             a.chrom = refs.at(al.RefID).RefName;
             a.start = al.Position;
             a.end   = al.GetEndPosition(false, false);
-            if (al.IsReverseStrand()) a.strand = "-";
             a.strand = "+";
+            if (al.IsReverseStrand()) a.strand = "-";
             
             ostringstream annotations;
             // annotate the BAM file based on overlaps with the annotation files.
@@ -92,20 +98,64 @@ void TagBam::Tag() {
             {
                 // grab the current annotation file.
                 BedFile *anno = _annoFiles[i];
-                // add the label for this annotation file to tag if there is overlap
-                if (FindOneOrMoreOverlap(a, anno)) {
-                    annotations << _annoLabels[i] << ";";
+                
+                if (!_useNames && !_useScores && !_useIntervals) {
+                    // add the label for this annotation file to tag if there is overlap
+                    if (anno->anyHits(a.chrom, a.start, a.end, a.strand, 
+                                      _sameStrand, _diffStrand, _overlapFraction, false))
+                    {
+                        annotations << _annoLabels[i] << ";";
+                    }
+                }
+                // use the score field
+                else if (!_useNames && _useScores && !_useIntervals) {
+                    anno->allHits(a.chrom, a.start, a.end, a.strand, 
+                                  hits, _sameStrand, _diffStrand, _overlapFraction, false);
+                    for (size_t i = 0; i < hits.size(); ++i) {
+                        annotations << hits[i].score;
+                        if (i < hits.size() - 1) annotations << ",";
+                    }
+                    if (hits.size() > 0) annotations << ";";
+                    hits.clear();
+                }
+                // use the name field from the annotation files to populate tag
+                else if (_useNames && !_useScores && !_useIntervals) {
+                    anno->allHits(a.chrom, a.start, a.end, a.strand, 
+                                  hits, _sameStrand, _diffStrand, _overlapFraction, false);
+                    for (size_t j = 0; j < hits.size(); ++j) {
+                        annotations << hits[j].name;
+                        if (j < hits.size() - 1) annotations << ",";
+                    }
+                    if (hits.size() > 0) annotations << ";";
+                    hits.clear();
+                }
+                // use the full interval information annotation files to populate tag
+                else if (!_useNames && !_useScores && _useIntervals) {
+                    anno->allHits(a.chrom, a.start, a.end, a.strand, 
+                                  hits, _sameStrand, _diffStrand,  _overlapFraction, false);
+                    for (size_t j = 0; j < hits.size(); ++j) {
+                        annotations << _annoLabels[i]  << ":" << 
+                                        hits[j].chrom  << ":" <<
+                                        hits[j].start  << "-" <<
+                                        hits[j].end    << "," <<
+                                        hits[j].name   << "," <<
+                                        hits[j].score  << "," <<
+                                        hits[j].strand;
+                        if (j < hits.size() - 1) annotations << ",";
+                    }
+                    if (hits.size() > 0) annotations << ";";
+                    hits.clear();
                 }
             }
             // were there any overlaps with which to make a tag?
             if (annotations.str().size() > 0) {
                 al.AddTag(_tag, "Z", annotations.str().substr(0, annotations.str().size() - 1)); // get rid of the last ";"
             }
-            writer.SaveAlignment(al);
         }
+        writer.SaveAlignment(al);
     }
     reader.Close();
-
+    writer.Close();
     // close the annotations files;
     CloseAnnoFiles();
 }

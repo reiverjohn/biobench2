@@ -1,3 +1,449 @@
+Version 2.19.1 (6-Mar-2014)
+Bug fix to intersect causing BAM footers to be erroneously written when -b is BAM
+
+Speedup for the map tool.
+http://bedtools.readthedocs.org/en/latest/_images/map-speed-comparo.png
+
+Map tool now allows multiple columns and operations in a single run.
+http://bedtools.readthedocs.org/en/latest/content/tools/map.html#multiple-operations-and-columns-at-the-same-time
+
+
+Version 2.19.0 (8-Feb-2014)
+Bug Fixes
+=========
+
+1. Fixed a long standing bug in which the number of base pairs of overlap was incorrectly calculated when using the -wo option with the -split option. Thanks to many for reporting this.
+
+2. Fixed a bug in which certain flavors of unmapped BAM alignments were incorrectly rejected in the latest 2.18.* series.  Thanks very much to 
+Gabriel Pratt.
+
+
+Enhancements
+============
+
+1. Substantially reduced memory usage, especially when dealing with unsorted data. Memory usage ballooned in the 2.18.* series owing to default buffer sizes we were using in a custom string class.  We have adjusted this and the memory usage has returned to 2.17.* levels while maintaining speed increases.  Thanks so much to Ian Sudberry rightfully complaining about this!
+
+
+New features
+============
+
+1. The latest version of the "map" function is ~3X faster than the one available in version 2.17 and 2.18
+
+# bedtools 2.17
+$ time bedtools map \
+                -a hg19.gerp.elements.bed.gz \
+                -b hg19.rmsk.bed.gz \
+                -c 4 \
+                -o collapse > /dev/null
+real	0m15.865s
+user	0m15.815s
+sys	0m0.040s
+
+
+# bedtools 2.19
+$ time bedtools map \
+                -a hg19.gerp.elements.bed.gz \
+                -b hg19.rmsk.bed.gz \
+                -c 4 \
+                -o collapse > /dev/null
+real	0m5.367s
+user	0m5.314s
+sys	0m0.050s
+
+2. The map function now supports the "-split" option, as well as "absmin" and "absmax" operations.
+
+3. In addition, it supports multiple chromosome sorting criterion by supplying a genome file that defines the expected chromosome order. Here is an example of how to run map with datasets having chromosomes sorted in "version" order, as opposed to the lexicographical chrom order that is the norm. 
+
+# version sort the BED files (e.g. chr1, chr2, etc., not chr1, chr10, chr11, etc.)
+$ zcat hg19.gerp.elements.bed.gz | sort -k1,1V -k2,2n > hg19.gerp.versionsorted.bed
+$ zcat hg19.rmsk.bed.gz | sort -k1,1V -k2,2n > hg19.rmsk.versionsorted.bed
+
+# make a toy genome file
+$ cut -f 1 hg19.rmsk.versionsorted.bed | uniq | awk '{print $1"\t"1}' > hg19.versionsorted.genome
+
+$ head hg19.versionsorted.genome
+chr1	1
+chr1_gl000191_random	1
+chr1_gl000192_random	1
+chr2	1
+chr3	1
+chr4	1
+chr4_ctg9_hap1	1
+chr4_gl000193_random	1
+chr4_gl000194_random	1
+chr5	1
+
+# tell map to expect a different chrom order.
+$ bedtools map \
+         -a hg19.gerp.versionsorted.bed \
+         -b hg19.rmsk.versionsorted.bed \
+         -c 4 \
+         -o collapse \
+         -g hg19.versionsorted.genome
+
+
+Version 2.18.2 (8-Jan-2014)
+
+bedtools. The changes to bedtools reflect fixes to compilation errors, performance enhancements for smaller files, and a bug fix for BAM files that lack a formal header. Our current focus for the 2.19.* release is is on addressing some standing bug/enhancements and also in updating some of the other more widely used tools (e.g., coverage, map, and substract) to use the new API. We will also continue to look into ways to improve performance while hopefully reducing memory usage for algorithms that work with unsorted data (thanks to Ian Sudberry for the ping!).
+
+pybedtools. Ryan Dale has updated pybedtools to accomodate bedtools 2.18.*, added unit tests, and provided new functionality and bug fixes.  The details for this release are here:
+http://pythonhosted.org/pybedtools/changes.html
+
+Version 2.18.1 (16-Dec-2013)
+
+Fixes that address compilation errors with CLANG and force compilation of custom BamTools library.
+
+
+Version 2.18.0 (13-Dec-2013)
+
+The Google Code site is deprecated
+----------------------------------
+It looks like the Google Code service is going the way of the venerable Google Reader. As such, we are moving the repository and all formal release tarballs to Github. We have started a new repository prosaically named "bedtools2". The original bedtools repository will remain for historical purposes, but we created a new repository to distinguish the two code bases as they will become rather different over time.
+
+[https://github.com/arq5x/bedtools2](https://github.com/arq5x/bedtools2)
+
+
+We gutted the core API and algorithms
+-------------------------------------
+
+Much of Neil's hard work has been devoted to completely rewriting the core file/stream writing API to be much more flexible in the adoption of new formats. In addition, he has substantially improved many of the core algorithms for detecting interval intersections.
+
+
+Improved performance
+--------------------
+
+The 2.18.0 release leverages these improvements in the "intersect" tool.  Forthcoming releases will see the new API applied to other tools, but we started with intersect as it is the most widely used tool in the suite. 
+
+**Performance with sorted datasets.** The "chromsweep" algorithm we use for detecting intersections is now **60 times 
+faster** than when it was first release in version 2.16.2, and is **** than the 2.17 release. This makes the 
+algorithm slightly faster
+that the algorithm used in the bedops ``bedmap`` tool. As an example, the following [figure](https://dl.dropboxusercontent.com/u/515640/bedtools-intersect-sorteddata.png) demonstrates the speed
+when intersecting GENCODE exons against 1, 10, and 100 million BAM alignments from an exome capture experiment.
+Whereas in version 2.16.2 this wuld have taken 80 minutes, **it now takes 80 seconds**. 
+
+**Greater flexibility.** In addition, BAM, BED, GFF/GTF, or VCF files are now automatically detected whether they are a file, stream, or FIFO in either compressed or uncompressed form. As such, one now longer has specify `-abam` when using BAM input as the "A" file with ``intersect``. Moreover, any file type can be used for either the A or
+the B file.
+
+
+Better support for different chromosome sorting criteria
+--------------------------------------------------------
+Genomic analysis is plagued by different chromosome naming and sorting conventions. Prior to this release,
+the ``-sorted`` option in the ``intersect`` tool required that the chromosomes were sorted in alphanumeric
+order (e.g. chr1, chr10, etc. or 1, 10, etc.). Starting with this release, we now simply require by default 
+that the records are **GROUPED** by chromosome and that within each chromosome group, the records are sorted by
+chromosome position. This will allow greater flexibility.
+
+One problem that can arise however, is if two different files are each grouped by chromosome, yet the two
+files follow a different chromosome order.  In order to detect and enforce the same order, one can explicitly
+state the expected chromosome order through the use of a genome (aka chromsizes) file. Please see the 
+documentation [here](http://bedtools.readthedocs.org/en/latest/content/tools/intersect.html#sorted-invoke-a-memory-efficient-algorithm-for-very-large-files) and [here](http://bedtools.readthedocs.org/en/latest/content/tools/intersect.html#g-define-an-alternate-chromosome-sort-order-via-a-genome-file) for examples.
+
+
+New tools
+---------
+1. The ``jaccard`` tool. While not exactly new, there have been improvements to the tool and there is finally
+documentation. Read more here: http://bedtools.readthedocs.org/en/latest/content/tools/jaccard.html
+
+2. The ``reldist`` tool. Details here: http://bedtools.readthedocs.org/en/latest/content/tools/reldist.html
+
+3. The ``sample`` tool. Uses reservoir sampling to randomly sample a specified number of records from BAM, BED,
+VCF, and GFF/GTF files.
+
+
+Enhancements
+------------
+1. Improvements in the consistency of the output of the ``merge`` tool. Thanks to @kcha.
+2. A new ``-allowBeyondChromEnd`` option in the ``shuffle`` tool. Thanks to @stephenturner.
+[docs](http://bedtools.readthedocs.org/en/latest/content/tools/shuffle.html#allowbeyondchromend-allow-records-to-extend-beyond-the-chrom-length)
+3. A new ``-noOverlapping`` option that prevents shuffled intervals from overlapping one another. Thanks to @brentp. [docs](http://bedtools.readthedocs.org/en/latest/content/tools/shuffle.html#nooverlapping-prevent-shuffled-intervals-from-overlapping)
+4. Allow the user to specify the maximum number of shuffling attempts via the ``-maxTries`` option in the ``shuffle`` tool.
+4. Various improvements to the documentation provided by manu different users. Thanks to all.
+5. Added the number of intersections (``n_intersections``) to the Jaccard output. Thanks to @brentp.
+6. Various improvements to the ``tag`` tool.
+7. Added the ``-N`` (remove any) option to the ``subtract`` tool.
+
+
+
+
+Version 2.17.0 (3-Nov-2012)
+=====================
+===   New Tool   ===
+=====================
+
+We have added a new tool (bedtools "jaccard") for measuring the Jaccard statistic 
+between two interval files.  The Jaccard stat measures the ratio of the length 
+of the intersection over the length of the union of the two sets.  In this
+case, the union is measured as the sum of the lengths of the intervals in each
+set minus the length of the intersecting intervals.  As such, the Jaccard 
+statistic provides a "distance" measure between 0 (no intersections) 
+and 1 (self intersection). The higher the score, the more the two sets of 
+intervals overlap one another.  This tool was motivated by Favorov et al, 2012.
+For more details, see see PMID: 22693437.
+
+We anticipate releasing other statistical measures in forthcoming releases.
+
+
+
+===================================
+=== New Features & enhancements ===
+===================================
+1. The genome file drives the BAM header in "bedtools bedtobam"
+
+2. Substantially improvement the performance of the -sorted option in 
+   "bedtools intersect" and "bedtools map".  For many applications, 
+   bedtools is now nearly as fast as the BEDOPS suite when intersecting 
+   pre-sorted data.  This improvement is thanks to Neil Kindlon, a staff
+   scientist in the Quinlan lab.
+
+3. Tightened the logic for handling split (blocked) BAM and BED records
+
+4. Added ranged column selection to "bedtools groupby".  Thanks to Brent Pedersen"
+	- e.g., formerly "bedtools groupby -g 1,2,3,4,5"; now "-g 1-5"
+
+5. "bedtools getfasta" now properly extracts sequences based on blocked (BED12)
+   records (e.g., exons from genes in BED12 format).
+   
+6. "bedtools groupby" now allows a header line in the input.
+
+7. With -N, the user can now force the closest interval to have a different name
+   field in "bedtools closest"
+
+8. With -A, the user can now force the subtraction of entire interval when 
+   any overlap exists in "bedtools subtract".
+   
+9. "bedtools shuffle" can now shuffle BEDPE records.
+
+10. Improved random number generation.
+
+11. Added -split, -s, -S, -f, -r options to "bedtools multicov"
+
+12. Improvements to the regression testing framework.
+
+13. Standardized the tag reporting logic in "bedtools bamtobed"
+
+14. Improved the auto-detection of VCF format.  Thanks to Michael James Clark.
+
+====================
+===  Bug  fixes  ===
+====================
+1. Fixed a bug in bedtobam's -bed12 mode.
+
+2. Properly include unaligned BAM alignments with "bedtools intersect"'s -v option.
+
+3. Fixed off by one error in "bedtools closest"'s -d option
+
+4."bedtools bamtobed" fails properly for non-existent file.
+
+5. Corrected missing tab in "bedtools annotate"'s header.
+
+6. Allow int or uint tags in "bedtools bamtobed"
+
+7. "bedtools flank" no longer attempts to take flanks prior to the start of a
+   chromosome.
+
+8. Eliminated an extraneous tab from "bedtools window" -c.
+
+9. Fixed a corner case in the -sorted algorithm.
+
+10.Prevent numeric overflow in "bedtools coverage -hist"
+
+
+
+Version 2.14.1-3 (2-Nov-2011)
+
+Bug Fixes
+=========
+1. Corrected the help for closestBed. It now correctly reads -io instead of -no.
+2. Fixed regression in closestBed injected in version 2.13.4 whereby B features to the right of an A feature were missed.
+
+New tool.
+============
+1. Added the multiIntersectBed tool for reporting common intervals among multiple **sorted** BED/GFF/VCF files.
+
+
+
+Version 2.13.4 (26-Oct-2011)
+Bug Fixes
+=========
+1. The -sorted option (chromsweep) in intersectBed now obeys -s and -S.  I had neglected to implement that. Thanks to Paul Ryvkin for pointing this out.
+2. The -split option was mistakenly splitting of D CIGAR ops.
+3. The Makefile was not including zlib properly for newer versions of GCC. Thanks to Istvan Albert for pointing this out and providing the solution.
+
+Improvements
+============
+1. Thanks to Jacob Biesinger for a new option (-D) in closestBed that will report _signed_ distances.  Moreover, the new option allows fine control over whether the distances are reported based on the reference genome or based on the strand of the A or B feature. Many thanks to Jacob.
+2. Thanks to some nice analysis from Paul Ryvkin, I realized that the -sorted option was using way too much memory in certain cases where there is a chromosome change in a sorted BED file.  This has been corrected.
+
+Version 2.13.3 (30-Sept-2011)
+Bug Fixes
+============
+1. intersectBed detected, but did not report overlaps when using BAM input and -bed.
+
+Other
+=====
+1. Warning that -sorted trusts, but does not enforce that data is actually sorted.
+
+
+Version 2.13.2 (23-Sept-2011)
+
+New algorithm
+=============
+1. Preliminary release of the chrom_sweep algorithm.
+
+New options
+===========
+1. genomeCoverageBed no longer requires a genome file when working with BAM input.  It instead uses the BAM header.
+2. tagBam now has a -score option for annotating alignments with the BED "scores" field in annotation files.  This overrides the default behavior, which is to use the -labels associated with the annotation files passed in on the command line.
+
+Bug fixes
+=========
+1. Correct a bug that prevented proper BAM support in intersectBed.
+2. Improved detection of GFF features with negative coordinates.
+
+
+
+Version 2.13.1 (6-Sept-2011)
+
+New options
+===========
+1. tagBam now has -s and -S options for only annotating alignments with features on the same and opposite strand, respectively.
+2. tagBam now has a -names option for annotating alignments with the "name" field in annotation files.  This overrides the default behavior, which is to use the -labels associated with the annotation files passed in on the command line.  Currently, this works well with BED files, but given the limited metadata support for GFF files, annotating with -names and GFF files may not work as well as wished, depending on the type of GFF file used.
+
+
+
+Version 2.13.0 (1-Sept-2011)
+
+New tools
+=========
+1. tagBam. This tool annotates a BAM file with custom tag fields based on overlaps with BED/GFF/VCF files.
+For example:
+$ tagBam -i aln.bam -files exons.bed introns.bed cpg.bed utrs.bed \
+                    -tags exonic intonic cpg utr \
+                    > aln.tagged.bam
+For alignments that have overlaps, you should see new BAM tags like "YB:Z:exonic", "YB:Z:cpg;utr"
+
+2. multiBamCov. The new tool counts sequence coverage for multiple bams at specific loci defined in a BED/GFF/VCF file.
+For example:
+
+$ multiBamCov -bams aln.1.bam aln.2.bam aln3.bam -bed exons.bed
+chr1	861306	861409	SAMD11	1	+	181	280	236
+chr1	865533	865718	SAMD11	2	+	249	365	374
+chr1	866393	866496	SAMD11	3	+	162	298	322
+
+where the last 3 columns represent the number of alignments overlapping each interval from the three BAM file.
+
+The following options are available to control which types of alignments are are counted.
+-q	Minimum mapping quality allowed. Default is 0.
+
+-D	Include duplicate-marked reads.  Default is to count non-duplicates only
+
+-F	Include failed-QC reads.  Default is to count pass-QC reads only
+
+-p	Only count proper pairs.  Default is to count all alignments with MAPQ
+	greater than the -q argument, regardless of the BAM FLAG field.
+
+3. nucBed. This new tool profiles the nucleotide content of intervals in a fasta file. 	The following information will be reported after each original BED/GFF/VCF entry:
+	    1) %AT content
+	    2) %GC content
+	    3) Number of As observed
+	    4) Number of Cs observed
+	    5) Number of Gs observed
+	    6) Number of Ts observed
+	    7) Number of Ns observed
+	    8) Number of other bases observed
+	    9) The length of the explored sequence/interval.
+	    10) The sequence extracted from the FASTA file. (optional, if -seq is used)
+	    11) The number of times a user defined pattern was observed. (optional, if -pattern is used.)
+
+
+
+For example:
+$ nucBed -fi ~/data/genomes/hg18/hg18.fa -bed simrep.bed | head -3
+#1_usercol	2_usercol	3_usercol	4_usercol	5_usercol	6_usercol	7_pct_at	8_pct_gc	9_num_A	10_num_C	11_num_G	12_num_T	13_num_N	14_num_oth	15_seq_len	
+chr1	10000	10468	trf	789	+	0.540598	0.459402	155	96	119	98	0	0	468
+chr1	10627	10800	trf	346	+	0.445087	0.554913	54	55	41	23	0	0	173
+
+
+One can also report the sequence itself:
+$ nucBed -fi ~/data/genomes/hg18/hg18.fa -bed simrep.bed -seq | head -3
+#1_usercol	2_usercol	3_usercol	4_usercol	5_usercol	6_usercol	7_pct_at	8_pct_gc	9_num_A	10_num_C	11_num_G	12_num_T	13_num_N	14_num_oth	15_seq_len	16_seq
+chr1	10000	10468	trf	789	+	0.540598	0.459402	155	96	119	98	0	0	468	ccagggg...
+chr1	10627	10800	trf	346	+	0.445087	0.554913	54	55	41	23	0	0	173	TCTTTCA...
+
+Or, one can count the number of times that a specific pattern occur in the intervals (reported as the last column):
+$ nucBed -fi ~/data/genomes/hg18/hg18.fa -bed simrep.bed -pattern CGTT | head
+#1_usercol	2_usercol	3_usercol	4_usercol	5_usercol	6_usercol	7_pct_at	8_pct_gc	9_num_A	10_num_C	11_num_G	12_num_T	13_num_N	14_num_oth	15_seq_len	16_user_patt_count
+chr1	10000	10468	trf	789	+	0.540598	0.459402	155	96	119	98	0	0	468	0
+chr1	10627	10800	trf	346	+	0.445087	0.554913	54	55	41	23	0	0	173	0
+chr1	10757	10997	trf	434	+	0.370833	0.629167	49	70	81	40	0	0	240	0
+chr1	11225	11447	trf	273	+	0.463964	0.536036	44	86	33	59	0	0	222	0
+chr1	11271	11448	trf	187	+	0.463277	0.536723	37	69	26	45	0	0	177	0
+chr1	11283	11448	trf	199	+	0.466667	0.533333	37	64	24	40	0	0	165	0
+chr1	19305	19443	trf	242	+	0.282609	0.717391	17	57	42	22	0	0	138	1
+chr1	20828	20863	trf	70	+	0.428571	0.571429	10	7	13	5	0	0	35	0
+chr1	30862	30959	trf	79	+	0.556701	0.443299	35	22	21	19	0	0	97	0
+
+
+
+New options
+===========
+1. Support for named pipes and FIFOs.
+2. "-" is now allowable to indicate that data is being sent via stdin.
+
+3. Multiple tools. Added new -S option to annotateBed, closestBed, coverageBed, intersectBed, pairToBed, subtractBed, and windowBed (-Sm). This new option does the opposite of the -s option: that is, overlaps are only processed if they are on _opposite_ strands.  Thanks to Sol Katzman for the great suggestion.  Very useful for certain RNA-seq analyses.
+
+4. coverageBed. Added a new -counts option to coverageBed that only reports the count of overlaps, instead of also computing fractions, etc. This is much faster and uses much less memory.
+
+5. fastaFromBed. Added a new -full option that uses the full BED entry when naming each output sequence.  Also removed the -fo option such that all output is now written to stdout.
+
+6. genomeCoverageBed.
+	- Added new -scale option that allows the coverage values to be scaled by a constant.  Useful for normalizing coverage with RPM, RPKM, etc.  Thanks to Ryan Dale for the useful suggestion.
+	- Added new -5, -3, -trackline, -trackopts, and -dz options.  Many thanks to Assaf Gordon for these improvements.
+		-5: Calculate coverage of 5" positions (instead of entire interval)
+		-3: Calculate coverage of 3" positions (instead of entire interval).
+		-trackline: Adds a UCSC/Genome-Browser track line definition in the first line of the output.
+		-trackopts: rites additional track line definition parameters in the first line.
+		-dz: Report the depth at each genome position with zero-based coordinates, instead of zero-based.
+
+7. closestBed.  See below, thanks to Brent Pedersen, Assaf Gordon, Ryan Layer and Dan Webster for the helpful discussions.
+	- closestBed now reports _all_ features in B that overlap A by default.  This allows folks to decide which is the "best" overlapping feature on their own.
+
+	2. closestBed now has a "-io" option that ignores overlapping features.  In other words, it will only report the closest, non-overlapping feature.
+
+	An example:
+
+	$ cat a.bed
+	chr1    10      20
+
+	$ cat b.bed
+	chr1    15      16
+	chr1    16      40
+	chr1    100     1000
+	chr1    200     1000
+
+	$ bin/closestBed -a a.bed -b b.bed
+	chr1    10      20      chr1    15      16
+	chr1    10      20      chr1    16      40
+
+	$ bin/closestBed -a a.bed -b b.bed -io
+	chr1    10      20      chr1    100     1000
+	
+Updates
+=======
+1.  Updated to the latest version of BamTools.  This allows greater functionality and will facilitate new options and tools in the future.
+
+	- 
+Bug Fixes
+=========
+1. GFF files cannot have zero-length features.
+2. Corrected an erroneous check on the start coordinates in VCF files.  Thanks to Jan Vogel for the correction.
+3. mergeBed now always reports output in BED format.
+3. Updated the text file Tokenizer function to yield 15% speed improvement.
+4. Various tweaks and improvements.
+
+
+
+
 Version 2.12.0 (April-3-2011)
 
 New Tool

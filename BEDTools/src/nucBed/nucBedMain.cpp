@@ -15,16 +15,16 @@
 using namespace std;
 
 // define our program name
-#define PROGRAM_NAME "nucBed"
+#define PROGRAM_NAME "bedtools nuc"
 
 
 // define our parameter checking macro
 #define PARAMETER_CHECK(param, paramLen, actualLen) (strncmp(argv[i], param, min(actualLen, paramLen))== 0) && (actualLen == paramLen)
 
 // function declarations
-void ShowHelp(void);
+void nuc_help(void);
 
-int main(int argc, char* argv[]) {
+int nuc_main(int argc, char* argv[]) {
 
     // our configuration variables
     bool showHelp = false;
@@ -35,10 +35,13 @@ int main(int argc, char* argv[]) {
     string pattern;
 
     // checks for existence of parameters
-    bool haveFastaDb = false;
-    bool haveBed     = false;
-    bool printSeq    = false;
-    bool hasPattern  = false;
+    bool haveFastaDb   = false;
+    bool haveBed       = false;
+    bool printSeq      = false;
+    bool hasPattern    = false;
+    bool forceStrand   = false;
+    bool ignoreCase    = false;
+    bool useFullHeader = false;
 
     // check to see if we should print out some help
     if(argc <= 1) showHelp = true;
@@ -52,7 +55,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if(showHelp) ShowHelp();
+    if(showHelp) nuc_help();
 
     // do some parsing (all of these parameters require 2 strings)
     for(int i = 1; i < argc; i++) {
@@ -76,12 +79,21 @@ int main(int argc, char* argv[]) {
         else if(PARAMETER_CHECK("-seq", 4, parameterLength)) {
             printSeq = true;
         }
+        else if(PARAMETER_CHECK("-s", 2, parameterLength)) {
+            forceStrand = true;
+        }
+        else if(PARAMETER_CHECK("-C", 2, parameterLength)) {
+            ignoreCase = true;
+        }
         else if(PARAMETER_CHECK("-pattern", 8, parameterLength)) {
             if ((i+1) < argc) {
                 hasPattern = true;
                 pattern = argv[i + 1];
                 i++;
             }
+	}
+        else if(PARAMETER_CHECK("-fullHeader", 11, parameterLength)) {
+            useFullHeader = true;
         }
         else {
             cerr << "*****ERROR: Unrecognized parameter: " << argv[i] << " *****" << endl << endl;
@@ -95,35 +107,46 @@ int main(int argc, char* argv[]) {
 
     if (!showHelp) {
 
-        NucBed *nuc = new NucBed(fastaDbFile, bedFile, printSeq, hasPattern, pattern);
+        NucBed *nuc = new NucBed(fastaDbFile, bedFile, printSeq, 
+                                 hasPattern, pattern, forceStrand, ignoreCase,
+				 useFullHeader);
         delete nuc;
-
-        return 0;
     }
     else {
-        ShowHelp();
+        nuc_help();
     }
+    return 0;
 }
 
-void ShowHelp(void) {
+void nuc_help(void) {
 
-    cerr << endl << "Program: " << PROGRAM_NAME << " (v" << VERSION << ")" << endl;
-
-    cerr << "Author:  Aaron Quinlan (aaronquinlan@gmail.com)" << endl;
-
+    cerr << "\nTool:    bedtools nuc (aka nucBed)" << endl;
+    cerr << "Version: " << VERSION << "\n";    
     cerr << "Summary: Profiles the nucleotide content of intervals in a fasta file." << endl << endl;
 
     cerr << "Usage:   " << PROGRAM_NAME << " [OPTIONS] -fi <fasta> -bed <bed/gff/vcf>" << endl << endl;
 
     cerr << "Options: " << endl;
+
     cerr << "\t-fi\tInput FASTA file" << endl << endl;
+
     cerr << "\t-bed\tBED/GFF/VCF file of ranges to extract from -fi" << endl << endl;
+
+    cerr << "\t-s\tProfile the sequence according to strand." << endl << endl;
+
     cerr << "\t-seq\tPrint the extracted sequence" << endl << endl;
-    cerr << "\t-pattern\tReport the number of times a user-defined sequence is observed (case-insensitive)." << endl << endl;
-    
-    
+
+    cerr << "\t-pattern\tReport the number of times a user-defined sequence" << endl;
+    cerr << "\t\t\tis observed (case-sensitive)." << endl << endl;    
+
+    cerr << "\t-C\tIgnore case when matching -pattern. By defaulty, case matters." << endl << endl;
+
+    cerr << "\t-fullHeader\tUse full fasta header." << endl;
+    cerr << "\t\t- By default, only the word before the first space or tab "
+	 << "is used." << endl << endl;
+
     cerr << "Output format: " << endl;
-    cerr << "\tThe following information will be reported after each original BED entry:" << endl;
+    cerr << "\tThe following information will be reported after each BED entry:" << endl;
     cerr << "\t    1) %AT content" << endl;
     cerr << "\t    2) %GC content" << endl;
     cerr << "\t    3) Number of As observed" << endl;
@@ -133,9 +156,9 @@ void ShowHelp(void) {
     cerr << "\t    7) Number of Ns observed" << endl;
     cerr << "\t    8) Number of other bases observed" << endl;
     cerr << "\t    9) The length of the explored sequence/interval." << endl;
-    cerr << "\t    10) The sequence extracted from the FASTA file. (optional, if -seq is used)" << endl;
-    cerr << "\t    11) The number of times a user defined pattern was observed. (optional, if -pattern is used.)" << endl;
-
+    cerr << "\t    10) The seq. extracted from the FASTA file. (opt., if -seq is used)" << endl;
+    cerr << "\t    11) The number of times a user's pattern was observed." << endl;
+    cerr << "\t        (opt., if -pattern is used.)" << endl << endl;
     // end the program here
     exit(1);
 

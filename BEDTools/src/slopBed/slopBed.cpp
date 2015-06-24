@@ -13,14 +13,17 @@
 #include "slopBed.h"
 
 
-BedSlop::BedSlop(string &bedFile, string &genomeFile, bool forceStrand, float leftSlop, float rightSlop, bool fractional) {
+BedSlop::BedSlop(string &bedFile, string &genomeFile, bool forceStrand, 
+                 float leftSlop, float rightSlop, bool fractional,
+                 bool printHeader) {
 
     _bedFile     = bedFile;
     _genomeFile  = genomeFile;
     _forceStrand = forceStrand;
     _leftSlop    = leftSlop;
     _rightSlop   = rightSlop;
-    _fractional  = fractional; 
+    _fractional  = fractional;
+    _printHeader = printHeader;
 
     _bed    = new BedFile(bedFile);
     _genome = new GenomeFile(genomeFile);
@@ -37,54 +40,71 @@ BedSlop::~BedSlop(void) {
 
 void BedSlop::SlopBed() {
 
-    int lineNum = 0;
-    BED bedEntry, nullBed;     // used to store the current BED line from the BED file.
-    BedLineStatus bedStatus;
+    BED bedEntry;     // used to store the current BED line from the BED file.
+    float l, r;
 
     _bed->Open();
-    bedStatus = _bed->GetNextBed(bedEntry, lineNum);
-    while (bedStatus != BED_INVALID) {
-        if (bedStatus == BED_VALID) {
+    // report header first if asked.
+    if (_printHeader == true) {
+        _bed->PrintHeader();
+    }        
+    while (_bed->GetNextBed(bedEntry)) {    
+        if (_bed->_status == BED_VALID) {
             if (_fractional == false) {
-                AddSlop(bedEntry, (int) _leftSlop, (int) _rightSlop);
+                AddSlop(bedEntry);
             }
             else {
-                int leftSlop  = (int) (_leftSlop  * bedEntry.size());
-                int rightSlop = (int) (_rightSlop * bedEntry.size());
-                AddSlop(bedEntry, leftSlop, rightSlop);
+	        l = _leftSlop;	
+                _leftSlop  = _leftSlop * (float)bedEntry.size();
+	        r = _rightSlop;	
+                _rightSlop = _rightSlop * (float)bedEntry.size();
+                AddSlop(bedEntry);
+	        _rightSlop = r;
+	        _leftSlop = l;
             }
             _bed->reportBedNewLine(bedEntry);
-            bedEntry = nullBed;
         }
-        bedStatus = _bed->GetNextBed(bedEntry, lineNum);
     }
     _bed->Close();
 }
 
 
-void BedSlop::AddSlop(BED &bed, int leftSlop, int rightSlop) {
+void BedSlop::AddSlop(BED &bed) {
 
     // special handling if the BED entry is on the negative
     // strand and the user cares about strandedness.
-    CHRPOS chromSize = _genome->getChromSize(bed.chrom);
+    CHRPOS chromSize = (CHRPOS)_genome->getChromSize(bed.chrom);
 
     if ( (_forceStrand) && (bed.strand == "-") ) {
-        // inspect the start
-        if ( (static_cast<int>(bed.start) - rightSlop) > 0 ) bed.start -= rightSlop;
-        else bed.start = 0;
+        if ( ((int)bed.start - (int)_rightSlop) >= 0 )
+        {
+            bed.start = bed.start - (int)_rightSlop;
+        }
+        else
+            bed.start = 0;
 
-        // inspect the start
-        if ( (static_cast<int>(bed.end) + leftSlop) <= static_cast<int>(chromSize)) bed.end += leftSlop;
-        else bed.end = chromSize;
+        if ( ((int)bed.end + (int)_leftSlop) <= chromSize )
+            bed.end = bed.end + (int)_leftSlop;
+        else
+            // if the _leftSlop is negative and pushes bed.end to be < 0, set to 1
+            if ( (((int)bed.end + (int)_leftSlop) <= 0) && _leftSlop < 0)
+                bed.end = 1;
+            else
+                bed.end = chromSize;
     }
     else {
-        // inspect the start
-        if ( (static_cast<int>(bed.start) - leftSlop) > 0) bed.start -= leftSlop;
-        else bed.start = 0;
-
-        // inspect the end
-        if ( (static_cast<int>(bed.end) + rightSlop) <= static_cast<int>(chromSize)) bed.end += rightSlop;
-        else bed.end = chromSize;
+    	if ( ((int)bed.start - (int)_leftSlop) >= 0 )
+            bed.start = bed.start - (int)_leftSlop;
+        else
+            bed.start = 0;
+        if ( ((int)bed.end + (int)_rightSlop) <= chromSize )
+            bed.end = bed.end + (int)_rightSlop;
+        else
+            // if the _rightSlop is negative and pushes bed.end to be < 0, set to 1
+            if ( (((int)bed.end + (int)_rightSlop) <= 0) && _rightSlop < 0)
+                bed.end = 1;
+            else
+                bed.end = chromSize;
     }
 }
 

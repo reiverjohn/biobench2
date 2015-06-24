@@ -13,14 +13,19 @@
 #include "nucBed.h"
 
 
-NucBed::NucBed(string &dbFile, string &bedFile, bool printSeq, bool hasPattern, const string &pattern) {
+NucBed::NucBed(string &dbFile, string &bedFile, bool printSeq, 
+               bool hasPattern, const string &pattern, 
+               bool forceStrand, bool ignoreCase, bool useFullHeader) 
+{
 
-    _dbFile       = dbFile;
-    _bedFile      = bedFile;
-    _printSeq     = printSeq;
-    _hasPattern   = hasPattern;
-    _pattern      = pattern;
-    
+    _dbFile        = dbFile;
+    _bedFile       = bedFile;
+    _printSeq      = printSeq;
+    _hasPattern    = hasPattern;
+    _pattern       = pattern;
+    _forceStrand   = forceStrand;
+    _ignoreCase    = ignoreCase;
+    _useFullHeader = useFullHeader;
     _bed = new BedFile(_bedFile);
 
     // Compute the DNA content in each BED/GFF/VCF interval
@@ -40,7 +45,7 @@ void NucBed::ReportDnaProfile(const BED& bed, const string &sequence, int seqLen
     getDnaContent(sequence,a,c,g,t,n,other);
     
     if (_hasPattern)
-        userPatternCount = countPattern(sequence, _pattern);
+        userPatternCount = countPattern(sequence, _pattern, _ignoreCase);
     
     
     // report the original interval
@@ -75,12 +80,12 @@ void NucBed::PrintHeader(void) {
     printf("%d_num_T\t", numOrigColumns + 6);
     printf("%d_num_N\t", numOrigColumns + 7);
     printf("%d_num_oth\t", numOrigColumns + 8);
-    printf("%d_seq_len\t", numOrigColumns + 9);
+    printf("%d_seq_len", numOrigColumns + 9);
     
     if (_printSeq)
-        printf("%d_seq", numOrigColumns + 10);
+        printf("\t%d_seq", numOrigColumns + 10);
     if (_hasPattern && !_printSeq)
-        printf("%d_user_patt_count", numOrigColumns + 10);
+        printf("\t%d_user_patt_count", numOrigColumns + 10);
     else if (_hasPattern && _printSeq)
         printf("\t%d_user_patt_count", numOrigColumns + 11);
     printf("\n");
@@ -105,17 +110,15 @@ void NucBed::ProfileDNA() {
     // open and memory-map genome file
     FastaReference fr;
     bool memmap = true;    
-    fr.open(_dbFile, memmap);
+    fr.open(_dbFile, memmap, _useFullHeader);
 
     bool headerReported = false;
-    BED bed, nullBed;
-    int lineNum = 0;
-    BedLineStatus bedStatus;
+    BED bed;
     string sequence;
 
     _bed->Open();
-    while ((bedStatus = _bed->GetNextBed(bed, lineNum)) != BED_INVALID) {
-        if (bedStatus == BED_VALID) {
+    while (_bed->GetNextBed(bed)) {
+        if (_bed->_status == BED_VALID) {
             if (headerReported == false) {
                 PrintHeader();
                 headerReported = true;
@@ -129,8 +132,11 @@ void NucBed::ProfileDNA() {
                     // grab the dna at this interval
                     int length = bed.end - bed.start;
                     // report the sequence's content
-                    ReportDnaProfile(bed, fr.getSubSequence(bed.chrom, bed.start, length), length);
-                    bed = nullBed;
+                    string dna = fr.getSubSequence(bed.chrom, bed.start, length);
+                    // rev comp si necessaire
+                    if ((_forceStrand == true) && (bed.strand == "-"))
+                        reverseComplement(dna);
+                    ReportDnaProfile(bed, dna, length);
                 }
                 else
                 {
@@ -142,7 +148,6 @@ void NucBed::ProfileDNA() {
             else {
                 cerr << "Feature (" << bed.chrom << ":" << bed.start+1 << "-" << bed.end-1 << ") has length = 0, Skipping." << endl;
             }
-            bed = nullBed;
         }
     }
     _bed->Close();

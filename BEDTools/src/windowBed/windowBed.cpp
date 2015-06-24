@@ -18,7 +18,8 @@
 */
 BedWindow::BedWindow(string bedAFile, string bedBFile, int leftSlop, int rightSlop,
                      bool anyHit, bool noHit, bool writeCount, bool strandWindows,
-                     bool matchOnSameStrand, bool matchOnDiffStrand, bool bamInput, bool bamOutput, bool isUncompressedBam) {
+                     bool matchOnSameStrand, bool matchOnDiffStrand, bool bamInput, 
+                     bool bamOutput, bool isUncompressedBam, bool printHeader) {
 
     _bedAFile      = bedAFile;
     _bedBFile      = bedBFile;
@@ -35,6 +36,7 @@ BedWindow::BedWindow(string bedAFile, string bedBFile, int leftSlop, int rightSl
     _bamInput            = bamInput;
     _bamOutput           = bamOutput;
     _isUncompressedBam   = isUncompressedBam;
+    _printHeader         = printHeader;
 
     _bedA          = new BedFile(bedAFile);
     _bedB          = new BedFile(bedBFile);
@@ -71,7 +73,8 @@ void BedWindow::FindWindowOverlaps(const BED &a, vector<BED> &hits) {
         Now report the hits (if any) based on the window around a.
     */
     // get the hits in B for the A feature
-    _bedB->FindOverlapsPerBin(a.chrom, aFudgeStart, aFudgeEnd, a.strand, hits, _matchOnSameStrand, _matchOnDiffStrand);
+    _bedB->allHits(a.chrom, aFudgeStart, aFudgeEnd, a.strand, hits, 
+                   _matchOnSameStrand, _matchOnDiffStrand, 0.0, false);
 
     int numOverlaps = 0;
 
@@ -99,7 +102,7 @@ void BedWindow::FindWindowOverlaps(const BED &a, vector<BED> &hits) {
     if (_anyHit == true && (numOverlaps >= 1)) {
         _bedA->reportBedNewLine(a); }
     else if (_writeCount == true) {
-        _bedA->reportBedTab(a); printf("\t%d\n", numOverlaps);
+        _bedA->reportBedTab(a); printf("%d\n", numOverlaps);
     }
     else if (_noHit == true && (numOverlaps == 0)) {
         _bedA->reportBedNewLine(a);
@@ -115,7 +118,8 @@ bool BedWindow::FindOneOrMoreWindowOverlaps(const BED &a) {
     CHRPOS aFudgeEnd;
     AddWindow(a, aFudgeStart, aFudgeEnd);
 
-    bool overlapsFound = _bedB->FindOneOrMoreOverlapsPerBin(a.chrom, a.start, a.end, a.strand, _matchOnSameStrand, _matchOnDiffStrand);
+    bool overlapsFound = _bedB->anyHits(a.chrom, a.start, a.end, a.strand, 
+                                        _matchOnSameStrand, _matchOnDiffStrand, 0.0, false);
     return overlapsFound;
 }
 
@@ -126,18 +130,19 @@ void BedWindow::WindowIntersectBed() {
     // that we can easily compare "A" to it for overlaps
     _bedB->loadBedFileIntoMap();
 
-    BED a, nullBed;
-    int lineNum = 0;                    // current input line number
-    BedLineStatus bedStatus;
-    vector<BED> hits;                   // vector of potential hits
+    BED a;
+    vector<BED> hits;
     hits.reserve(100);
 
     _bedA->Open();
-    while ((bedStatus = _bedA->GetNextBed(a, lineNum)) != BED_INVALID) {
-        if (bedStatus == BED_VALID) {
+    // report A's header first if asked.
+    if (_printHeader == true) {
+        _bedA->PrintHeader();
+    }
+    while (_bedA->GetNextBed(a)) {
+        if (_bedA->_status == BED_VALID) {
             FindWindowOverlaps(a, hits);
             hits.clear();
-            a = nullBed;
         }
     }
     _bedA->Close();
@@ -153,7 +158,11 @@ void BedWindow::WindowIntersectBam(string bamFile) {
     // open the BAM file
     BamReader reader;
     BamWriter writer;
-    reader.Open(bamFile);
+    if (!reader.Open(bamFile)) {
+        cerr << "Failed to open BAM file " << bamFile << endl;
+        exit(1);
+    }
+
 
     // get header & reference information
     string bamHeader  = reader.GetHeaderText();

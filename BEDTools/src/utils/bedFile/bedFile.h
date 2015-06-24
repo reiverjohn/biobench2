@@ -46,7 +46,6 @@ typedef uint32_t UINT;
 //*************************************************
 // Genome binning constants
 //*************************************************
-
 const BIN      _numBins   = 37450;
 const BINLEVEL _binLevels = 7;
 
@@ -86,16 +85,12 @@ struct BED {
     string name;
     string score;
     string strand;
-
-    // Add'l fields for BED12 and/or custom BED annotations
-    vector<string> otherFields;
-
-    // experimental fields for the FJOIN approach.
+    // all of the original fields in the record
+    vector<string> fields;
+    // indices of the "other" fields
+    vector<uint16_t> other_idxs;
+    // is this a zero length feature: i.e., start == end
     bool   zeroLength;
-    bool   added;
-    bool   finished;
-    // list of hits from another file.
-    vector<BED> overlaps;
 
 public:
     // constructors
@@ -108,11 +103,9 @@ public:
       name(""),
       score(""),
       strand(""),
-      otherFields(),
-      zeroLength(false),
-      added(false),
-      finished(false),
-      overlaps()
+      fields(),
+      other_idxs(),
+      zeroLength(false)
     {}
 
     // BED3
@@ -123,11 +116,9 @@ public:
       name(""),
       score(""),
       strand(""),
-      otherFields(),
-      zeroLength(false),
-      added(false),
-      finished(false),
-      overlaps()
+      fields(),
+      other_idxs(),
+      zeroLength(false)
     {}
 
     // BED4
@@ -138,11 +129,9 @@ public:
       name(""),
       score(""),
       strand(strand),
-      otherFields(),
-      zeroLength(false),
-      added(false),
-      finished(false),
-      overlaps()
+      fields(),
+      other_idxs(),
+      zeroLength(false)
     {}
 
     // BED6
@@ -154,30 +143,27 @@ public:
       name(name),
       score(score),
       strand(strand),
-      otherFields(),
-      zeroLength(false),
-      added(false),
-      finished(false),
-      overlaps()
+      fields(),
+      other_idxs(),
+      zeroLength(false)
     {}
 
     // BEDALL
     BED(string chrom, CHRPOS start, CHRPOS end, string name,
-        string score, string strand, vector<string> otherFields)
+        string score, string strand, vector<string> fields, 
+        vector<uint16_t> other_idxs)
     : chrom(chrom),
       start(start),
       end(end),
       name(name),
       score(score),
       strand(strand),
-      otherFields(otherFields),
-      zeroLength(false),
-      added(false),
-      finished(false),
-      overlaps()
+      fields(fields),
+      other_idxs(other_idxs),
+      zeroLength(false)
     {}
     
-    int size() {
+    int size() const {
         return end-start;
     }
 
@@ -209,10 +195,11 @@ struct BEDCOV {
     string score;
     string strand;
 
-    // Add'l fields for BED12 and/or custom BED annotations
-    vector<string> otherFields;
-
-    // flag a zero-length feature
+    // all of the original fields in the record
+    vector<string> fields;
+    // indices of the "other" fields
+    vector<uint16_t> other_idxs;
+    // is this a zero length feature: i.e., start == end
     bool   zeroLength;
     
     // Additional fields specific to computing coverage
@@ -231,7 +218,8 @@ struct BEDCOV {
       name(""),
       score(""),
       strand(""),
-      otherFields(),
+      fields(),
+      other_idxs(),
       zeroLength(false),
       depthMap(),
       count(0),
@@ -254,10 +242,11 @@ struct BEDCOVLIST {
     string score;
     string strand;
 
-    // Add'l fields for BED12 and/or custom BED annotations
-    vector<string> otherFields;
-    
-    // flag a zero-length feature
+    // all of the original fields in the record
+    vector<string> fields;
+    // indices of the "other" fields
+    vector<uint16_t> other_idxs;
+    // is this a zero length feature: i.e., start == end
     bool   zeroLength;
 
     // Additional fields specific to computing coverage
@@ -276,7 +265,8 @@ struct BEDCOVLIST {
       name(""),
       score(""),
       strand(""),
-      otherFields(),
+      fields(),
+      other_idxs(),
       zeroLength(false),
       depthMapList(),
       counts(0),
@@ -310,29 +300,16 @@ typedef vector<BEDCOV> bedCovVector;
 typedef vector<MATE> mateVector;
 typedef vector<BEDCOVLIST> bedCovListVector;
 
-typedef map<BIN, bedVector,    std::less<BIN> > binsToBeds;
-typedef map<BIN, bedCovVector, std::less<BIN> > binsToBedCovs;
-typedef map<BIN, mateVector, std::less<BIN> > binsToMates;
-typedef map<BIN, bedCovListVector, std::less<BIN> > binsToBedCovLists;
+typedef map<BIN, bedVector> binsToBeds;
+typedef map<BIN, bedCovVector> binsToBedCovs;
+typedef map<BIN, mateVector> binsToMates;
+typedef map<BIN, bedCovListVector> binsToBedCovLists;
 
-typedef map<string, binsToBeds, std::less<string> >    masterBedMap;
-typedef map<string, binsToBedCovs, std::less<string> > masterBedCovMap;
-typedef map<string, binsToMates, std::less<string> > masterMateMap;
-typedef map<string, binsToBedCovLists, std::less<string> > masterBedCovListMap;
-typedef map<string, bedVector, std::less<string> >     masterBedMapNoBin;
-
-
-// EXPERIMENTAL - wait for TR1
-// typedef vector<BED>    bedVector;
-// typedef vector<BEDCOV> bedCovVector;
-//
-// typedef tr1::unordered_map<BIN, bedVector> binsToBeds;
-// typedef tr1::unordered_map<BIN, bedCovVector> binsToBedCovs;
-//
-// typedef tr1::unordered_map<string, binsToBeds>    masterBedMap;
-// typedef tr1::unordered_map<string, binsToBedCovs> masterBedCovMap;
-// typedef tr1::unordered_map<string, bedVector>     masterBedMapNoBin;
-
+typedef map<string, binsToBeds>    masterBedMap;
+typedef map<string, binsToBedCovs> masterBedCovMap;
+typedef map<string, binsToMates> masterMateMap;
+typedef map<string, binsToBedCovLists> masterBedCovListMap;
+typedef map<string, bedVector>     masterBedMapNoBin;
 
 
 // return the genome "bin" for a feature with this start and end
@@ -347,7 +324,9 @@ BIN getBin(CHRPOS start, CHRPOS end) {
         start >>= _binNextShift;
         end   >>= _binNextShift;
     }
-    cerr << "start " << start << ", end " << end << " out of range in findBin (max is 512M)" << endl;
+    cerr << "start " << start << ", end " << end 
+         << " out of range in findBin (max is 512M)" 
+         << endl;
     return 0;
 }
 
@@ -363,16 +342,22 @@ inline bool isInteger(const std::string& s) {
 }
 
 
-// return the amount of overlap between two features.  Negative if none and the the
+// return the amount of overlap between two features.  Negative if none and the
 // number of negative bases is the distance between the two.
 inline
 int overlaps(CHRPOS aS, CHRPOS aE, CHRPOS bS, CHRPOS bE) {
     return min(aE, bE) - max(aS, bS);
 }
 
+// is A after (to the right of) B?
+inline
+bool after(const BED &a, const BED &b) {
+    return (a.start >= b.end);
+}
+
 
 // Ancillary functions
-void splitBedIntoBlocks(const BED &bed, int lineNum, bedVector &bedBlocks);
+void splitBedIntoBlocks(const BED &bed, bedVector &bedBlocks);
 
 
 // BED Sorting Methods
@@ -395,73 +380,122 @@ public:
 
     // Constructor
     BedFile(string &);
+    BedFile(void);
 
     // Destructor
     ~BedFile(void);
 
+    /********* File management ********/
     // Open a BED file for reading (creates an istream pointer)
     void Open(void);
 
     // Close an opened BED file.
     void Close(void);
 
+    // are the any intervals left in the file?
+    bool Empty(void);
+
+    // Rewind the pointer back to the beginning of the file
+    void Rewind(void);
+
+    // Jump to a specific byte in the file
+    void Seek(unsigned long offset);
+
+    // dump the header, which is collected as part of Open()
+    void PrintHeader(void);
+
+    // get the next line in the file. splits a line in _bedFields
+    void GetLine(void);
+
     // Get the next BED entry in an opened BED file.
-    BedLineStatus GetNextBed (BED &bed, int &lineNum);
+    bool GetNextBed (BED &bed, bool forceSorted = false);
+    
+    // Returns the next MERGED (i.e., non-overlapping) interval in 
+    // an opened BED file
+    // NOTE: assumes input file is sorted by chrom then start
+    bool GetNextMergedBed(BED &merged_bed);
 
-    // load a BED file into a map keyed by chrom, then bin. value is vector of BEDs
+    // load a BED file into a map keyed by chrom, then bin. value is 
+    // vector of BEDs
     void loadBedFileIntoMap();
+    void loadBedFileIntoMergedMap();
 
-    // load a BED file into a map keyed by chrom, then bin. value is vector of BEDCOVs
+    // load a BED entry into and existing map
+    void addBEDIntoMap(BED bedEntry);
+
+    // load a BED file into a map keyed by chrom, then bin. value is 
+    // vector of BEDCOVs
     void loadBedCovFileIntoMap();
 
-    // load a BED file into a map keyed by chrom, then bin. value is vector of BEDCOVLISTs
+    // load a BED file into a map keyed by chrom, then bin. value is 
+    // vector of BEDCOVLISTs
     void loadBedCovListFileIntoMap();
 
     // load a BED file into a map keyed by chrom. value is vector of BEDs
     void loadBedFileIntoMapNoBin();
 
+    // load a BED file into a vector of BEDs
+    void loadBedFileIntoVector();
+
     // Given a chrom, start, end and strand for a single feature,
     // search for all overlapping features in another BED file.
     // Searches through each relevant genome bin on the same chromosome
     // as the single feature. Note: Adapted from kent source "binKeeperFind"
-    void FindOverlapsPerBin(string chrom, CHRPOS start, CHRPOS end, string strand, vector<BED> &hits, bool sameStrand, bool diffStrand);
+    void allHits(string chrom, CHRPOS start, CHRPOS end, string strand, 
+                 vector<BED> &hits, bool sameStrand, bool diffStrand, 
+                 float overlapFraction, bool reciprocal);
 
     // return true if at least one overlap was found.  otherwise, return false.
-    bool FindOneOrMoreOverlapsPerBin(string chrom, CHRPOS start, CHRPOS end, string strand,
-                                        bool sameStrand, bool diffStrand, float overlapFraction = 0.0);
+    bool anyHits(string chrom, CHRPOS start, CHRPOS end, string strand,
+                bool sameStrand, bool diffStrand, float overlapFraction, bool reciprocal);
 
-    // return true if at least one __reciprocal__ overlap was found.  otherwise, return false.
-    bool FindOneOrMoreReciprocalOverlapsPerBin(string chrom, CHRPOS start, CHRPOS end, string strand,
-                                                    bool sameStrand, bool diffStrand, float overlapFraction = 0.0);
 
     // Given a chrom, start, end and strand for a single feature,
     // increment a the number of hits for each feature in B file
     // that the feature overlaps
-    void countHits(const BED &a, bool sameStrand = false, bool diffStrand = false, bool countsOnly = false);
+    void countHits(const BED &a, bool sameStrand = false, 
+                   bool diffStrand = false, bool countsOnly = false);
 
     // same as above, but has special logic that processes a set of
     // BED "blocks" from a single entry so as to avoid over-counting
     // each "block" of a single BAM/BED12 as distinct coverage.  That is,
     // if one read has four block, we only want to count the coverage as
     // coming from one read, not four.
-    void countSplitHits(const vector<BED> &bedBlock, bool sameStrand = false, bool diffStrand = false, bool countsOnly = false);
+    void countSplitHits(const vector<BED> &bedBlock, bool sameStrand = false, 
+                        bool diffStrand = false, bool countsOnly = false);
 
     // Given a chrom, start, end and strand for a single feature,
     // increment a the number of hits for each feature in B file
     // that the feature overlaps
-    void countListHits(const BED &a, int index, bool sameStrand, bool diffStrand);
+    void countListHits(const BED &a, int index, 
+                       bool sameStrand, bool diffStrand);
+    
+    
+    // return the total length of all the intervals in the file.
+    // use with GetNextBed()
+    unsigned long getTotalLength(void);
+
+    // return the total _flattened_ length of all the intervals in the file.
+    // use with GetNextMergedBed()
+    unsigned long getTotalFlattenedLength(void);
+    
 
     // the bedfile with which this instance is associated
     string bedFile;
     unsigned int bedType;  // 3-6, 12 for BED
                            // 9 for GFF
+    bool isBed12;          // is it file of true blocked BED12 records?
     bool isZeroBased;
 
     // Main data structires used by BEDTools
     masterBedCovMap      bedCovMap;
     masterBedCovListMap  bedCovListMap;
     masterBedMap         bedMap;
+    bedVector            bedList;
     masterBedMapNoBin    bedMapNoBin;
+    
+    BedLineStatus _status;
+    int _lineNum;
 
 private:
 
@@ -472,13 +506,29 @@ private:
     FileType   _fileType;     // what is the file type? (BED? GFF? VCF?)
     istream   *_bedStream;
     string _bedLine;
+
+    BED _nullBed;
+    string _header;
+    bool _firstLine;
     vector<string> _bedFields;
+    unsigned int _numFields;
+    int _merged_start;
+    int _merged_end;
+    string _merged_chrom;
+    int _prev_start;
+    string _prev_chrom;
+    unsigned long _total_length;
+    unsigned long _total_flattened_length;
 
     void setZeroBased(bool zeroBased);
     void setGff (bool isGff);
     void setVcf (bool isVcf);
     void setFileType (FileType type);
     void setBedType (int colNums);
+    void setBed12 (bool isBed12);
+
+    /************ Private utilities ***********************/
+    void GetHeader(void);
 
     /******************************************************
     Private definitions to circumvent linker issues with
@@ -489,76 +539,116 @@ private:
         parseLine: converts a lineVector into either BED or BEDCOV (templated, hence in header to avoid linker issues.)
     */
     template <typename T>
-    inline BedLineStatus parseLine (T &bed, const vector<string> &lineVector, int &lineNum) {
-
-        //char *p2End, *p3End, *p4End, *p5End;
-        //long l2, l3, l4, l5;
-        unsigned int numFields = lineVector.size();
-
+    inline BedLineStatus parseLine (T &bed, const vector<string> &fields) {
+        
+        // clear out the data from the last line.
+        bed = _nullBed;
         // bail out if we have a blank line
-        if (numFields == 0) {
+        if (_numFields == 0) {
             return BED_BLANK;
         }
+        // bail out if we have a comment line
+        if ( (fields[0].find("#")       == 0) ||
+             (fields[0].find("browser") == 0) ||
+             (fields[0].find("track")   == 0) 
+           )
+        {
+            return BED_HEADER;
+        }
 
-        if ((lineVector[0].find("track") == string::npos) && (lineVector[0].find("browser") == string::npos) && (lineVector[0].find("#") == string::npos) ) {
-
-            if (numFields >= 3) {
-                // line parsing for all lines after the first non-header line
-                if (_typeIsKnown == true) {
-                    switch(_fileType) {
-                        case BED_FILETYPE:
-                            if (parseBedLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                        case VCF_FILETYPE:
-                            if (parseVcfLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                        case GFF_FILETYPE:
-                            if (parseGffLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                        default:
-                            printf("ERROR: file type encountered. Exiting\n");
-                            exit(1);
-                    }
-                }
-                // line parsing for first non-header line: figure out file contents
-                else {
-                    // it's BED format if columns 2 and 3 are integers
-                    if (isInteger(lineVector[1]) && isInteger(lineVector[2])) {
-                        setGff(false);
-                        setZeroBased(true);
-                        setFileType(BED_FILETYPE);
-                        setBedType(numFields);       // we now expect numFields columns in each line
-                        if (parseBedLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                    }
-                    // it's VCF, assuming the second column is numeric and there are at least 8 fields.
-                    else if (isInteger(lineVector[1]) && numFields >= 8) {
-                        setGff(false);
-                        setVcf(true);
-                        setZeroBased(false);
-                        setFileType(VCF_FILETYPE);
-                        setBedType(numFields);       // we now expect numFields columns in each line
-                        if (parseVcfLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                    }
-                    // it's GFF, assuming columns columns 4 and 5 are numeric and we have 9 fields total.
-                    else if ((numFields >= 8) && isInteger(lineVector[3]) && isInteger(lineVector[4])) {
-                        setGff(true);
-                        setZeroBased(false);
-                        setFileType(GFF_FILETYPE);
-                        setBedType(numFields);       // we now expect numFields columns in each line
-                        if (parseGffLine(bed, lineVector, lineNum, numFields) == true) return BED_VALID;
-                    }
-                    else {
-                        cerr << "Unexpected file format.  Please use tab-delimited BED, GFF, or VCF. " <<
-                                "Perhaps you have non-integer starts or ends at line " << lineNum << "?" << endl;
+        if (_numFields >= 3) {
+            // line parsing for all lines after the first non-header line
+            if (_typeIsKnown == true) {
+                switch(_fileType) {
+                    case BED_FILETYPE:
+                        if (parseBedLine(bed, fields) == true) 
+                            return BED_VALID;
+                    case VCF_FILETYPE:
+                        if (parseVcfLine(bed, fields) == true)
+                        {
+                            return BED_VALID;
+                        }
+                    case GFF_FILETYPE:
+                        if (parseGffLine(bed, fields) == true) 
+                                return BED_VALID;
+                    default:
+                        printf("ERROR: file type encountered. Exiting\n");
                         exit(1);
-                    }
                 }
             }
+            // line parsing for first non-header line: figure out file contents
             else {
-                cerr << "It looks as though you have less than 3 columns at line: " << lineNum << ".  Are you sure your files are tab-delimited?" << endl;
-                exit(1);
+                // it's BED format if columns 2 and 3 are integers
+                if (isInteger(fields[1]) && isInteger(fields[2])) {
+                    setGff(false);
+                    setZeroBased(true);
+                    setFileType(BED_FILETYPE);
+                    // we now expect numFields columns in each line
+                    setBedType(_numFields);
+                    
+                    // test to see if the file has true blocked BED12 records
+                    if (_numFields == 12) {
+                        int cdsStart = atoi(fields[6].c_str());
+                        int cdsEnd   = atoi(fields[7].c_str());
+                        int numExons = atoi(fields[9].c_str());
+
+                        if (cdsStart > 0 && cdsEnd > 0&& numExons > 0 &&
+                            fields[10].find(",") == 0 &&
+                            fields[11].find(",") == 0)
+                        {
+                            setBed12(true);
+                        }
+                        else setBed12(false);
+                    }
+                    if (parseBedLine(bed, fields) == true) 
+                        return BED_VALID;
+                }
+                // it's VCF, assuming the second column is numeric and 
+                // there are at least 8 fields.
+                else if (isInteger(fields[1]) && _numFields >= 8) {
+                    setGff(false);
+                    setVcf(true);
+                    setZeroBased(false);
+                    setFileType(VCF_FILETYPE);
+                    // we now expect numFields columns in each line
+                    setBedType(_numFields);
+                    if (parseVcfLine(bed, fields) == true) 
+                        return BED_VALID;
+                }
+                // it's GFF, assuming columns columns 4 and 5 are numeric 
+                // and we have 9 fields total.
+                else if ((_numFields >= 8) && 
+                          isInteger(fields[3]) && 
+                          isInteger(fields[4])) 
+                {
+                    setGff(true);
+                    setZeroBased(false);
+                    setFileType(GFF_FILETYPE);
+                    // we now expect numFields columns in each line
+                    setBedType(_numFields);
+                    if (parseGffLine(bed, fields) == true) 
+                    {
+                        return BED_VALID;
+                    }
+                }
+                else {
+                    cerr << "Unexpected file format.  "
+                         << "Please use tab-delimited BED, GFF, or VCF. " 
+                         << "Perhaps you have non-integer starts or ends "
+                         << "at line " 
+                         << _lineNum 
+                         << "?" 
+                         << endl;
+                    exit(1);
+                }
             }
         }
         else {
-            lineNum--;
-            return BED_HEADER;
+            cerr << "It looks as though you have less than 3 columns at line: " 
+                 << _lineNum 
+                 << ".  Are you sure your files are tab-delimited?" 
+                 << endl;
+            exit(1);
         }
         // default
         return BED_INVALID;
@@ -569,22 +659,29 @@ private:
         parseBedLine: converts a lineVector into either BED or BEDCOV (templated, hence in header to avoid linker issues.)
     */
     template <typename T>
-    inline bool parseBedLine (T &bed, const vector<string> &lineVector, int lineNum, unsigned int numFields) {
-
+    inline bool parseBedLine (T &bed, const vector<string> &fields) 
+    {
         // process as long as the number of fields in this
         // line matches what we expect for this file.
-        if (numFields == this->bedType) {
-            bed.chrom = lineVector[0];
+        if (_numFields == this->bedType) {
+            bed.fields = fields;
+            bed.chrom = fields[0];
             int i;
-            i = atoi(lineVector[1].c_str());
+            i = atoi(fields[1].c_str());
             if (i<0) {
-                 cerr << "Error: malformed BED entry at line " << lineNum << ". Start Coordinate detected that is < 0. Exiting." << endl;
+                 cerr << "Error: malformed BED entry at line " 
+                      << _lineNum 
+                      << ". Start Coordinate detected that is < 0. Exiting." 
+                      << endl;
                  exit(1);
             }
             bed.start = (CHRPOS)i;
-            i = atoi(lineVector[2].c_str());
+            i = atoi(fields[2].c_str());
             if (i<0) {
-                cerr << "Error: malformed BED entry at line " << lineNum << ". End Coordinate detected that is < 0. Exiting." << endl;
+                cerr << "Error: malformed BED entry at line " 
+                     << _lineNum 
+                     << ". End Coordinate detected that is < 0. Exiting." 
+                     << endl;
                 exit(1);
             }
             bed.end = (CHRPOS)i;
@@ -597,28 +694,31 @@ private:
             }
             
             if (this->bedType == 4) {
-                bed.name = lineVector[3];
+                bed.name = fields[3];
             }
             else if (this->bedType == 5) {
-                bed.name = lineVector[3];
-                bed.score = lineVector[4];
+                bed.name = fields[3];
+                bed.score = fields[4];
             }
             else if (this->bedType == 6) {
-                bed.name = lineVector[3];
-                bed.score = lineVector[4];
-                bed.strand = lineVector[5];
+                bed.name = fields[3];
+                bed.score = fields[4];
+                bed.strand = fields[5];
             }
             else if (this->bedType > 6) {
-                bed.name = lineVector[3];
-                bed.score = lineVector[4];
-                bed.strand = lineVector[5];
-                for (unsigned int i = 6; i < lineVector.size(); ++i) {
-                    bed.otherFields.push_back(lineVector[i]);
+                bed.name = fields[3];
+                bed.score = fields[4];
+                bed.strand = fields[5];
+                for (unsigned int i = 6; i < fields.size(); ++i) {
+                    bed.other_idxs.push_back(i);
                 }
             }
             else if (this->bedType != 3) {
-                cerr << "Error: unexpected number of fields at line: " << lineNum
-                     << ".  Verify that your files are TAB-delimited.  Exiting..." << endl;
+                cerr << "Error: unexpected number of fields at line: " 
+                     << _lineNum
+                     << ".  Verify that your files are TAB-delimited. "     
+                     << "Exiting..." 
+                     << endl;
                 exit(1);
             }
 
@@ -627,20 +727,33 @@ private:
                 return true;
             }
             else {
-                cerr << "Error: malformed BED entry at line " << lineNum << ". Start was greater than end. Exiting." << endl;
+                cerr << "Error: malformed BED entry at line " 
+                     << _lineNum 
+                     << ". Start was greater than end. Exiting." 
+                     << endl;
                 exit(1);
             }
         }
-        else if (numFields == 1) {
-            cerr << "Only one BED field detected: " << lineNum << ".  Verify that your files are TAB-delimited.  Exiting..." << endl;
+        else if (_numFields == 1) {
+            cerr << "Only one BED field detected: " 
+                 << _lineNum 
+                 << ".  Verify that your files are TAB-delimited.  Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields != this->bedType) && (numFields != 0)) {
-            cerr << "Differing number of BED fields encountered at line: " << lineNum << ".  Exiting..." << endl;
+        else if ((_numFields != this->bedType) && (_numFields != 0)) {
+            cerr << "Differing number of BED fields encountered at line: " 
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields < 3) && (numFields != 0)) {
-            cerr << "TAB delimited BED file with at least 3 fields (chrom, start, end) is required at line: "<< lineNum << ".  Exiting..." << endl;
+        else if ((_numFields < 3) && (_numFields != 0)) {
+            cerr << "TAB delimited BED file with at least 3 fields"
+                 << " (chrom, start, end) is required at line: "
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
         return false;
@@ -651,46 +764,67 @@ private:
         parseVcfLine: converts a lineVector into either BED or BEDCOV (templated, hence in header to avoid linker issues.)
     */
     template <typename T>
-    inline bool parseVcfLine (T &bed, const vector<string> &lineVector, int lineNum, unsigned int numFields) {
-        if (numFields == this->bedType) {
-            bed.chrom  = lineVector[0];
-            bed.start  = atoi(lineVector[1].c_str()) - 1;  // VCF is one-based
-            bed.end    = bed.start + lineVector[3].size(); // VCF 4.0 stores the size of the affected REF allele.
+    inline bool parseVcfLine (T &bed, const vector<string> &fields) 
+    {
+        if (_numFields >= this->bedType) {
+            bed.fields = fields;
+            bed.chrom  = fields[0];
+            // VCF is one-based
+            bed.start  = atoi(fields[1].c_str()) - 1;  
+            // VCF 4.0 stores the size of the affected REF allele.
+            bed.end    = bed.start + fields[3].size(); 
             bed.strand = "+";
             // construct the name from the ref and alt alleles.
             // if it's an annotated variant, add the rsId as well.
-            bed.name   = lineVector[3] + "/" + lineVector[4];
-            if (lineVector[2] != ".") {
-                bed.name += "_" + lineVector[2];
+            bed.name   = fields[3] + "/" + fields[4];
+            if (fields[2] != ".") {
+                bed.name += "_" + fields[2];
             }
 
             if (this->bedType > 2) {
-                for (unsigned int i = 2; i < numFields; ++i)
-                    bed.otherFields.push_back(lineVector[i]);
+                for (unsigned int i = 2; i < _numFields; ++i)
+                    bed.other_idxs.push_back(i);
             }
 
             if ((bed.start <= bed.end) && (bed.start >= 0) && (bed.end >= 0)) {
                 return true;
             }
             else if (bed.start > bed.end) {
-                cerr << "Error: malformed VCF entry at line " << lineNum << ". Start was greater than end. Exiting." << endl;
+                cerr << "Error: malformed VCF entry at line " 
+                    << _lineNum 
+                    << ". Start was greater than end. Exiting." 
+                    << endl;
                 exit(1);
             }
             else if ( (bed.start < 0) || (bed.end < 0) ) {
-                cerr << "Error: malformed VCF entry at line " << lineNum << ". Coordinate detected that is < 0. Exiting." << endl;
+                cerr << "Error: malformed VCF entry at line " 
+                     << _lineNum << ". Coordinate detected that is < 0. "
+                     << "Exiting." 
+                     << endl;
                 exit(1);
             }
         }
-        else if (numFields == 1) {
-            cerr << "Only one VCF field detected: " << lineNum << ".  Verify that your files are TAB-delimited.  Exiting..." << endl;
+        else if (_numFields == 1) {
+            cerr << "Only one VCF field detected: " 
+                 << _lineNum 
+                 << ".  Verify that your files are TAB-delimited. "
+                 << "Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields != this->bedType) && (numFields != 0)) {
-            cerr << "Differing number of VCF fields encountered at line: " << lineNum << ".  Exiting..." << endl;
+        else if ((_numFields != this->bedType) && (_numFields != 0)) {
+            cerr << "Differing number of VCF fields encountered at line: " 
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields < 2) && (numFields != 0)) {
-            cerr << "TAB delimited VCF file with at least 2 fields (chrom, pos) is required at line: "<< lineNum << ".  Exiting..." << endl;
+        else if ((_numFields < 2) && (_numFields != 0)) {
+            cerr << "TAB delimited VCF file with at least 2 fields "
+                 << "(chrom, pos) is required at line: "
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
         return false;
@@ -702,54 +836,73 @@ private:
         parseGffLine: converts a lineVector into either BED or BEDCOV (templated, hence in header to avoid linker issues.)
     */
     template <typename T>
-    inline bool parseGffLine (T &bed, const vector<string> &lineVector, int lineNum, unsigned int numFields) {
-        if (numFields == this->bedType) {
+    inline bool parseGffLine (T &bed, const vector<string> &fields) 
+    {
+        if (_numFields == this->bedType) {
+            bed.fields = fields;
             if (this->bedType >= 8 && _isGff) {
-                bed.chrom = lineVector[0];
-                bed.start  = atoi(lineVector[3].c_str());
-                bed.end    = atoi(lineVector[4].c_str());
-                bed.name   = lineVector[2];
-                bed.score  = lineVector[5];
-                bed.strand = lineVector[6].c_str();
-                bed.otherFields.push_back(lineVector[1]);  // add GFF "source". unused in BED
-                bed.otherFields.push_back(lineVector[7]);  // add GFF "fname". unused in BED
+                bed.chrom = fields[0];
+                if (isInteger(fields[3]))
+                    bed.start  = atoi(fields[3].c_str());
+                if (isInteger(fields[4]))
+                    bed.end  = atoi(fields[4].c_str());
+                bed.name   = fields[2];
+                bed.score  = fields[5];
+                bed.strand = fields[6].c_str();
+                // add GFF "source". unused in BED
+                bed.other_idxs.push_back(1); 
+                // add GFF "fname". unused in BED
+                bed.other_idxs.push_back(7);  
                 // handle the optional 9th field.
                 if (this->bedType == 9)
-                    bed.otherFields.push_back(lineVector[8]);  // add GFF "group". unused in BED
-                    
-                // handle starts == end (e.g., insertions in reference genome)
-                // if (bed.start == bed.end) {
-                //     bed.end++;
-                //     bed.zeroLength = true;
-                // }
-                // GFF uses 1-based starts, covert to zero-based
+                    // add GFF "group". unused in BED
+                    bed.other_idxs.push_back(8); 
                 bed.start--;
             }
             else {
-                cerr << "Error: unexpected number of fields at line: " << lineNum <<
-                        ".  Verify that your files are TAB-delimited and that your GFF file has 8 or 9 fields.  Exiting..." << endl;
+                cerr << "Error: unexpected number of fields at line: " 
+                    << _lineNum 
+                    << ".  Verify that your files are TAB-delimited and that "
+                    << "your GFF file has 8 or 9 fields.  Exiting..." 
+                    << endl;
                 exit(1);
             }
             if (bed.start > bed.end) {
-                cerr << "Error: malformed GFF entry at line " << lineNum << ". Start was greater than end. Exiting." << endl;
+                cerr << "Error: malformed GFF entry at line " 
+                     << _lineNum 
+                     << ". Start was greater than end. Exiting." 
+                     << endl;
                 exit(1);
             }
-            else if ( (bed.start < 0) || (bed.end < 0) ) {
-                cerr << "Error: malformed GFF entry at line " << lineNum << ". Coordinate detected that is < 1. Exiting." << endl;
+            if ( (bed.start < 0) || (bed.end < 0) ) {
+                cerr << "Error: malformed GFF entry at line " 
+                     << _lineNum 
+                     << ". Coordinate detected that is < 1. Exiting." 
+                     << endl;
                 exit(1);
             }
-            else return true;
+            return true;
         }
-        else if (numFields == 1) {
-            cerr << "Only one GFF field detected: " << lineNum << ".  Verify that your files are TAB-delimited.  Exiting..." << endl;
+        else if (_numFields == 1) {
+            cerr << "Only one GFF field detected: " 
+                 << _lineNum 
+                 << ".  Verify that your files are TAB-delimited.  Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields != this->bedType) && (numFields != 0)) {
-            cerr << "Differing number of GFF fields encountered at line: " << lineNum << ".  Exiting..." << endl;
+        else if ((_numFields != this->bedType) && (_numFields != 0)) {
+            cerr << "Differing number of GFF fields encountered at line: " 
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
-        else if ((numFields < 8) && (numFields != 0)) {
-            cerr << "TAB delimited GFF file with 8 or 9 fields is required at line: "<< lineNum << ".  Exiting..." << endl;
+        else if ((_numFields < 8) && (_numFields != 0)) {
+            cerr << "TAB delimited GFF file with 8 or 9 fields is required"
+                 << " at line: "
+                 << _lineNum 
+                 << ".  Exiting..." 
+                 << endl;
             exit(1);
         }
         return false;
@@ -767,7 +920,6 @@ public:
     */
     template <typename T>
     inline void reportBedTab(const T &bed) {
-        
         // if it is azeroLength feature, we need to
         // correct the start and end coords to what they were
         // in the original file
@@ -785,24 +937,30 @@ public:
                 printf ("%s\t%d\t%d\t", bed.chrom.c_str(), start, end);
             }
             else if (this->bedType == 4) {
-                printf ("%s\t%d\t%d\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str());
+                printf ("%s\t%d\t%d\t%s\t", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str());
             }
             else if (this->bedType == 5) {
-                printf ("%s\t%d\t%d\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                bed.score.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, 
+                    bed.name.c_str(), bed.score.c_str());
             }
             else if (this->bedType == 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, 
+                    bed.name.c_str(), bed.score.c_str(), bed.strand.c_str());
             }
             else if (this->bedType > 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
-
-                vector<string>::const_iterator othIt = bed.otherFields.begin();
-                vector<string>::const_iterator othEnd = bed.otherFields.end();
+                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
+                
+                vector<uint16_t>::const_iterator 
+                    othIt  = bed.other_idxs.begin();
+                vector<uint16_t>::const_iterator 
+                    othEnd = bed.other_idxs.end();
                 for ( ; othIt != othEnd; ++othIt) {
-                    printf("%s\t", othIt->c_str());
+                    printf("%s\t", bed.fields[*othIt].c_str());
                 }
             }
         }
@@ -810,27 +968,29 @@ public:
         else if (_isGff == false && _isVcf == true) {
             printf ("%s\t%d\t", bed.chrom.c_str(), start+1);
 
-            vector<string>::const_iterator othIt = bed.otherFields.begin();
-            vector<string>::const_iterator othEnd = bed.otherFields.end();
+            vector<uint16_t>::const_iterator othIt  = bed.other_idxs.begin();
+            vector<uint16_t>::const_iterator othEnd = bed.other_idxs.end();
             for ( ; othIt != othEnd; ++othIt) {
-                printf("%s\t", othIt->c_str());
+                printf("%s\t", bed.fields[*othIt].c_str());
             }
         }
         // GFF
         else if (_isGff == true) {
             // "GFF-8"
             if (this->bedType == 8) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                                 bed.name.c_str(), start+1, end,
-                                                                 bed.score.c_str(), bed.strand.c_str(),
-                                                                 bed.otherFields[1].c_str());
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end, bed.score.c_str(), 
+                    bed.strand.c_str(), bed.fields[bed.other_idxs[1]].c_str());
             }
             // "GFF-9"
             else if (this->bedType == 9) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                                 bed.name.c_str(), start+1, end,
-                                                                 bed.score.c_str(), bed.strand.c_str(),
-                                                                 bed.otherFields[1].c_str(), bed.otherFields[2].c_str());
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str(), 
+                    bed.fields[bed.other_idxs[2]].c_str());
             }
         }
     }
@@ -838,14 +998,14 @@ public:
 
 
     /*
-        reportBedNewLine
+        reportToFileBedNewLine
 
         Writes the _original_ BED entry with a NEWLINE
         at the end of the line.
         Works for BED3 - BED6.
     */
     template <typename T>
-    inline void reportBedNewLine(const T &bed) {
+    inline void reportToFileBedNewLine(FILE* out,const T &bed) {
         
         // if it is azeroLength feature, we need to
         // correct the start and end coords to what they were
@@ -857,66 +1017,78 @@ public:
                 start++;
             end--;
         }
-        
         //BED
         if (_isGff == false && _isVcf == false) {
             if (this->bedType == 3) {
-                printf ("%s\t%d\t%d\n", bed.chrom.c_str(), start, end);
+                fprintf(out,"%s\t%d\t%d\n", bed.chrom.c_str(), start, end);
             }
             else if (this->bedType == 4) {
-                printf ("%s\t%d\t%d\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str());
+                fprintf(out,"%s\t%d\t%d\t%s\n", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str());
             }
             else if (this->bedType == 5) {
-                printf ("%s\t%d\t%d\t%s\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                bed.score.c_str());
+                fprintf(out,"%s\t%d\t%d\t%s\t%s\n", 
+                    bed.chrom.c_str(), start, end, 
+                    bed.name.c_str(), bed.score.c_str());
             }
             else if (this->bedType == 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                fprintf(out,"%s\t%d\t%d\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
             }
             else if (this->bedType > 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                fprintf(out,"%s\t%d\t%d\t%s\t%s\t%s", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
 
-                vector<string>::const_iterator othIt = bed.otherFields.begin();
-                vector<string>::const_iterator othEnd = bed.otherFields.end();
+                vector<uint16_t>::const_iterator 
+                    othIt  = bed.other_idxs.begin();
+                vector<uint16_t>::const_iterator 
+                    othEnd = bed.other_idxs.end();
                 for ( ; othIt != othEnd; ++othIt) {
-                    printf("\t%s", othIt->c_str());
+                    fprintf(out,"\t%s", bed.fields[*othIt].c_str());
                 }
-                printf("\n");
+                fprintf(out,"\n");
             }
         }
         // VCF
         else if (_isGff == false && _isVcf == true) {
-            printf ("%s\t%d\t", bed.chrom.c_str(), start+1);
+            fprintf(out,"%s\t%d", bed.chrom.c_str(), start+1);
 
-            vector<string>::const_iterator othIt = bed.otherFields.begin();
-            vector<string>::const_iterator othEnd = bed.otherFields.end();
+            vector<uint16_t>::const_iterator othIt  = bed.other_idxs.begin();
+            vector<uint16_t>::const_iterator othEnd = bed.other_idxs.end();
             for ( ; othIt != othEnd; ++othIt) {
-                printf("%s\t", othIt->c_str());
+                fprintf(out,"\t%s", bed.fields[*othIt].c_str());
             }
-            printf("\n");
+            fprintf(out,"\n");
         }
         // GFF
         else if (_isGff == true) {
             // "GFF-8"
             if (this->bedType == 8) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                                 bed.name.c_str(), start+1, end,
-                                                                 bed.score.c_str(), bed.strand.c_str(),
-                                                                 bed.otherFields[1].c_str());
+                fprintf (out,"%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str());
             }
             // "GFF-9"
             else if (this->bedType == 9) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                                 bed.name.c_str(), start+1, end,
-                                                                 bed.score.c_str(), bed.strand.c_str(),
-                                                                 bed.otherFields[1].c_str(), bed.otherFields[2].c_str());
+                fprintf (out,"%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str(), 
+                    bed.fields[bed.other_idxs[2]].c_str());
             }
         }
     }
 
-
+    /* specialized version of reportBedNewLine printing to stdout */
+     template <typename T>
+     inline void reportBedNewLine(const T &bed) {
+     reportToFileBedNewLine(stdout,bed);
+     }
 
     /*
         reportBedRangeNewLine
@@ -928,7 +1100,6 @@ public:
     */
     template <typename T>
     inline void reportBedRangeTab(const T &bed, CHRPOS start, CHRPOS end) {
-        
         // if it is azeroLength feature, we need to
         // correct the start and end coords to what they were
         // in the original file
@@ -936,59 +1107,66 @@ public:
             start = bed.start + 1;
             end   = bed.end - 1;
         }
-        
         // BED
         if (_isGff == false && _isVcf == false) {
             if (this->bedType == 3) {
                 printf ("%s\t%d\t%d\t", bed.chrom.c_str(), start, end);
             }
             else if (this->bedType == 4) {
-                printf ("%s\t%d\t%d\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str());
+                printf ("%s\t%d\t%d\t%s\t", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str());
             }
             else if (this->bedType == 5) {
-                printf ("%s\t%d\t%d\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                bed.score.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, 
+                    bed.name.c_str(), bed.score.c_str());
             }
             else if (this->bedType == 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
             }
             else if (this->bedType > 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
-
-                vector<string>::const_iterator othIt = bed.otherFields.begin();
-                vector<string>::const_iterator othEnd = bed.otherFields.end();
+                printf ("%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
+                
+                vector<uint16_t>::const_iterator 
+                    othIt  = bed.other_idxs.begin();
+                vector<uint16_t>::const_iterator 
+                    othEnd = bed.other_idxs.end();
                 for ( ; othIt != othEnd; ++othIt) {
-                    printf("%s\t", othIt->c_str());
+                    printf("%s\t", bed.fields[*othIt].c_str());
                 }
             }
         }
         // VCF
         else if (_isGff == false && _isVcf == true) {
             printf ("%s\t%d\t", bed.chrom.c_str(), bed.start+1);
-
-            vector<string>::const_iterator othIt = bed.otherFields.begin();
-            vector<string>::const_iterator othEnd = bed.otherFields.end();
+            vector<uint16_t>::const_iterator othIt  = bed.other_idxs.begin();
+            vector<uint16_t>::const_iterator othEnd = bed.other_idxs.end();
             for ( ; othIt != othEnd; ++othIt) {
-                printf("%s\t", othIt->c_str());
+                printf("%s\t", bed.fields[*othIt].c_str());
             }
         }
         // GFF
         else if (_isGff == true) {
             // "GFF-8"
             if (this->bedType == 8) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                             bed.name.c_str(), start+1, end,
-                                                             bed.score.c_str(), bed.strand.c_str(),
-                                                             bed.otherFields[1].c_str());
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str());
             }
             // "GFF-9"
             else if (this->bedType == 9) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                             bed.name.c_str(), start+1, end,
-                                                             bed.score.c_str(), bed.strand.c_str(),
-                                                             bed.otherFields[1].c_str(), bed.otherFields[2].c_str());
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str(), 
+                    bed.fields[bed.other_idxs[2]].c_str());
             }
         }
     }
@@ -1013,61 +1191,67 @@ public:
             start = bed.start + 1;
             end   = bed.end - 1;
         }
-        
         // BED
         if (_isGff == false && _isVcf == false) {
             if (this->bedType == 3) {
                 printf ("%s\t%d\t%d\n", bed.chrom.c_str(), start, end);
             }
             else if (this->bedType == 4) {
-                printf ("%s\t%d\t%d\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str());
+                printf ("%s\t%d\t%d\t%s\n", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str());
             }
             else if (this->bedType == 5) {
-                printf ("%s\t%d\t%d\t%s\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                bed.score.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\n", 
+                    bed.chrom.c_str(), start, end, 
+                    bed.name.c_str(), bed.score.c_str());
             }
             else if (this->bedType == 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s\n", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
             }
             else if (this->bedType > 6) {
-                printf ("%s\t%d\t%d\t%s\t%s\t%s", bed.chrom.c_str(), start, end, bed.name.c_str(),
-                                                    bed.score.c_str(), bed.strand.c_str());
+                printf ("%s\t%d\t%d\t%s\t%s\t%s", 
+                    bed.chrom.c_str(), start, end, bed.name.c_str(),
+                    bed.score.c_str(), bed.strand.c_str());
 
-                vector<string>::const_iterator othIt = bed.otherFields.begin();
-                vector<string>::const_iterator othEnd = bed.otherFields.end();
+                vector<uint16_t>::const_iterator 
+                    othIt  = bed.other_idxs.begin();
+                vector<uint16_t>::const_iterator 
+                    othEnd = bed.other_idxs.end();
                 for ( ; othIt != othEnd; ++othIt) {
-                    printf("\t%s", othIt->c_str());
+                    printf("\t%s", bed.fields[*othIt].c_str());
                 }
                 printf("\n");
             }
         }
         // VCF
         else if (_isGff == false && _isVcf == true) {
-            printf ("%s\t%d\t", bed.chrom.c_str(), bed.start+1);
-
-            vector<string>::const_iterator othIt = bed.otherFields.begin();
-            vector<string>::const_iterator othEnd = bed.otherFields.end();
+            printf ("%s\t%d", bed.chrom.c_str(), bed.start+1);
+            vector<uint16_t>::const_iterator othIt  = bed.other_idxs.begin();
+            vector<uint16_t>::const_iterator othEnd = bed.other_idxs.end();
             for ( ; othIt != othEnd; ++othIt) {
-                printf("%s\t", othIt->c_str());
+                printf("\t%s", bed.fields[*othIt].c_str());
             }
             printf("\n");
         }
         // GFF
         else if (_isGff == true) {
-            // "GFF-9"
-            if (this->bedType == 8) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                             bed.name.c_str(), start+1, end,
-                                                             bed.score.c_str(), bed.strand.c_str(),
-                                                             bed.otherFields[1].c_str());
-            }
             // "GFF-8"
+            if (this->bedType == 8) {
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),                                          bed.fields[bed.other_idxs[1]].c_str());
+            }
+            // "GFF-9"
             else if (this->bedType == 9) {
-                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", bed.chrom.c_str(), bed.otherFields[0].c_str(),
-                                                             bed.name.c_str(), start+1, end,
-                                                             bed.score.c_str(), bed.strand.c_str(),
-                                                             bed.otherFields[1].c_str(), bed.otherFields[2].c_str());
+                printf ("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", 
+                    bed.chrom.c_str(), bed.fields[bed.other_idxs[0]].c_str(),
+                    bed.name.c_str(), start+1, end,
+                    bed.score.c_str(), bed.strand.c_str(),
+                    bed.fields[bed.other_idxs[1]].c_str(), 
+                    bed.fields[bed.other_idxs[2]].c_str());
             }
         }
     }

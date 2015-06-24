@@ -14,7 +14,6 @@
 
 #include "bedFile.h"
 
-#include "version.h"
 #include "api/BamReader.h"
 #include "api/BamWriter.h"
 #include "api/BamAux.h"
@@ -40,8 +39,9 @@ public:
 
     // constructor
     TagBam(const string &bamFile, const vector<string> &annoFileNames,
-                const vector<string> &annoLabels, const string &tag,
-                bool forceStrand, float overlapFraction);
+                const vector<string> &annoLabels, const string &tag, 
+                bool useNames, bool useScores, bool useIntervals, bool sameStrand, 
+                bool diffStrand, float overlapFraction);
 
     // destructor
     ~TagBam(void);
@@ -55,14 +55,20 @@ private:
     string _bamFile;
     vector<string> _annoFileNames;
     vector<string> _annoLabels;
+        
     string _tag;
 
     // instance of a bed file class.
-    BedFile *_bed;
     vector<BedFile*> _annoFiles;
 
+    // should we use the name field from the annotation files?
+    bool _useNames;
+    bool _useScores;
+    bool _useIntervals;
+    
     // do we care about strandedness when tagging?
-    bool _forceStrand;
+    bool _sameStrand;
+    bool _diffStrand;
     float _overlapFraction;
 
     // private function for reporting coverage information
@@ -71,7 +77,6 @@ private:
     void OpenAnnoFiles();
 
     void CloseAnnoFiles();
-    
-    bool FindOneOrMoreOverlap(const BED &a, BedFile *bedFile);
+
 };
 #endif /* TAGBAM_H */

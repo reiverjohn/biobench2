@@ -32,6 +32,7 @@ bool IsCorrectMappingForBEDPE (const BamAlignment &bam) {
     Constructor
 */
 
+
 BedIntersectPE::BedIntersectPE(string bedAFilePE, string bedBFile, float overlapFraction,
                                string searchType, bool sameStrand, bool diffStrand, bool bamInput,
                                bool bamOutput,  bool uncompressedBam, bool useEditDistance) {
@@ -81,7 +82,8 @@ void BedIntersectPE::FindOverlaps(const BEDPE &a, vector<BED> &hits1, vector<BED
     // make sure we have a valid chromosome before we search
     if (a.chrom1 != ".") {
         // Find the quality hits between ***end1*** of the BEDPE and the B BED file
-        _bedB->FindOverlapsPerBin(a.chrom1, a.start1, a.end1, a.strand1, hits1, _sameStrand, _diffStrand);
+        _bedB->allHits(a.chrom1, a.start1, a.end1, a.strand1, 
+                       hits1, _sameStrand, _diffStrand, 0.0, false);
 
         vector<BED>::const_iterator h = hits1.begin();
         vector<BED>::const_iterator hitsEnd = hits1.end();
@@ -111,7 +113,8 @@ void BedIntersectPE::FindOverlaps(const BEDPE &a, vector<BED> &hits1, vector<BED
     // make sure we have a valid chromosome before we search
     if (a.chrom2 != ".") {
         // Now find the quality hits between ***end2*** of the BEDPE and the B BED file
-        _bedB->FindOverlapsPerBin(a.chrom2, a.start2, a.end2, a.strand2, hits2, _sameStrand, _diffStrand);
+        _bedB->allHits(a.chrom2, a.start2, a.end2, a.strand2, 
+                       hits2, _sameStrand, _diffStrand, 0.0, false);
 
         vector<BED>::const_iterator h = hits2.begin();
         vector<BED>::const_iterator hitsEnd = hits2.end();
@@ -198,8 +201,8 @@ bool BedIntersectPE::FindOneOrMoreOverlaps(const BEDPE &a, const string &type) {
 
     // Look for overlaps in end 1 assuming we have an aligned chromosome.
     if (a.chrom1 != ".") {
-        end1Found = _bedB->FindOneOrMoreOverlapsPerBin(a.chrom1, a.start1, a.end1, a.strand1,
-            _sameStrand, _diffStrand, _overlapFraction);
+        end1Found = _bedB->anyHits(a.chrom1, a.start1, a.end1, a.strand1,
+                                   _sameStrand, _diffStrand, _overlapFraction, false);
 
         // can we bail out without checking end2?
         if ((type == "either") && (end1Found == true)) return true;
@@ -210,8 +213,8 @@ bool BedIntersectPE::FindOneOrMoreOverlaps(const BEDPE &a, const string &type) {
 
     // Now look for overlaps in end 2 assuming we have an aligned chromosome.
     if (a.chrom2 != ".") {
-        end2Found = _bedB->FindOneOrMoreOverlapsPerBin(a.chrom2, a.start2, a.end2, a.strand2,
-            _sameStrand, _diffStrand, _overlapFraction);
+        end2Found = _bedB->anyHits(a.chrom2, a.start2, a.end2, a.strand2,
+                                   _sameStrand, _diffStrand, _overlapFraction, false);
 
         if ((type == "either") && (end2Found == true)) return true;
         else if ((type == "neither") && (end2Found == true)) return false;
@@ -272,7 +275,8 @@ void BedIntersectPE::FindSpanningOverlaps(const BEDPE &a, vector<BED> &hits, con
     spanLength = spanEnd - spanStart;
 
     // get the hits for the span
-    _bedB->FindOverlapsPerBin(a.chrom1, spanStart, spanEnd, a.strand1, hits, _sameStrand, _diffStrand);
+    _bedB->allHits(a.chrom1, spanStart, spanEnd, a.strand1, 
+                   hits, _sameStrand, _diffStrand, 0.0, false);
 
     vector<BED>::const_iterator h = hits.begin();
     vector<BED>::const_iterator hitsEnd = hits.end();
@@ -324,8 +328,8 @@ bool BedIntersectPE::FindOneOrMoreSpanningOverlaps(const BEDPE &a, const string 
     }
     spanLength = spanEnd - spanStart;
 
-    overlapFound = _bedB->FindOneOrMoreOverlapsPerBin(a.chrom1, spanStart, spanEnd, a.strand1,
-        _sameStrand, _diffStrand, _overlapFraction);
+    overlapFound = _bedB->anyHits(a.chrom1, spanStart, spanEnd, a.strand1,
+                                  _sameStrand, _diffStrand, _overlapFraction, false);
 
     return overlapFound;
 }
@@ -379,7 +383,10 @@ void BedIntersectPE::IntersectBamPE(string bamFile) {
     // open the BAM file
     BamReader reader;
     BamWriter writer;
-    reader.Open(bamFile);
+    if (!reader.Open(bamFile)) {
+        cerr << "Failed to open BAM file " << bamFile << endl;
+        exit(1);
+    }
 
     // get header & reference information
     string bamHeader = reader.GetHeaderText();
@@ -409,19 +416,22 @@ void BedIntersectPE::IntersectBamPE(string bamFile) {
     // rip through the BAM file and convert each mapped entry to BEDPE
     BamAlignment bam1, bam2;
     while (reader.GetNextAlignment(bam1)) {
-        // the alignment must be paired
-        if (bam1.IsPaired() == true) {
-            // grab the second alignment for the pair.
-            reader.GetNextAlignment(bam2);
-
-            // require that the alignments are from the same query
-            if (bam1.Name == bam2.Name) {
-                ProcessBamBlock(bam1, bam2, refs, writer);
+        reader.GetNextAlignment(bam2);        
+        if (bam1.Name != bam2.Name) {
+            while (bam1.Name != bam2.Name)
+            {
+                if (bam1.IsPaired()) 
+                {
+                    cerr << "*****WARNING: Query " << bam1.Name
+                         << " is marked as paired, but it's mate does not occur"
+                         << " next to it in your BAM file.  Skipping. " << endl;
+                }
+                bam1 = bam2;
+                reader.GetNextAlignment(bam2);
             }
-            else {
-                cerr << "*****ERROR: -bedpe requires BAM to be sorted or grouped by query name. " << endl;
-                exit(1);
-            }
+        }
+        else if (bam1.IsPaired() && bam1.IsPaired()) {
+            ProcessBamBlock(bam1, bam2, refs, writer);
         }
     }
     // close up

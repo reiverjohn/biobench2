@@ -13,7 +13,7 @@ Licenced under the GNU General Public License 2.0 license.
 #include "genomeCoverageBed.h"
 
 
-BedGenomeCoverage::BedGenomeCoverage(string bedFile, string genomeFile, 
+BedGenomeCoverage::BedGenomeCoverage(string bedFile, string genomeFile,
                                      bool eachBase, bool startSites, 
                                      bool bedGraph, bool bedGraphAll,
                                      int max, float scale,
@@ -43,15 +43,20 @@ BedGenomeCoverage::BedGenomeCoverage(string bedFile, string genomeFile,
     _currChromName = "";
     _currChromSize = 0 ;
 
-    _bed = new BedFile(bedFile);
-    _genome = new GenomeFile(genomeFile);
-
+    
+    if (_bamInput == false) {
+        _genome = new GenomeFile(genomeFile);
+    }
+    
     PrintTrackDefinitionLine();
 
-    if (_bamInput == false)
+    if (_bamInput == false) {
+        _bed = new BedFile(bedFile);
         CoverageBed();
-    else
-        CoverageBam(_bed->bedFile);
+    }
+    else {
+        CoverageBam(_bedFile);
+    }
 }
 
 void BedGenomeCoverage::PrintTrackDefinitionLine()
@@ -119,7 +124,7 @@ void BedGenomeCoverage::AddCoverage(int start, int end) {
     // make sure the coordinates fit within the chrom
     if (start < _currChromSize)
         _currChromCoverage[start].starts++;
-    if (end < _currChromSize)
+    if (end >= 0 && end < _currChromSize)
         _currChromCoverage[end].ends++;
     else
         _currChromCoverage[_currChromSize-1].ends++;
@@ -140,22 +145,20 @@ void BedGenomeCoverage::AddBlockedCoverage(const vector<BED> &bedBlocks) {
 
 void BedGenomeCoverage::CoverageBed() {
 
-    BED a, nullBed;
-    int lineNum = 0; // current input line number
-    BedLineStatus bedStatus;
+    BED a;
 
     ResetChromCoverage();
 
     _bed->Open();
-    while ( (bedStatus = _bed->GetNextBed(a, lineNum)) != BED_INVALID ) {
-        if (bedStatus == BED_VALID) {
+    while (_bed->GetNextBed(a)) {
+        if (_bed->_status == BED_VALID) {
             if (_filterByStrand == true) {
                 if (a.strand.empty()) {
-                    cerr << "Input error: Interval is missing a strand value on line " << lineNum << "." <<endl;
+                    cerr << "Input error: Interval is missing a strand value on line " << _bed->_lineNum << "." <<endl;
                     exit(1);
                 }
                 if ( ! (a.strand == "-" || a.strand == "+") ) {
-                    cerr << "Input error: Invalid strand value (" << a.strand << ") on line " << lineNum << "." << endl;
+                    cerr << "Input error: Invalid strand value (" << a.strand << ") on line " << _bed->_lineNum << "." << endl;
                     exit(1);
                 }
                 // skip if the strand is not what the user requested.
@@ -169,7 +172,7 @@ void BedGenomeCoverage::CoverageBed() {
 
             if (_obeySplits == true) {
                 bedVector bedBlocks; // vec to store the discrete BED "blocks"
-                splitBedIntoBlocks(a, lineNum, bedBlocks);
+                GetBedBlocks(a, bedBlocks);
                 AddBlockedCoverage(bedBlocks);
             }
             else if (_only_5p_end) {
@@ -208,12 +211,17 @@ void BedGenomeCoverage::CoverageBam(string bamFile) {
 
     // open the BAM file
     BamReader reader;
-    reader.Open(bamFile);
+    if (!reader.Open(bamFile)) {
+        cerr << "Failed to open BAM file " << bamFile << endl;
+        exit(1);
+    }
 
     // get header & reference information
     string header = reader.GetHeaderText();
     RefVector refs = reader.GetReferenceData();
 
+    // load the BAM header references into a BEDTools "genome file"
+    _genome = new GenomeFile(refs);
     // convert each aligned BAM entry to BED
     // and compute coverage on B
     BamAlignment bam;
@@ -238,11 +246,16 @@ void BedGenomeCoverage::CoverageBam(string bamFile) {
             StartNewChrom(chrom);
 
         // add coverage accordingly.
-        if (_obeySplits) {
+        if (!_only_5p_end && !_only_3p_end) {
             bedVector bedBlocks;
-            // since we are counting coverage, we do want to split blocks when a
-            // deletion (D) CIGAR op is encountered (hence the true for the last parm)
-            getBamBlocks(bam, refs, bedBlocks, true);
+            // we always want to split blocks when a D CIGAR op is found.
+            // if the user invokes -split, we want to also split on N ops.
+            if (_obeySplits) { // "D" true, "N" true
+                GetBamBlocks(bam, refs.at(bam.RefID).RefName, bedBlocks, true, true);
+            }
+            else { // "D" true, "N" false
+                GetBamBlocks(bam, refs.at(bam.RefID).RefName, bedBlocks, true, false);
+            }
             AddBlockedCoverage(bedBlocks);
         }
         else if (_only_5p_end) {
@@ -253,8 +266,6 @@ void BedGenomeCoverage::CoverageBam(string bamFile) {
             int pos = ( bam.IsReverseStrand() ) ? start : end;
             AddCoverage(pos,pos);
         }
-        else
-            AddCoverage(start, end);
     }
     // close the BAM
     reader.Close();

@@ -10,7 +10,8 @@
   Licenced under the GNU General Public License 2.0 license.
 ******************************************************************************/
 #include "bedFile.h"
-#include "genomeFile.h"
+#include "bedFilePE.h"
+#include "GenomeFile.h"
 
 #include <vector>
 #include <iostream>
@@ -21,9 +22,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <algorithm>  // for binary search
 using namespace std;
-
-const int MAX_TRIES = 1000000;
 
 //************************************************
 // Class methods and elements
@@ -33,9 +33,14 @@ class BedShuffle {
 public:
 
     // constructor
-    BedShuffle(string &bedFile, string &genomeFile, string &excludeFile, string &includeFile, 
-                           bool haveSeed, bool haveExclude, bool haveInclude, bool sameChrom, 
-                           float overlapFraction, int seed);
+    BedShuffle(string &bedFile, string &genomeFile, 
+               string &excludeFile, string &includeFile, 
+               bool haveSeed, bool haveExclude, 
+               bool haveInclude, bool sameChrom, 
+               float overlapFraction, int seed, 
+               bool chooseChrom, bool isBedpe,
+               size_t _maxTries, bool noOverlapping,
+               bool preventExceedingChromEnd);
 
     // destructor
     ~BedShuffle(void);
@@ -52,10 +57,16 @@ private:
     bool _haveExclude;
     bool _haveInclude;
     bool _haveSeed;
+    bool _chooseChrom;
+    bool _isBedpe;
+    size_t _maxTries;
+    bool _noOverlapping;
+    bool _preventExceedingChromEnd;
 
 
     // The BED file from which to compute coverage.
     BedFile *_bed;
+    BedFilePE *_bedpe;
     BedFile *_exclude;
     BedFile *_include;
 
@@ -65,12 +76,16 @@ private:
     int _numChroms;
     vector<string> _includeChroms;
     int _numIncludeChroms;
+    uint32_t _genomeSize;
 
     // methods
     void Shuffle();
     void ShuffleWithExclusions();
     void ShuffleWithInclusions();
+    void ShuffleWithInclusionsAndExclusions();
 
     void ChooseLocus(BED &);
     void ChooseLocusFromInclusionFile(BED &);
+    
+    void ChoosePairedLocus(BEDPE &b);
 };

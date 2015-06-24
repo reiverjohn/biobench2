@@ -10,9 +10,9 @@ aaronquinlan@gmail.com
 Licenced under the GNU General Public License 2.0 license.
 ******************************************************************************/
 #include "bedFile.h"
-#include "genomeFile.h"
+#include "GenomeFile.h"
 
-#include "BamAncillary.h"
+#include "BlockedIntervals.h"
 #include "api/BamReader.h"
 #include "api/BamAux.h"
 using namespace BamTools;
@@ -90,6 +90,7 @@ private:
     // methods
     void CoverageBed();
     void CoverageBam(string bamFile);
+    void LoadBamHeaderIntoGenomeFile(const string &bamFile);
     void ReportChromCoverage(const vector<DEPTH> &, const int &chromSize, const string &chrom, chromHistMap&);
     void ReportGenomeCoverage(chromHistMap &chromDepthHist);
     void ReportChromCoverageBedGraph(const vector<DEPTH> &chromCov, const int &chromSize, const string &chrom);

@@ -57,7 +57,7 @@ void BedAnnotate::PrintHeader() {
     // print a hash to indicate header and then write a tab
     // for each field in the main file.
     printf("#");
-    for (size_t i = 0; i < _bed->bedType; ++i)
+    for (size_t i = 0; i < _bed->bedType - 1; ++i)
         printf("\t");
 
     // now print the label for each file.
@@ -68,7 +68,7 @@ void BedAnnotate::PrintHeader() {
     }
     else {
         for (size_t i = 0; i < _annoTitles.size(); ++i)
-            printf("%s_cnt\t%s_pct", _annoTitles[i].c_str(), _annoTitles[i].c_str());
+            printf("\t%s_cnt\t%s_pct", _annoTitles[i].c_str(), _annoTitles[i].c_str());
         printf("\n");
     }
 }
@@ -114,15 +114,11 @@ void BedAnnotate::AnnotateBed() {
     for (size_t annoIndex = 0; annoIndex < _annoFiles.size(); ++annoIndex) {
         // grab the current annotation file.
         BedFile *anno = _annoFiles[annoIndex];
-        int lineNum = 0;
-        BED a, nullBed;
-        BedLineStatus bedStatus;
-
+        BED a;
         // process each entry in the current anno file
-        while ((bedStatus = anno->GetNextBed(a, lineNum)) != BED_INVALID) {
-            if (bedStatus == BED_VALID) {
+        while (anno->GetNextBed(a)) {
+            if (anno->_status == BED_VALID) {
                 _bed->countListHits(a, annoIndex, _sameStrand, _diffStrand);
-                a = nullBed;
             }
         }
     }
@@ -193,11 +189,14 @@ void BedAnnotate::ReportAnnotations() {
                     int nonZeroBases   = (length - zeroDepthCount);
                     float fractCovered = (float) nonZeroBases / length;
                     if (_reportCounts == false && _reportBoth == false)
-                        printf("%f\t", fractCovered);
+                        printf("%f", fractCovered);
                     else if (_reportCounts == true && _reportBoth == false)
-                        printf("%d\t", bedItr->counts[i]);
+                        printf("%d", bedItr->counts[i]);
                     else if (_reportCounts == false && _reportBoth == true)
-                        printf("%d\t%f\t", bedItr->counts[i], fractCovered);
+                        printf("%d\t%f", bedItr->counts[i], fractCovered);
+
+                    if (i != _annoFiles.size() - 1)
+                        printf("\t");
                 }
                 // print newline for next feature.
                 printf("\n");

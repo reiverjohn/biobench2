@@ -11,7 +11,7 @@
 ******************************************************************************/
 #include "lineFileUtilities.h"
 #include "bedFile.h"
-#include "genomeFile.h"
+#include "GenomeFile.h"
 #include "version.h"
 
 #include <vector>
@@ -22,13 +22,13 @@
 using namespace std;
 
 // define our program name
-#define PROGRAM_NAME "bedToIgv"
+#define PROGRAM_NAME "bedtools igv"
 
 // define our parameter checking macro
 #define PARAMETER_CHECK(param, paramLen, actualLen) (strncmp(argv[i], param, min(actualLen, paramLen))== 0) && (actualLen == paramLen)
 
 // function declarations
-void ShowHelp(void);
+void bedtoigv_help(void);
 
 void DetermineBedInput(BedFile *bed, string path, string sortType, string session,
                         bool collapse, bool useNames, string imageType, int slop);
@@ -36,7 +36,7 @@ void ProcessBed(istream &bedInput, BedFile *bed, string path, string sortType, s
                         bool collapse, bool useNames, string imageType, int slop);
 
 
-int main(int argc, char* argv[]) {
+int bedtoigv_main(int argc, char* argv[]) {
 
     // our configuration variables
     bool showHelp = false;
@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if(showHelp) ShowHelp();
+    if(showHelp) bedtoigv_help();
 
     // do some parsing (all of these parameters require 2 strings)
     for(int i = 1; i < argc; i++) {
@@ -139,17 +139,16 @@ int main(int argc, char* argv[]) {
         DetermineBedInput(bed, imagePath, sortType, session, collapse, useNames, imageType, slop);
     }
     else {
-        ShowHelp();
+        bedtoigv_help();
     }
+    return 0;
 }
 
 
-void ShowHelp(void) {
+void bedtoigv_help(void) {
 
-    cerr << endl << "Program: " << PROGRAM_NAME << " (v" << VERSION << ")" << endl;
-
-    cerr << "Author:  Aaron Quinlan (aaronquinlan@gmail.com)" << endl;
-
+    cerr << "\nTool:    bedtools igv (aka bedToIgv)" << endl;
+    cerr << "Version: " << VERSION << "\n";
     cerr << "Summary: Creates a batch script to create IGV images " << endl;
     cerr << "         at each interval defined in a BED/GFF/VCF file." << endl << endl;
 
@@ -182,9 +181,9 @@ void ShowHelp(void) {
     cerr                    << "\t\tDefault is png." << endl << endl;
 
     cerr << "Notes: " << endl;
-    cerr << "\t(1)  The resulting script is meant to be run from within the IGV GUI version 1.5 or later." << endl;
-    cerr << "\t(2)  Unless you use the -sess option, it is assumed that prior to running the script, " << endl;
-    cerr << "\t\tyou have loaded the proper genome, tracks and data files." << endl << endl;
+    cerr << "\t(1)  The resulting script is meant to be run from within IGV." << endl;
+    cerr << "\t(2)  Unless you use the -sess option, it is assumed that prior to " << endl;
+    cerr << "\t\trunning the script, you've loaded the proper genome and tracks." << endl << endl;
 
 
     // end the program here
@@ -223,14 +222,11 @@ void ProcessBed(istream &bedInput, BedFile *bed, string path, string sortType, s
         cout << "load " << session << endl;
 
 
-    BED bedEntry, nullBed;
-    int lineNum = 0;
-    BedLineStatus bedStatus;
-
+    BED bedEntry;
     bed->Open();
     // process each BED entry and convert to an IGV request
-    while ((bedStatus = bed->GetNextBed(bedEntry, lineNum)) != BED_INVALID) {
-        if (bedStatus == BED_VALID) {
+    while (bed->GetNextBed(bedEntry)) {
+        if (bed->_status == BED_VALID) {
 
             string filename = bedEntry.chrom + "_" + ToString(bedEntry.start) + "_" + ToString(bedEntry.end);
             string locus    = bedEntry.chrom + ":" + ToString(bedEntry.start - slop) + "-" + ToString(bedEntry.end + slop);
@@ -260,8 +256,6 @@ void ProcessBed(istream &bedInput, BedFile *bed, string path, string sortType, s
             // snapshot
             cout << "snapshot " << filename << "." << imageType << endl;
 
-            // reset
-            bedEntry = nullBed;
         }
     }
     // close up

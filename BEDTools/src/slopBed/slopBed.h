@@ -11,7 +11,7 @@
 ******************************************************************************/
 
 #include "bedFile.h"
-#include "genomeFile.h"
+#include "GenomeFile.h"
 
 #include <vector>
 #include <iostream>
@@ -30,7 +30,8 @@ class BedSlop {
 public:
 
     // constructor
-    BedSlop(string &bedFile, string &genomeFile, bool forceStrand, float leftSlop, float rightSlop, bool fractional);
+    BedSlop(string &bedFile, string &genomeFile, bool forceStrand, 
+            float leftSlop, float rightSlop, bool fractional, bool printHeader);
 
     // destructor
     ~BedSlop(void);
@@ -46,6 +47,7 @@ private:
     float  _leftSlop;
     float  _rightSlop;
     bool   _fractional;
+    bool   _printHeader;
 
     BedFile *_bed;
     GenomeFile *_genome;
@@ -55,5 +57,5 @@ private:
     void SlopBed();
 
     // method to add requested "slop" to a single BED entry
-    void AddSlop(BED &bed, int leftSlop, int rightSlop);
+    void AddSlop(BED &bed);
 };

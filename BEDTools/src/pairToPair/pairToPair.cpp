@@ -123,8 +123,7 @@ void PairToPair::FindOverlaps(const BEDPE &a) {
             found1 = FindHitsOnBothEnds(a, hitsA1B1, hitsA2B2);
         if ((hitsA2B1.size() > 0) || (hitsA1B2.size() > 0))
             found2 = FindHitsOnBothEnds(a, hitsA2B1, hitsA1B2);
-
-        if (!found1 || !found2)
+        if (found1 == false && found2 == false)
             _bedA->reportBedPENewLine(a);
     }
     else if (_searchType == "either") {
@@ -137,7 +136,7 @@ void PairToPair::FindOverlaps(const BEDPE &a) {
 bool PairToPair::FindHitsOnBothEnds(const BEDPE &a, const vector<MATE> &qualityHitsEnd1,
                                     const vector<MATE> &qualityHitsEnd2) {
 
-    map<unsigned int, vector<MATE>, less<int> > hitsMap;
+    map<unsigned int, vector<MATE>, less<unsigned int> > hitsMap;
 
     for (vector<MATE>::const_iterator h = qualityHitsEnd1.begin(); h != qualityHitsEnd1.end(); ++h) {
         hitsMap[h->lineNum].push_back(*h);
@@ -151,7 +150,7 @@ bool PairToPair::FindHitsOnBothEnds(const BEDPE &a, const vector<MATE> &qualityH
     for (map<unsigned int, vector<MATE>, less<unsigned int> >::iterator m = hitsMap.begin(); m != hitsMap.end(); ++m) {
         
         // hits on both sides
-        if (m->second.size() == 2) {
+        if (m->second.size() >= 2) {
             bothFound = true;
             MATE b1 = m->second[0];
             MATE b2 = m->second[1];
@@ -162,8 +161,8 @@ bool PairToPair::FindHitsOnBothEnds(const BEDPE &a, const vector<MATE> &qualityH
                                                                    b2.bed.chrom.c_str(), b2.bed.start, b2.bed.end,
                                                                    b1.bed.name.c_str(), b1.bed.score.c_str(),
                                                                    b1.bed.strand.c_str(), b2.bed.strand.c_str());
-                for (size_t i = 0; i < b1.bed.otherFields.size(); ++i)
-                    printf("\t%s", b1.bed.otherFields[i].c_str());
+                for (size_t i = 0; i < b1.bed.other_idxs.size(); ++i)
+                    printf("\t%s", b1.bed.fields[b1.bed.other_idxs[i]].c_str());
                 printf("\n");
             }
         }
@@ -175,7 +174,7 @@ bool PairToPair::FindHitsOnBothEnds(const BEDPE &a, const vector<MATE> &qualityH
 void PairToPair::FindHitsOnEitherEnd(const BEDPE &a, const vector<MATE> &qualityHitsEnd1,
                                     const vector<MATE> &qualityHitsEnd2) {
 
-    map<unsigned int, vector<MATE>, less<int> > hitsMap;
+    map<unsigned int, vector<MATE>, less<unsigned int> > hitsMap;
 
     for (vector<MATE>::const_iterator h = qualityHitsEnd1.begin(); h != qualityHitsEnd1.end(); ++h) {
         hitsMap[h->lineNum].push_back(*h);
@@ -196,8 +195,8 @@ void PairToPair::FindHitsOnEitherEnd(const BEDPE &a, const vector<MATE> &quality
                                                                    b2.bed.chrom.c_str(), b2.bed.start, b2.bed.end,
                                                                    b1.bed.name.c_str(), b1.bed.score.c_str(),
                                                                    b1.bed.strand.c_str(), b2.bed.strand.c_str());
-                for (size_t i = 0; i < b1.bed.otherFields.size(); ++i)
-                    printf("\t%s", b1.bed.otherFields[i].c_str());
+                for (size_t i = 0; i < b1.bed.other_idxs.size(); ++i)
+                    printf("\t%s", b1.bed.fields[b1.bed.other_idxs[i]].c_str());
                 printf("\n");
             }
             else {
@@ -208,8 +207,8 @@ void PairToPair::FindHitsOnEitherEnd(const BEDPE &a, const vector<MATE> &quality
                                                                    b1.mate->bed.chrom.c_str(), b1.mate->bed.start, b1.mate->bed.end,
                                                                    b1.bed.name.c_str(), b1.bed.score.c_str(),
                                                                    b1.bed.strand.c_str(), b1.mate->bed.strand.c_str());
-                for (size_t i = 0; i < b1.bed.otherFields.size(); ++i)
-                    printf("\t%s", b1.bed.otherFields[i].c_str());
+                for (size_t i = 0; i < b1.bed.other_idxs.size(); ++i)
+                    printf("\t%s", b1.bed.fields[b1.bed.other_idxs[i]].c_str());
                 printf("\n");
             }
         }

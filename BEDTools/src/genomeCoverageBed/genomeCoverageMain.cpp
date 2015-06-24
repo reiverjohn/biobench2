@@ -15,16 +15,16 @@ Licenced under the GNU General Public License 2.0 license.
 using namespace std;
 
 // define our program name
-#define PROGRAM_NAME "genomeCoverageBed"
+#define PROGRAM_NAME "bedtools genomecov"
 
 
 // define our parameter checking macro
 #define PARAMETER_CHECK(param, paramLen, actualLen) (strncmp(argv[i], param, min(actualLen, paramLen))== 0) && (actualLen == paramLen)
 
 // function declarations
-void ShowHelp(void);
+void genomecoverage_help(void);
 
-int main(int argc, char* argv[]) {
+int genomecoverage_main(int argc, char* argv[]) {
 
     // our configuration variables
     bool showHelp = false;
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if(showHelp) ShowHelp();
+    if(showHelp) genomecoverage_help();
 
     // do some parsing (all of these parameters require 2 strings)
     for(int i = 1; i < argc; i++) {
@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
     }
 
     // make sure we have both input files
-    if (!haveBed || !haveGenome) {
+    if (!haveBed && !haveGenome && !bamInput) {
       cerr << endl << "*****" << endl << "*****ERROR: Need both a BED (-i) and a genome (-g) file. " << endl << "*****" << endl;
       showHelp = true;
     }
@@ -197,7 +197,6 @@ int main(int argc, char* argv[]) {
     }
     
     if (!showHelp) {
-
         BedGenomeCoverage *bc = new BedGenomeCoverage(bedFile, genomeFile, eachBase,
                                                       startSites, bedGraph, bedGraphAll,
                                                       max, scale, bamInput, obeySplits,
@@ -206,21 +205,17 @@ int main(int argc, char* argv[]) {
                                                       eachBaseZeroBased,
                                                       add_gb_track_line, gb_track_opts);
         delete bc;
-
-        return 0;
     }
     else {
-        ShowHelp();
+        genomecoverage_help();
     }
+    return 0;
 }
 
-void ShowHelp(void) {
+void genomecoverage_help(void) {
 
-    cerr << endl << "Program: " << PROGRAM_NAME << " (v" << VERSION << ")" << endl;
-
-    cerr << "Authors: Aaron Quinlan (aaronquinlan@gmail.com)" << endl;
-    cerr << " Assaf Gordon, CSHL" << endl << endl;
-
+    cerr << "\nTool:    bedtools genomecov (aka genomeCoverageBed)" << endl;
+    cerr << "Version: " << VERSION << "\n";    
     cerr << "Summary: Compute the coverage of a feature file among a genome." << endl << endl;
 
     cerr << "Usage: " << PROGRAM_NAME << " [OPTIONS] -i <bed/gff/vcf> -g <genome>" << endl << endl;

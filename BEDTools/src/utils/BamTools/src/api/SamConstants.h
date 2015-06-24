@@ -1,9 +1,8 @@
 // ***************************************************************************
 // SamConstants.h (c) 2010 Derek Barnett
 // Marth Lab, Department of Biology, Boston College
-// All rights reserved.
 // ---------------------------------------------------------------------------
-// Last modified: 19 April 2011 (DB)
+// Last modified: 10 October 2011 (DB)
 // ---------------------------------------------------------------------------
 // Provides constants for SAM header
 // ***************************************************************************
@@ -11,7 +10,7 @@
 #ifndef SAM_CONSTANTS_H
 #define SAM_CONSTANTS_H
 
-#include <api/api_global.h>
+#include "api/api_global.h"
 #include <string>
 
 namespace BamTools {

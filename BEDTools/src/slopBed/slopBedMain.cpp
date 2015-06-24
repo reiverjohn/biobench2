@@ -15,16 +15,16 @@
 using namespace std;
 
 // define our program name
-#define PROGRAM_NAME "slopBed"
+#define PROGRAM_NAME "bedtools slop"
 
 
 // define our parameter checking macro
 #define PARAMETER_CHECK(param, paramLen, actualLen) (strncmp(argv[i], param, min(actualLen, paramLen))== 0) && (actualLen == paramLen)
 
 // function declarations
-void ShowHelp(void);
+void slop_help(void);
 
-int main(int argc, char* argv[]) {
+int slop_main(int argc, char* argv[]) {
 
     // our configuration variables
     bool showHelp = false;
@@ -43,6 +43,7 @@ int main(int argc, char* argv[]) {
     float leftSlop   = 0.0;
     float rightSlop  = 0.0;
     bool  fractional = false;
+    bool printHeader = false;
 
     for(int i = 1; i < argc; i++) {
         int parameterLength = (int)strlen(argv[i]);
@@ -53,7 +54,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if(showHelp) ShowHelp();
+    if(showHelp) slop_help();
 
     // do some parsing (all of these parameters require 2 strings)
     for(int i = 1; i < argc; i++) {
@@ -101,6 +102,9 @@ int main(int argc, char* argv[]) {
         else if(PARAMETER_CHECK("-pct", 4, parameterLength)) {
             fractional = true;
         }
+        else if(PARAMETER_CHECK("-header", 7, parameterLength)) {
+            printHeader = true;
+        }
         else {
           cerr << endl << "*****ERROR: Unrecognized parameter: " << argv[i] << " *****" << endl << endl;
             showHelp = true;
@@ -120,34 +124,32 @@ int main(int argc, char* argv[]) {
       cerr << endl << "*****" << endl << "*****ERROR: Need both -l and -r. " << endl << "*****" << endl;
       showHelp = true;
     }
-    if (forceStrand && (!(haveLeft) || !(haveRight))) {
-      cerr << endl << "*****" << endl << "*****ERROR: Must supply -l and -r with -s. " << endl << "*****" << endl;
+    if (forceStrand && ((!(haveLeft) || !(haveRight)) && (!haveBoth))) {
+      cerr << endl << "*****" << endl << "*****ERROR: Must supply -l and -r or just -b with -s. " << endl << "*****" << endl;
       showHelp = true;
     }
-
     if (!showHelp) {
-        BedSlop *bc = new BedSlop(bedFile, genomeFile, forceStrand, leftSlop, rightSlop, fractional);
+        BedSlop *bc = new BedSlop(bedFile, genomeFile, forceStrand, leftSlop, rightSlop, fractional, printHeader);
         delete bc;
 
         return 0;
     }
     else {
-        ShowHelp();
+        slop_help();
     }
+    return 0;
 }
 
-void ShowHelp(void) {
+void slop_help(void) {
 
-    cerr << endl << "Program: " << PROGRAM_NAME << " (v" << VERSION << ")" << endl;
-
-    cerr << "Author:  Aaron Quinlan (aaronquinlan@gmail.com)" << endl;
-
+    cerr << "\nTool:    bedtools slop (aka slopBed)" << endl;
+    cerr << "Version: " << VERSION << "\n";    
     cerr << "Summary: Add requested base pairs of \"slop\" to each feature." << endl << endl;
 
     cerr << "Usage:   " << PROGRAM_NAME << " [OPTIONS] -i <bed/gff/vcf> -g <genome> [-b <int> or (-l and -r)]" << endl << endl;
 
     cerr << "Options: " << endl;
-    cerr << "\t-b\t"                << "Increase the BED/GFF/VCF entry by -b base pairs in each direction." << endl;
+    cerr << "\t-b\t"                << "Increase the BED/GFF/VCF entry -b base pairs in each direction." << endl;
     cerr                            << "\t\t- (Integer) or (Float, e.g. 0.1) if used with -pct." << endl << endl;
 
     cerr << "\t-l\t"                << "The number of base pairs to subtract from the start coordinate." << endl;
@@ -163,6 +165,8 @@ void ShowHelp(void) {
     cerr << "\t-pct\t"              << "Define -l and -r as a fraction of the feature's length." << endl;
     cerr                            << "\t\tE.g. if used on a 1000bp feature, -l 0.50, " << endl;
     cerr                            << "\t\twill add 500 bp \"upstream\".  Default = false." << endl << endl;
+
+    cerr << "\t-header\t"           << "Print the header from the input file prior to results." << endl << endl;
 
     cerr << "Notes: " << endl;
     cerr << "\t(1)  Starts will be set to 0 if options would force it below 0." << endl;
