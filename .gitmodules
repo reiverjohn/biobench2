@@ -1,3 +1,6 @@
 [submodule "BEDTools"]
 	path = BEDTools
 	url = https://github.com/arq5x/bedtools2.git
+[submodule "velvet"]
+	path = velvet
+	url = git://github.com/dzerbino/velvet.git
