@@ -1,10 +1,7 @@
 /* Easel's portable, threadsafe random number generator.
- * 
- * SRE, Wed Jul 14 11:23:57 2004 [St. Louis]
- * SVN $Id: esl_random.h 408 2009-10-19 17:47:46Z eddys $
  */
-#ifndef ESL_RANDOM_INCLUDED
-#define ESL_RANDOM_INCLUDED
+#ifndef eslRANDOM_INCLUDED
+#define eslRANDOM_INCLUDED
 
 #define eslRND_FAST     0
 #define eslRND_MERSENNE 1
@@ -35,23 +32,29 @@ extern uint32_t        esl_randomness_GetSeed(const ESL_RANDOMNESS *r);
  */
 extern double esl_random(ESL_RANDOMNESS *r);
 
-/* 3. Other fundamental sampling (including Gaussian, gamma).
+/* 3. Debugging/development tools.
+ */
+extern int esl_randomness_Dump(FILE *fp, ESL_RANDOMNESS *r);
+
+/* 4. Other fundamental sampling (including Gaussian, gamma).
  */
 extern double esl_rnd_UniformPositive(ESL_RANDOMNESS *r);
 extern double esl_rnd_Gaussian(ESL_RANDOMNESS *r, double mean, double stddev);
 extern double esl_rnd_Gamma(ESL_RANDOMNESS *r, double a);
 
-/* 4. Multinomial sampling from discrete probability n-vectors.
+/* 5. Multinomial sampling from discrete probability n-vectors.
  */
-extern int    esl_rnd_DChoose(ESL_RANDOMNESS *r, const double *p, int N);
-extern int    esl_rnd_FChoose(ESL_RANDOMNESS *r, const float  *p, int N);
+extern int    esl_rnd_DChoose   (ESL_RANDOMNESS *r, const double *p,   int N);
+extern int    esl_rnd_FChoose   (ESL_RANDOMNESS *r, const float  *p,   int N);
+extern int    esl_rnd_DChooseCDF(ESL_RANDOMNESS *r, const double *cdf, int N);
+extern int    esl_rnd_FChooseCDF(ESL_RANDOMNESS *r, const float  *cdf, int N);
 
 
-#endif /*ESL_RANDOM_INCLUDED*/
+#endif /*eslRANDOM_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

@@ -21,15 +21,13 @@
  *    4. Test driver.
  *    5. Example.
  *    6. Copyright and license information.
- * 
- * SRE, Tue Jan 30 10:49:43 2007 [at Einstein's in St. Louis]
- * SVN $Id: generic_viterbi.c 2909 2009-09-27 12:06:37Z eddys $
  */
  
 #include "p7_config.h"
 
 #include "easel.h"
 #include "esl_alphabet.h"
+#include "esl_gumbel.h"
 
 #include "hmmer.h"
 
@@ -163,6 +161,161 @@ p7_GViterbi(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float *
 /*-------------------- end, viterbi -----------------------------*/
 
 
+
+/* Function:  p7_GViterbi_longtarget()
+ * Synopsis:  The Viterbi algorithm.
+ * Incept:    SRE, Tue Jan 30 10:50:53 2007 [Einstein's, St. Louis]
+ *
+ * Purpose:   Given a digital sequence <dsq> of length <L>, a profile
+ *            <gm>, and DP matrix <gx> allocated for at least <L>
+ *            by <gm->M> cells; calculates the Viterbi score for
+ *            regions of <dsq>, and captures the positions at which
+ *            such regions exceed the score required to be
+ *            significant in the eyes of the calling function
+ *            (usually p=0.001).
+ *
+ * Args:      dsq    - sequence in digitized form, 1..L
+ *            L      - length of dsq
+ *            gm     - profile.
+ *            gx     - DP matrix with room for an MxL alignment
+ *            filtersc   - null or bias correction, required for translating a P-value threshold into a score threshold
+ *            P       - p-value below which a region is captured as being above threshold
+ *            windowlist - RETURN: array of hit windows (start and end of diagonal) for the above-threshold areas
+ *
+ * Return:   <eslOK> on success.
+ */
+int
+p7_GViterbi_longtarget(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx,
+                       float filtersc, double P, P7_HMM_WINDOWLIST *windowlist)
+{
+  float const *tsc  = gm->tsc;
+  float      **dp   = gx->dp;
+  float       *xmx  = gx->xmx;
+  int          M    = gm->M;
+  int          i,k;
+  float        esc  = p7_profile_IsLocal(gm) ? 0 : -eslINFINITY;
+
+  int16_t sc_thresh;
+  float invP;
+
+  /* Initialization of the zero row.  */
+  XMX(0,p7G_N) = 0;                                           /* S->N, p=1            */
+  XMX(0,p7G_B) = gm->xsc[p7P_N][p7P_MOVE];                    /* S->N->B, no N-tail   */
+  XMX(0,p7G_E) = XMX(0,p7G_C) = XMX(0,p7G_J) = -eslINFINITY;  /* need seq to get here */
+  for (k = 0; k <= gm->M; k++)
+    MMX(0,k) = IMX(0,k) = DMX(0,k) = -eslINFINITY;            /* need seq to get here */
+
+
+  /*
+   *  In p7_ViterbiFilter, converting from a scaled int Viterbi score
+   *  S (aka xE the score getting to state E) to a probability
+   *  goes like this:
+   *    S =  XMX(i,p7G_E)
+   *    vsc =  S + gm->xsc[p7P_E][p7P_MOVE] +  gm->xsc[p7P_C][p7P_MOVE];
+   *    P  = esl_gumbel_surv((vfsc - filtersc) / eslCONST_LOG2  ,  gm->evparam[p7_VMU],  gm->evparam[p7_VLAMBDA]);
+   *  and we're computing the threshold vsc, so invert it:
+   *    (vsc - filtersc) /  eslCONST_LOG2 = esl_gumbel_invsurv( P, gm->evparam[p7_VMU],  gm->evparam[p7_VLAMBDA])
+   *    vsc = filtersc + eslCONST_LOG2 * esl_gumbel_invsurv( P, gm->evparam[p7_VMU],  gm->evparam[p7_VLAMBDA])
+   *    S = vsc - gm->xsc[p7P_E][p7P_MOVE] -  gm->xsc[p7P_C][p7P_MOVE]
+   */
+    invP = esl_gumbel_invsurv(P, gm->evparam[p7_VMU],  gm->evparam[p7_VLAMBDA]);
+    sc_thresh =   (int) ceil (filtersc + (eslCONST_LOG2 * invP)
+                  - gm->xsc[p7P_E][p7P_MOVE] -  gm->xsc[p7P_C][p7P_MOVE] );
+
+
+  /* DP recursion */
+  for (i = 1; i <= L; i++)
+  {
+      float const *rsc = gm->rsc[dsq[i]];
+      float sc;
+
+      MMX(i,0) = IMX(i,0) = DMX(i,0) = -eslINFINITY;
+      XMX(i,p7G_E) = -eslINFINITY;
+
+      for (k = 1; k < gm->M; k++)
+      {
+          /* match state */
+        sc       = ESL_MAX(    MMX(i-1,k-1)   + TSC(p7P_MM,k-1),
+             IMX(i-1,k-1)   + TSC(p7P_IM,k-1));
+        sc       = ESL_MAX(sc, DMX(i-1,k-1)   + TSC(p7P_DM,k-1));
+        sc       = ESL_MAX(sc, XMX(i-1,p7G_B) + TSC(p7P_BM,k-1));
+        MMX(i,k) = sc + MSC(k);
+
+        /* E state update */
+        XMX(i,p7G_E) = ESL_MAX(XMX(i,p7G_E), MMX(i,k) + esc);
+        /* in Viterbi alignments, Dk->E can't win in local mode (and
+         * isn't possible in glocal mode), so don't bother
+         * looking. */
+
+        /* insert state */
+        sc = ESL_MAX(MMX(i-1,k) + TSC(p7P_MI,k),
+               IMX(i-1,k) + TSC(p7P_II,k));
+        IMX(i,k) = sc + ISC(k);
+
+        /* delete state */
+        DMX(i,k) =  ESL_MAX(MMX(i,k-1) + TSC(p7P_MD,k-1),
+                DMX(i,k-1) + TSC(p7P_DD,k-1));
+      }
+
+      /* Unrolled match state M. */
+      sc       = ESL_MAX(    MMX(i-1,M-1)   + TSC(p7P_MM,M-1),
+           IMX(i-1,M-1)   + TSC(p7P_IM,M-1));
+      sc       = ESL_MAX(sc, DMX(i-1,M-1 )  + TSC(p7P_DM,M-1));
+      sc       = ESL_MAX(sc, XMX(i-1,p7G_B) + TSC(p7P_BM,M-1));
+      MMX(i,M) = sc + MSC(M);
+
+      /* Unrolled delete state D_M
+       * (Unlike internal Dk->E transitions that can never appear in
+       * Viterbi alignments, D_M->E is possible in glocal mode.)
+       */
+      DMX(i,M) = ESL_MAX(MMX(i,M-1) + TSC(p7P_MD,M-1),
+       DMX(i,M-1) + TSC(p7P_DD,M-1));
+
+      /* E state update; transition from M_M scores 0 by def'n */
+      sc  =          ESL_MAX(XMX(i,p7G_E), MMX(i,M));
+      XMX(i,p7G_E) = ESL_MAX(sc,           DMX(i,M));
+
+
+      if (XMX(i,p7G_E) >= sc_thresh) {
+        //hit score threshold. Add a window to the list, then reset scores.
+
+        for (k = 1; k <= gm->M; k++) {
+          if (MMX(i,k) == XMX(i,p7G_E)) {
+            p7_hmmwindow_new(windowlist, 0, i, 0, k, 1, 0.0, p7_NOCOMPLEMENT, L);
+          }
+          MMX(i,0) = IMX(i,0) = DMX(i,0) = -eslINFINITY;
+        }
+      } else {
+
+        /* Now the special states. E must already be done, and B must follow N,J.
+         * remember, N, C and J emissions are zero score by definition.
+         */
+        /* J state */
+        sc           =             XMX(i-1,p7G_J) + gm->xsc[p7P_J][p7P_LOOP];   /* J->J */
+        XMX(i,p7G_J) = ESL_MAX(sc, XMX(i,  p7G_E) + gm->xsc[p7P_E][p7P_LOOP]);  /* E->J is E's "loop" */
+
+        /* C state */
+        sc           =             XMX(i-1,p7G_C) + gm->xsc[p7P_C][p7P_LOOP];
+        XMX(i,p7G_C) = ESL_MAX(sc, XMX(i,  p7G_E) + gm->xsc[p7P_E][p7P_MOVE]);
+
+        /* N state */
+        XMX(i,p7G_N) = XMX(i-1,p7G_N) + gm->xsc[p7P_N][p7P_LOOP];
+
+        /* B state */
+        sc           =             XMX(i,p7G_N) + gm->xsc[p7P_N][p7P_MOVE];   /* N->B is N's move */
+        XMX(i,p7G_B) = ESL_MAX(sc, XMX(i,p7G_J) + gm->xsc[p7P_J][p7P_MOVE]);  /* J->B is J's move */
+
+      }
+   }
+
+  /* T state (not stored) */
+  gx->M = gm->M;
+  gx->L = L;
+  return eslOK;
+}
+
+/*-------------------- end, p7_GViterbi_longtarget -----------------------------*/
+
 /*****************************************************************
  * 2. Benchmark driver.
  *****************************************************************/
@@ -204,7 +357,7 @@ static char banner[] = "benchmark driver for generic Viterbi";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -221,8 +374,8 @@ main(int argc, char **argv)
   float           sc;
   double          base_time, bench_time, Mcs;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -274,6 +427,8 @@ main(int argc, char **argv)
 #ifdef p7GENERIC_VITERBI_TESTDRIVE
 #include <string.h>
 #include "esl_getopts.h"
+#include "esl_msa.h"
+#include "esl_msafile.h"
 #include "esl_random.h"
 #include "esl_randomseq.h"
 
@@ -302,8 +457,9 @@ utest_basic(ESL_GETOPTS *go)
   if ((pri = p7_prior_CreateNucleic())             == NULL)  esl_fatal("failed to create prior");
   if ((msa = esl_msa_CreateFromString(query, fmt)) == NULL)  esl_fatal("failed to create MSA");
   if (esl_msa_Digitize(abc, msa, NULL)             != eslOK) esl_fatal("failed to digitize MSA");
-  if (p7_Fastmodelmaker(msa, 0.5, &hmm, NULL)      != eslOK) esl_fatal("failed to create GAATTC model");
+  if (p7_Fastmodelmaker(msa, 0.5, NULL, &hmm, NULL) != eslOK) esl_fatal("failed to create GAATTC model");
   if (p7_ParameterEstimation(hmm, pri)             != eslOK) esl_fatal("failed to parameterize GAATTC model");
+  if (p7_hmm_SetConsensus(hmm, NULL)               != eslOK) esl_fatal("failed to make consensus");
   if ((bg = p7_bg_Create(abc))                     == NULL)  esl_fatal("failed to create DNA null model");
   if ((gm = p7_profile_Create(hmm->M, abc))        == NULL)  esl_fatal("failed to create GAATTC profile");
   if (p7_ProfileConfig(hmm, bg, gm, L, p7_UNILOCAL)!= eslOK) esl_fatal("failed to config profile");
@@ -314,7 +470,7 @@ utest_basic(ESL_GETOPTS *go)
 
   p7_GViterbi   (dsq, L, gm, gx, &vsc);
   if (esl_opt_GetBoolean(go, "-v")) printf("Viterbi score: %.4f\n", vsc);
-  if (esl_opt_GetBoolean(go, "-v")) p7_gmx_Dump(stdout, gx);
+  if (esl_opt_GetBoolean(go, "-v")) p7_gmx_Dump(stdout, gx, p7_DEFAULT);
 
   p7_GTrace     (dsq, L, gm, gx, tr);
   p7_trace_Score(tr, dsq, gm, &vsc2);
@@ -324,7 +480,7 @@ utest_basic(ESL_GETOPTS *go)
 
   p7_GForward   (dsq, L, gm, gx, &fsc);
   if (esl_opt_GetBoolean(go, "-v")) printf("Forward score: %.4f\n", fsc);
-  if (esl_opt_GetBoolean(go, "-v")) p7_gmx_Dump(stdout, gx);
+  if (esl_opt_GetBoolean(go, "-v")) p7_gmx_Dump(stdout, gx, p7_DEFAULT);
 
   p7_trace_Destroy(tr);
   p7_gmx_Destroy(gx);
@@ -418,7 +574,7 @@ static char banner[] = "unit test driver for the generic Viterbi implementation"
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go    = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go    = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_HMM         *hmm  = NULL;
@@ -484,7 +640,7 @@ static char banner[] = "example of generic Viterbi";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -503,8 +659,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
   p7_hmmfile_Close(hfp);
  
   /* Read in one sequence */
@@ -557,10 +713,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/generic_viterbi.c $
+ * SVN $Id: generic_viterbi.c 3569 2011-06-16 16:16:13Z eddys $
  *****************************************************************/

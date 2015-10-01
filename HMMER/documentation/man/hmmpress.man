@@ -1,4 +1,4 @@
-.TH "hmmpress" 1 "@HMMER_DATE@" "HMMER @HMMER_VERSION@" "HMMER Manual"
+.TH "hmmpress" 1 "February 2015" "HMMER 3.1b2" "HMMER Manual"
 
 .SH NAME
 hmmpress - prepare an HMM database for hmmscan 
@@ -17,7 +17,7 @@ Starting from a profile database
 .I <hmmfile>
 in standard HMMER3 format,
 construct binary compressed datafiles for 
-.B hmmscan.
+.BR hmmscan .
 The 
 .I hmmpress
 step is required for
@@ -26,11 +26,11 @@ to work.
 
 .PP
 Four files are created:
-.I <hmmfile>.h3m,
-.I <hmmfile>.h3i,
-.I <hmmfile>.h3f,
+.IR <hmmfile>.h3m ,
+.IR <hmmfile>.h3i ,
+.IR <hmmfile>.h3f ,
 and
-.I <hmmfile>.h3p.
+.IR <hmmfile>.h3p .
 The 
 .I <hmmfile>.h3m
 file contains the profile HMMs and their annotation in a binary
@@ -49,6 +49,12 @@ The
 file contains precomputed data structures
 for the rest of each profile.
 
+.PP
+.I <hmmfile>
+may not be '-' (dash); running
+.B hmmpress
+on a standard input stream rather than a file
+is not allowed.
 
 
 .SH OPTIONS
@@ -76,21 +82,21 @@ for programs in the HMMER package.
 .PP
 For complete documentation, see the user guide that came with your
 HMMER distribution (Userguide.pdf); or see the HMMER web page
-(@HMMER_URL@).
+().
 
 
 
 .SH COPYRIGHT
 
 .nf
-@HMMER_COPYRIGHT@
-@HMMER_LICENSE@
+Copyright (C) 2015 Howard Hughes Medical Institute.
+Freely distributed under the GNU General Public License (GPLv3).
 .fi
 
 For additional information on copyright and licensing, see the file
 called COPYRIGHT in your HMMER source distribution, or see the HMMER
 web page 
-(@HMMER_URL@).
+().
 
 
 .SH AUTHOR

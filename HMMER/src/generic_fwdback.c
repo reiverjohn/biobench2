@@ -7,9 +7,6 @@
  *   4. Test driver.
  *   5. Example.
  *   6. Copyright and license information.
- *   
- * SRE, Tue Jan 30 10:49:43 2007 [at Einstein's in St. Louis]
- * SVN $Id: generic_fwdback.c 3034 2009-11-04 03:40:42Z farrarm $  
  */
 
 #include "p7_config.h"
@@ -25,7 +22,6 @@
 
 /* Function:  p7_GForward()
  * Synopsis:  The Forward algorithm.
- * Incept:    SRE, Mon Apr 16 13:57:35 2007 [Janelia]
  *
  * Purpose:   The Forward dynamic programming algorithm. 
  *
@@ -39,6 +35,9 @@
  *            bitscore, the caller needs to subtract a null model lod
  *            score, then convert to bits.
  *           
+ *            Caller must have initialized the log-sum calculation
+ *            with a call to <p7_FLogsumInit()>.
+ *
  * Args:      dsq    - sequence in digitized form, 1..L
  *            L      - length of dsq
  *            gm     - profile. 
@@ -57,15 +56,14 @@ p7_GForward(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float *
   int          i, k;  
   float        esc  = p7_profile_IsLocal(gm) ? 0 : -eslINFINITY;
 
-  /* Initialization of the zero row, and the lookup table of the log
-   * sum routine.
-   */
+  p7_FLogsumInit();		/* Would like to get rid of this -- have main()'s all initialize instead, more efficient */
+
+  /* Initialization of the zero row. */
   XMX(0,p7G_N) = 0;                                           /* S->N, p=1            */
   XMX(0,p7G_B) = gm->xsc[p7P_N][p7P_MOVE];                    /* S->N->B, no N-tail   */
   XMX(0,p7G_E) = XMX(0,p7G_C) = XMX(0,p7G_J) = -eslINFINITY;  /* need seq to get here */
   for (k = 0; k <= M; k++)
     MMX(0,k) = IMX(0,k) = DMX(0,k) = -eslINFINITY;            /* need seq to get here */
-  p7_FLogsumInit();
 
   /* Recursion. Done as a pull.
    * Note some slightly wasteful boundary conditions:  
@@ -143,7 +141,6 @@ p7_GForward(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float *
 
 /* Function:  p7_GBackward()
  * Synopsis:  The Backward algorithm.
- * Incept:    SRE, Fri Dec 28 14:31:58 2007 [Janelia]
  *
  * Purpose:   The Backward dynamic programming algorithm.
  * 
@@ -246,7 +243,7 @@ p7_GBackward(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float 
   XMX(i,p7G_N) = p7_FLogsum( XMX(1, p7G_N) + gm->xsc[p7P_N][p7P_LOOP],
 			     XMX(0, p7G_B) + gm->xsc[p7P_N][p7P_MOVE]);
   for (k = M; k >= 1; k--)
-    MMX(i,M) = IMX(i,M) = DMX(i,M) = -eslINFINITY;
+    MMX(i,k) = IMX(i,k) = DMX(i,k) = -eslINFINITY;
 
 
   if (opt_sc != NULL) *opt_sc = XMX(0,p7G_N);
@@ -259,7 +256,6 @@ p7_GBackward(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float 
 
 /* Function:  p7_GHybrid()
  * Synopsis:  The "hybrid" algorithm.
- * Incept:    SRE, Sat May 19 10:01:46 2007 [Janelia]
  *
  * Purpose:   The profile HMM version of the Hwa "hybrid" alignment
  *            algorithm \citep{YuHwa02}. The "hybrid" score is the
@@ -329,7 +325,7 @@ p7_GHybrid(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *gx, float *o
 /*
    gcc -g -O2      -o generic_fwdback_benchmark -I. -L. -I../easel -L../easel -Dp7GENERIC_FWDBACK_BENCHMARK generic_fwdback.c -lhmmer -leasel -lm
    icc -O3 -static -o generic_fwdback_benchmark -I. -L. -I../easel -L../easel -Dp7GENERIC_FWDBACK_BENCHMARK generic_fwdback.c -lhmmer -leasel -lm
-   ./benchmark-generic-fwdback <hmmfile>
+   ./generic_fwdback_benchmark <hmmfile>
  */
 /* As of Fri Dec 28 14:48:39 2007
  *    Viterbi  = 61.8 Mc/s
@@ -365,7 +361,7 @@ static char banner[] = "benchmark driver for generic Forward/Backward";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -383,8 +379,8 @@ main(int argc, char **argv)
   float           sc;
   double          base_time, bench_time, Mcs;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -406,6 +402,9 @@ main(int argc, char **argv)
       esl_rsq_xfIID(r, bg->f, abc->K, L, dsq);
       if (! esl_opt_GetBoolean(go, "-B"))  p7_GForward (dsq, L, gm, fwd, &sc);
       if (! esl_opt_GetBoolean(go, "-F"))  p7_GBackward(dsq, L, gm, bck, NULL);
+
+      p7_gmx_Reuse(fwd);
+      p7_gmx_Reuse(bck);
     }
   esl_stopwatch_Stop(w);
   bench_time = w->user - base_time;
@@ -472,7 +471,7 @@ utest_forward(ESL_GETOPTS *go, ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, 
       if (p7_GForward(dsq, L, gm, fwd, &fsc)      != eslOK) esl_fatal("forward failed");
       if (p7_GBackward(dsq, L, gm, bck, &bsc)     != eslOK) esl_fatal("backward failed");
 
-      if (fsc < vsc)             esl_fatal("Foward score can't be less than Viterbi score");
+      if (fsc < vsc)             esl_fatal("Forward score can't be less than Viterbi score");
       if (fabs(fsc-bsc) > 0.001) esl_fatal("Forward/Backward failed: %f %f\n", fsc, bsc);
 
       if (p7_bg_NullOne(bg, dsq, L, &nullsc)      != eslOK) esl_fatal("null score failed");
@@ -565,8 +564,7 @@ utest_enumeration(ESL_GETOPTS *go, ESL_RANDOMNESS *r, ESL_ALPHABET *abc, int M)
   double total_p;
   char   *seq;
     
-  /* Sample an enumerable HMM & profile of length M.
-   */
+  /* Sample an enumerable HMM & profile of length M.  */
   if (p7_hmm_SampleEnumerable(r, M, abc, &hmm)      != eslOK) esl_fatal("failed to sample an enumerable HMM");
   if ((bg = p7_bg_Create(abc))                      == NULL)  esl_fatal("failed to create null model");
   if ((gm = p7_profile_Create(hmm->M, abc))         == NULL)  esl_fatal("failed to create profile");
@@ -658,7 +656,7 @@ static char banner[] = "unit test driver for the generic Forward/Backward implem
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_HMM         *hmm  = NULL;
@@ -668,6 +666,8 @@ main(int argc, char **argv)
   int             L    = 200;
   int             nseq = 20;
   char            errbuf[eslERRBUFSIZE];
+
+  p7_FLogsumInit();
 
   if ((abc = esl_alphabet_Create(eslAMINO))         == NULL)  esl_fatal("failed to create alphabet");
   if (p7_hmm_Sample(r, M, abc, &hmm)                != eslOK) esl_fatal("failed to sample an HMM");
@@ -710,9 +710,15 @@ main(int argc, char **argv)
 
 #include "hmmer.h"
 
+#define STYLES     "--fs,--sw,--ls,--s"	               /* Exclusive choice for alignment mode     */
+
 static ESL_OPTIONS options[] = {
-  /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
-  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",             0 },
+  /* name           type      default  env  range  toggles reqs incomp  help                                       docgroup*/
+  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "show brief help on version and usage",             0 },
+  { "--fs",      eslARG_NONE,"default",NULL, NULL, STYLES,  NULL, NULL, "multihit local alignment",                         0 },
+  { "--sw",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit local alignment",                           0 },
+  { "--ls",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "multihit glocal alignment",                        0 },
+  { "--s",       eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit glocal alignment",                          0 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 static char usage[]  = "[-options] <hmmfile> <seqfile>";
@@ -721,7 +727,7 @@ static char banner[] = "example of Forward/Backward, generic implementation";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -735,11 +741,15 @@ main(int argc, char **argv)
   ESL_SQFILE     *sqfp    = NULL;
   int             format  = eslSQFILE_UNKNOWN;
   float           fsc, bsc;
+  float           nullsc;
   int             status;
 
+  /* Initialize log-sum calculator */
+  p7_FLogsumInit();
+
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
   p7_hmmfile_Close(hfp);
  
   /* Read in one sequence */
@@ -749,27 +759,60 @@ main(int argc, char **argv)
   else if (status == eslEFORMAT)   p7_Fail("Format unrecognized.");
   else if (status == eslEINVAL)    p7_Fail("Can't autodetect stdin or .gz.");
   else if (status != eslOK)        p7_Fail("Open failed, code %d.", status);
-  if  (esl_sqio_Read(sqfp, sq) != eslOK) p7_Fail("Failed to read sequence");
-  esl_sqfile_Close(sqfp);
  
   /* Configure a profile from the HMM */
   bg = p7_bg_Create(abc);
-  p7_bg_SetLength(bg, sq->n);
   gm = p7_profile_Create(hmm->M, abc);
-  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNILOCAL);
+
+  /* Now reconfig the models however we were asked to */
+  if      (esl_opt_GetBoolean(go, "--fs"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_LOCAL);
+  else if (esl_opt_GetBoolean(go, "--sw"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNILOCAL);
+  else if (esl_opt_GetBoolean(go, "--ls"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_GLOCAL);
+  else if (esl_opt_GetBoolean(go, "--s"))   p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNIGLOCAL);
   
   /* Allocate matrices */
   fwd = p7_gmx_Create(gm->M, sq->n);
   bck = p7_gmx_Create(gm->M, sq->n);
 
-  /* Run Forward, Backward */
-  p7_GForward (sq->dsq, sq->n, gm, fwd, &fsc);
-  p7_GBackward(sq->dsq, sq->n, gm, bck, &bsc);
+  printf("%-30s   %-10s %-10s   %-10s %-10s\n", "# seq name",      "fwd (raw)",   "bck (raw) ",  "fwd (bits)",  "bck (bits)");
+  printf("%-30s   %10s %10s   %10s %10s\n",     "#--------------", "----------",  "----------",  "----------",  "----------");
 
-  printf("fwd = %.4f nats\n", fsc);
-  printf("bck = %.4f nats\n", bsc);
+  while ( (status = esl_sqio_Read(sqfp, sq)) != eslEOF)
+    {
+      if      (status == eslEFORMAT) p7_Fail("Parse failed (sequence file %s)\n%s\n", sqfp->filename, sqfp->get_error(sqfp));     
+      else if (status != eslOK)      p7_Fail("Unexpected error %d reading sequence file %s", status, sqfp->filename);
+
+      /* Resize the DP matrices if necessary */
+      p7_gmx_GrowTo(fwd, gm->M, sq->n);
+      p7_gmx_GrowTo(bck, gm->M, sq->n);
+
+      /* Set the profile and null model's target length models */
+      p7_bg_SetLength(bg,   sq->n);
+      p7_ReconfigLength(gm, sq->n);
+
+      /* Run Forward, Backward */
+      p7_GForward (sq->dsq, sq->n, gm, fwd, &fsc);
+      p7_GBackward(sq->dsq, sq->n, gm, bck, &bsc);
+
+      p7_gmx_Dump(stdout, fwd, p7_DEFAULT);
+
+      /* Those scores are partial log-odds likelihoods in nats.
+       * Subtract off the rest of the null model, convert to bits.
+       */
+      p7_bg_NullOne(bg, sq->dsq, sq->n, &nullsc);
+
+      printf("%-30s   %10.4f %10.4f   %10.4f %10.4f\n", 
+	     sq->name, 
+	     fsc, bsc, 
+	     (fsc - nullsc) / eslCONST_LOG2, (bsc - nullsc) / eslCONST_LOG2);
+
+      p7_gmx_Reuse(fwd);
+      p7_gmx_Reuse(bck);
+      esl_sq_Reuse(sq);
+    }
 
   /* Cleanup */
+  esl_sqfile_Close(sqfp);
   esl_sq_Destroy(sq);
   p7_gmx_Destroy(fwd);
   p7_gmx_Destroy(bck);
@@ -785,10 +828,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ *
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/generic_fwdback.c $
+ * SVN $Id: generic_fwdback.c 3776 2011-12-02 18:38:22Z eddys $  
  *****************************************************************/

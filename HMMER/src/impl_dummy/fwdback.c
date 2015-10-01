@@ -10,7 +10,7 @@
  *   8. Copyright and license information.
  * 
  * MSF Tue Nov 3, 2009 [Janelia]
- * SVN $Id: fwdback.c 2818 2009-06-03 12:31:02Z eddys $
+ * SVN $Id: fwdback.c 3665 2011-08-25 13:45:55Z eddys $
  */
 #include "p7_config.h"
 
@@ -197,8 +197,8 @@ static ESL_OPTIONS options[] = {
   { "-x",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-c", "equate scores to trusted implementation (debug)",  0 },
   { "-L",        eslARG_INT,    "400", NULL, "n>0", NULL,  NULL, NULL, "length of random target seqs",                     0 },
   { "-N",        eslARG_INT,  "50000", NULL, "n>0", NULL,  NULL, NULL, "number of random target seqs",                     0 },
-  { "-F",        eslARG_NONE,   FALSE, NULL, "n>0", NULL,  NULL, "-B", "only benchmark Forward",                           0 },
-  { "-B",        eslARG_NONE,   FALSE, NULL, "n>0", NULL,  NULL, "-F", "only benchmark Backward",                          0 },
+  { "-F",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-B", "only benchmark Forward",                           0 },
+  { "-B",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-F", "only benchmark Backward",                          0 },
   { "-P",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "benchmark parsing version, not full version",      0 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
@@ -208,7 +208,7 @@ static char banner[] = "benchmark driver for non-optimized Forward, Backward imp
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -231,8 +231,8 @@ main(int argc, char **argv)
 
   p7_FLogsumInit();
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -409,7 +409,7 @@ static char banner[] = "test driver for non-optimized Forward, Backward implemen
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -484,7 +484,7 @@ static char banner[] = "example of Forward/Backward (non-optmized versions)";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -505,8 +505,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   /* Open sequence file for reading */
   sq     = esl_sq_CreateDigital(abc);
@@ -559,7 +559,7 @@ main(int argc, char **argv)
       p7_GForward     (sq->dsq, sq->n, gm, gx,  &gfraw);
       p7_GBackward    (sq->dsq, sq->n, gm, gx,  &gbraw);
 
-      /* p7_gmx_Dump(stdout, gx);  */
+      /* p7_gmx_Dump(stdout, gx, p7_DEFAULT);  */
 
       fsc  =  (fraw-nullsc) / eslCONST_LOG2;
       gfsc = (gfraw-nullsc) / eslCONST_LOG2;
@@ -610,8 +610,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

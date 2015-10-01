@@ -1,9 +1,10 @@
 /* Unaligned ncbi sequence file i/o.
  * 
- * SVN $Id: esl_sqio_ncbi.h 361 2009-06-30 00:40:48Z farrarm $
+ * SVN $Id: esl_sqio_ncbi.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_sqio_ncbi.h $
  */
-#ifndef ESL_SQIO_NCBI_INCLUDED
-#define ESL_SQIO_NCBI_INCLUDED
+#ifndef eslSQIO_NCBI_INCLUDED
+#define eslSQIO_NCBI_INCLUDED
 
 #include <stdio.h>
 #include "esl_sq.h"
@@ -16,6 +17,25 @@
 
 /* forward declaration */
 struct esl_sqio_s;
+
+/* set the max residue count to 1 meg when reading a block */
+#define MAX_RESIDUE_COUNT (1024 * 1024)
+
+#define MAX_DB_VOLUMES   100
+
+/* ESL_SQNCBI_VOLUME:
+ * Information for the volume
+ */
+typedef struct esl_sqncbi_vol_s {
+  char      *name;                 /* name of the volume                       */
+
+  uint32_t   start_seq;            /* starting sequence number                 */
+  uint32_t   end_seq;              /* starting sequence number                 */
+
+  uint32_t   hdr_off;              /* disk offset in .pin to header index      */
+  uint32_t   seq_off;              /* disk offset to .pin to sequence index    */
+  uint32_t   amb_off;              /* disk offset to .pin to ambiguous index   */
+} ESL_SQNCBI_VOLUME;
 
 /* ESL_SQNCBI:
  * An open sequence file for reading.
@@ -39,19 +59,35 @@ typedef struct esl_sqncbi_s {
   uint32_t   amb_off;              /* disk offset to .pin to ambiguous index   */
   
   int        index;                /* current sequence index in the database   */
+  uint32_t   vol_index;            /* current volume index (-1 if no volumes)  */
+  uint32_t   roff;                 /* record offset (start of header)          */
+  uint32_t   hoff;                 /* offset to last byte of header            */
+  uint32_t   doff;                 /* data offset (start of sequence data)     */
+  uint32_t   eoff;                 /* offset to last byte of sequence          */
 
-  uint32_t   cur_indexes;          /* start of indexes currently loaded        */
+  uint32_t   index_start;          /* start of indexes currently loaded        */
+  uint32_t   index_end;            /* end of indexes currently loaded          */
   uint32_t  *hdr_indexes;          /* block of header indexes from .pin        */
   uint32_t  *seq_indexes;          /* block of header indexes from .pin        */
   uint32_t  *amb_indexes;          /* block of header indexes from .pin        */
+
+  /* volume information */
+  uint32_t   volumes;              /* number of volumes                        */
+  ESL_SQNCBI_VOLUME vols[MAX_DB_VOLUMES];
 
   /* information for the current header */
   unsigned char *hdr_buf;          /* buffer for holding unparsed header       */
   unsigned char *hdr_ptr;          /* current parser position                  */
   int            hdr_alloced;      /* size of the allocated buffer             */
-  int            hdr_size;         /* size of the current header               */
-  uint32_t       hdr_fpos;         /* offset into the .phr file                */
 
+  char          *name_ptr;         /* pointer to name NOT NULL TERMINATED      */
+  int32_t        name_size;        /* length of the name                       */
+  char          *acc_ptr;          /* pointer to accession NOT NULL TERMINATED */
+  int32_t        acc_size;         /* length of the accession                  */
+  int32_t        int_id;           /* integer sequence id                      */
+  char          *str_id_ptr;       /* pointer to id NOT NULL TERMINATED        */
+  int32_t        str_id_size;      /* length of the id                         */
+  
   /* information on the current sequence */
   uint32_t       seq_apos;         /* position of ambiguity table              */
   uint32_t       seq_alen;         /* size of ambiguity table                  */
@@ -68,11 +104,11 @@ typedef struct esl_sqncbi_s {
 extern int  esl_sqncbi_Open(char *seqfile, int format, struct esl_sqio_s *sqfp);
 
 
-#endif /*!ESL_SQIO_NCBI_INCLUDED*/
+#endif /*eslSQIO_NCBI_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

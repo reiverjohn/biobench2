@@ -1,20 +1,18 @@
 /* Generating, shuffling, and randomizing sequences.
  * 
  * Contents:
- *   1. Generating iid sequences.
- *   2. Shuffling sequences. 
- *   3. Randomizing sequences.
- *   4. Generating iid sequences (digital mode).
- *   5. Shuffling sequences (digital mode).
- *   6. Randomizing sequences (digital mode).
- *   7. Statistics drivers.
- *   8. Unit tests.
- *   9. Test driver.
- *  10. Example.
- *  11. Copyright and license information 
- * 
- * SRE, Thu Apr 24 08:59:26 2008 [Janelia]
- * SVN $Id$
+ *   1. Generating simple random character strings.
+ *   2. Generating iid sequences.
+ *   3. Shuffling sequences. 
+ *   4. Randomizing sequences.
+ *   5. Generating iid sequences (digital mode).
+ *   6. Shuffling sequences (digital mode).
+ *   7. Randomizing sequences (digital mode).
+ *   8. Statistics drivers.
+ *   9. Unit tests.
+ *  10. Test driver.
+ *  11. Example.
+ *  12. Copyright and license information 
  */
 #include "esl_config.h"
 
@@ -30,6 +28,98 @@
 #ifdef eslAUGMENT_ALPHABET 
 #include "esl_alphabet.h"
 #endif
+
+/*****************************************************************
+ * 1. Generating simple random character strings.
+ *****************************************************************/
+
+/* Function:  esl_rsq_Sample()
+ * Synopsis:  Generate a random character string.
+ *
+ * Purpose:   Sample a random character string of length <L>, 
+ *            consisting of characters in the set defined by
+ *            an integer flag <allowed_chars>, using 
+ *            random number generator <rng>. Return the newly
+ *            allocated, NUL-terminated string in <*ret_s>.
+ *            
+ *            Allowed values of the flag <allowed_char_flag> mirror
+ *            the standard C99 character set functions in <ctype.h>:
+ *            
+ *            | <eslRSQ_SAMPLE_ALNUM>  |  isalnum()  |
+ *            | <eslRSQ_SAMPLE_ALPHA>  |  isalpha()  |
+ *            | <eslRSQ_SAMPLE_LOWER>  |  islower()  |
+ *            | <eslRSQ_SAMPLE_UPPER>  |  isupper()  |
+ *            | <eslRSQ_SAMPLE_DIGIT>  |  isdigit()  |
+ *            | <eslRSQ_SAMPLE_XDIGIT> |  isxdigit() |
+ *            | <eslRSQ_SAMPLE_CNTRL>  |  iscntrl()  |
+ *            | <eslRSQ_SAMPLE_GRAPH>  |  isgraph()  |
+ *            | <eslRSQ_SAMPLE_SPACE>  |  isspace()  |
+ *            | <eslRSQ_SAMPLE_BLANK>  |  isblank()  |
+ *            | <eslRSQ_SAMPLE_PRINT>  |  isprint()  |
+ *            | <eslRSQ_SAMPLE_PUNCT>  |  ispunct()  |
+ *
+ *            Note that with <eslRSQ_SAMPLE_CNTRL>, your string
+ *            may sample NUL control characters (<0>), in addition to
+ *            the string-terminating one at <(*ret_s)[L]>, so <strlen(*ret_s)>
+ *            may not equal <L> in this case.
+ *
+ * Args:      rng           - ESL_RANDOMNESS object, the random number generator
+ *            allowed_chars - allowed character set flag: eslRSQ_SAMPLE_*
+ *            L             - length of string to sample
+ *            ret_s         - RETURN: the newly allocated, NUL-terminated string
+ *
+ * Returns:   <eslOK> on success; <*ret_s> is the sampled string, which was
+ *            newly allocated here, and caller becomes responsible for free'ing.
+ *
+ * Throws:    <eslEMEM> on allocation error; <eslEINVAL> if caller 
+ *            passes an invalid value of <allowed_chars>. Now <*ret_s> 
+ *            is <NULL>.
+ */
+int
+esl_rsq_Sample(ESL_RANDOMNESS *rng, int allowed_chars, int L, char **ret_s)
+{
+  char *s = NULL;
+  int   n = 0;
+  char  c[127];
+  int   x,i;
+  int   status;
+
+  /* We can't portably make assumptions about char codes (EBCDIC,
+   * ASCII...); and we don't want to write a bunch of fiddly overhead
+   * initializing static tables. So, quickly and portably build an
+   * array c[0..n-1] of characters we will sample uniformly from.
+   * RNG sampling is fairly compute-intensive anyway, so this time
+   * should disappear in the noise of that.
+   */
+  switch (allowed_chars) {
+  case eslRSQ_SAMPLE_ALNUM:  for (x = 0; x < 128; x++) if (isalnum(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_ALPHA:  for (x = 0; x < 128; x++) if (isalpha(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_LOWER:  for (x = 0; x < 128; x++) if (islower(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_UPPER:  for (x = 0; x < 128; x++) if (isupper(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_DIGIT:  for (x = 0; x < 128; x++) if (isdigit(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_XDIGIT: for (x = 0; x < 128; x++) if (isxdigit(x)) c[n++] = x; break;
+  case eslRSQ_SAMPLE_CNTRL:  for (x = 0; x < 128; x++) if (iscntrl(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_GRAPH:  for (x = 0; x < 128; x++) if (isgraph(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_SPACE:  for (x = 0; x < 128; x++) if (isspace(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_BLANK:  for (x = 0; x < 128; x++) if (isblank(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_PRINT:  for (x = 0; x < 128; x++) if (isprint(x))  c[n++] = x; break;
+  case eslRSQ_SAMPLE_PUNCT:  for (x = 0; x < 128; x++) if (ispunct(x))  c[n++] = x; break;
+  default: ESL_XEXCEPTION(eslEINVAL, "bad flag; wanted something like eslRSQ_SAMPLE_ALPHA");
+  }
+
+  ESL_ALLOC(s, sizeof(char) * (L+1)); /* +\0 */
+  for (i = 0; i < L; i++)
+    s[i] = c[ esl_rnd_Roll(rng, n) ];
+  s[L] = '\0';
+  
+  *ret_s = s;
+  return eslOK;
+
+ ERROR:
+  *ret_s = NULL;
+  return status;
+}
+
 
 /*****************************************************************
  *# 1. Generating iid sequences.
@@ -384,11 +474,11 @@ esl_rsq_CShuffleKmers(ESL_RANDOMNESS *r, const char *s, int K, char *shuffled)
   if (shuffled != s) strcpy(shuffled, s);
   ESL_ALLOC(swap, sizeof(char) * K);
   while (W > 1) 
-    {
-      i = esl_rnd_Roll(r, W);	                                  /* pick a word          */
-      strncpy(swap,                   shuffled + P + i*K,     K); /* copy it to tmp space */
-      strncpy(shuffled + P + i*K,     shuffled + P + (W-1)*K, K); /* move word W-1 to i   */
-      strncpy(shuffled + P + (W-1)*K, swap,                   K); /* move word i to W-1   */
+    {	/* use memmove, not strncpy or memcpy, because i==W-1 creates an overlap case */
+      i = esl_rnd_Roll(r, W);	                                                 /* pick a word          */
+      memmove(swap,                   shuffled + P + i*K,     K * sizeof(char)); /* copy it to tmp space */
+      memmove(shuffled + P + i*K,     shuffled + P + (W-1)*K, K * sizeof(char)); /* move word W-1 to i   */
+      memmove(shuffled + P + (W-1)*K, swap,                   K * sizeof(char)); /* move word i to W-1   */
       W--;
     }
   free(swap);
@@ -863,7 +953,6 @@ esl_rsq_XShuffleDP(ESL_RANDOMNESS *r, const ESL_DSQ *dsq, int L, int K, ESL_DSQ 
 
 /* Function:  esl_rsq_XShuffleKmers()
  * Synopsis:  Shuffle k-mers in a digital sequence.
- * Incept:    SRE, Tue Nov 17 18:58:00 2009 [NHGRI retreat, Gettysburg]
  *
  * Purpose:   Same as <esl_rsq_CShuffleKmers()>, but shuffle digital 
  *            sequence <dsq> of length <L> into digital result <shuffled>.
@@ -889,11 +978,11 @@ esl_rsq_XShuffleKmers(ESL_RANDOMNESS *r, const ESL_DSQ *dsq, int L, int K, ESL_D
   if (shuffled != dsq) esl_abc_dsqcpy(dsq, L, shuffled);
   ESL_ALLOC(swap, sizeof(char) * K);
   while (W > 1) 
-    {
-      i = esl_rnd_Roll(r, W);	                                 /* pick a word          */
-      memcpy(swap,                   shuffled + P + i*K,     K); /* copy it to tmp space */
-      memcpy(shuffled + P + i*K,     shuffled + P + (W-1)*K, K); /* move word W-1 to i   */
-      memcpy(shuffled + P + (W-1)*K, swap,                   K); /* move word i to W-1   */
+    {				/* use memmove, not memcpy, because i==W-1 is an overlap case */
+      i = esl_rnd_Roll(r, W);	                                                 /* pick a word          */
+      memmove(swap,                   shuffled + P + i*K,     K * sizeof(char)); /* copy it to tmp space */
+      memmove(shuffled + P + i*K,     shuffled + P + (W-1)*K, K * sizeof(char)); /* move word W-1 to i   */
+      memmove(shuffled + P + (W-1)*K, swap,                   K * sizeof(char)); /* move word i to W-1   */
       W--;
     }
   free(swap);
@@ -1921,10 +2010,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_randomseq.c 854 2013-02-25 22:00:19Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_randomseq.c $
  *****************************************************************/

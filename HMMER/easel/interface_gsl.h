@@ -1,12 +1,13 @@
-#ifdef ESL_WITH_GSL
+#ifdef HAVE_LIBGSL
 /* interface_gsl.h
  * Easel's interfaces to the GNU Scientific Library
  * 
  * SRE, Tue Jul 13 15:36:48 2004
- * SVN $Id: interface_gsl.h 11 2005-01-06 11:44:17Z eddy $
+ * SVN $Id: interface_gsl.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/interface_gsl.h $
  */
-#ifndef ESL_INTERFACE_GSL_INCLUDED
-#define ESL_INTERFACE_GSL_INCLUDED
+#ifndef eslINTERFACE_GSL_INCLUDED
+#define eslINTERFACE_GSL_INCLUDED
 
 #include <stdlib.h>
 #include <easel/easel.h>
@@ -19,5 +20,5 @@
 extern int esl_GSL_MatrixInversion(ESL_DMATRIX *A, ESL_DMATRIX **ret_Ai);
 
 
-#endif /*ESL_INTERFACE_GSL_INCLUDED*/
-#endif /*ESL_WITH_GSL*/
+#endif /*eslINTERFACE_GSL_INCLUDED*/
+#endif /*HAVE_LIBGSL*/

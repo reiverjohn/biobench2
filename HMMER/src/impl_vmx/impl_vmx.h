@@ -2,7 +2,7 @@
  * routines: structures, declarations, and macros.
  * 
  * SRE, Sun Nov 25 11:23:02 2007
- * SVN $Id: impl_vmx.h 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: impl_vmx.h 4511 2013-07-08 19:05:40Z wheelert $
  */
 #ifndef P7_IMPL_VMX_INCLUDED
 #define P7_IMPL_VMX_INCLUDED
@@ -113,6 +113,7 @@ typedef struct p7_oprofile_s {
   char  *acc;			/* unique accession of model, or NULL                */
   char  *desc;                  /* brief (1-line) description of model, or NULL      */
   char  *rf;                    /* reference line           1..M; *ref=0: unused     */
+  char  *mm;                    /* modelmask line           1..M; *ref=0: unused     */
   char  *cs;                    /* consensus structure line 1..M, *cs=0: unused      */
   char  *consensus;		/* consensus residues for ali display, 1..M          */
   float  evparam[p7_NEVPARAM]; 	/* parameters for determining E-values, or UNSET     */
@@ -123,6 +124,7 @@ typedef struct p7_oprofile_s {
   /* Information about current configuration, size, allocation                       */
   int    L;			/* current configured target seq length              */
   int    M;			/* model length                                      */
+  int    max_length;		/* upper bound on emitted seq length                 */
   int    allocM;		/* maximum model length currently allocated for      */
   int    allocQ4;		/* p7_NQF(allocM): alloc size for tf, rf             */
   int    allocQ8;		/* p7_NQW(allocM): alloc size for tw, rw             */
@@ -265,8 +267,10 @@ extern int          p7_omx_DumpFBRow(P7_OMX *ox, int logify, int rowi, int width
 extern P7_OPROFILE *p7_oprofile_Create(int M, const ESL_ALPHABET *abc);
 extern int          p7_oprofile_IsLocal(const P7_OPROFILE *om);
 extern void         p7_oprofile_Destroy(P7_OPROFILE *om);
+extern size_t       p7_oprofile_Sizeof(P7_OPROFILE *om);
 extern P7_OPROFILE *p7_oprofile_Copy(P7_OPROFILE *om);
 extern P7_OPROFILE *p7_oprofile_Clone(const P7_OPROFILE *om);
+extern int          p7_oprofile_UpdateFwdEmissionScores(P7_OPROFILE *om, P7_BG *bg, float *fwd_emissions, float *sc_arr);
 
 extern int          p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om);
 extern int          p7_oprofile_ReconfigLength    (P7_OPROFILE *om, int L);
@@ -282,7 +286,10 @@ extern int          p7_oprofile_Compare(const P7_OPROFILE *om1, const P7_OPROFIL
 extern int          p7_profile_SameAsMF(const P7_OPROFILE *om, P7_PROFILE *gm);
 extern int          p7_profile_SameAsVF(const P7_OPROFILE *om, P7_PROFILE *gm);
 
-
+extern int          p7_oprofile_GetFwdTransitionArray(const P7_OPROFILE *om, int type, float *arr );
+extern int          p7_oprofile_GetSSVEmissionScoreArray(const P7_OPROFILE *om, uint8_t *arr );
+extern int          p7_oprofile_GetFwdEmissionScoreArray(const P7_OPROFILE *om, float *arr );
+extern int          p7_oprofile_GetFwdEmissionArray(const P7_OPROFILE *om, P7_BG *bg, float *arr );
 
 /* decoding.c */
 extern int p7_Decoding      (const P7_OPROFILE *om, const P7_OMX *oxf,       P7_OMX *oxb, P7_OMX *pp);
@@ -307,6 +314,7 @@ extern void p7_oprofile_DestroyBlock(P7_OM_BLOCK *block);
 
 /* msvfilter.c */
 extern int p7_MSVFilter    (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
+extern int p7_SSVFilter_longtarget(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, const P7_SCOREDATA *msvdata, P7_BG *bg, double P, P7_HMM_WINDOWLIST *windowlist);
 
 /* null2.c */
 extern int p7_Null2_ByExpectation(const P7_OPROFILE *om, const P7_OMX *pp, float *null2);
@@ -322,16 +330,26 @@ extern int p7_StochasticTrace(ESL_RANDOMNESS *rng, const ESL_DSQ *dsq, int L, co
 
 /* vitfilter.c */
 extern int p7_ViterbiFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
+extern int p7_ViterbiFilter_longtarget(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox,
+                            float filtersc, double P, P7_HMM_WINDOWLIST *windowlist);
+
 
 /* vitscore.c */
 extern int p7_ViterbiScore (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
 
 
+
 /*****************************************************************
- * 4. Implementation specific initialization
+ * 3. Implementation specific initialization
  *****************************************************************/
 static inline void
 impl_Init(void)
+{
+}
+
+
+static inline void
+impl_ThreadInit(void)
 {
 }
   
@@ -340,8 +358,8 @@ impl_Init(void)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

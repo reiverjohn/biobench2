@@ -7,14 +7,14 @@
 # Example:  ./i10-duplicate-names.pl ..         ..       tmpfoo
 #
 # SRE, Sun Dec 13 14:41:31 2009 [Yokohama, Japan]
-# SVN $Id: i10-duplicate-names.pl 3152 2010-02-07 22:55:22Z eddys $
+# SVN $Id: i10-duplicate-names.pl 3462 2011-01-11 13:52:50Z eddys $
 
 BEGIN {
     $builddir = shift;
     $srcdir   = shift;
     $tmppfx   = shift;
 }
-use lib "$srcdir/testsuite";
+use lib "$srcdir/testsuite";  # The BEGIN is necessary to make this work: sets $srcdir at compile-time
 use h3;
 
 

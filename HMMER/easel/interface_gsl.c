@@ -1,15 +1,11 @@
-#ifdef ESL_WITH_GSL
-/* interface_gsl.c
- * Easel's interfaces to the GNU Scientific Library
- * 
- * SRE, Tue Jul 13 15:36:48 2004
- * SVN $Id: interface_gsl.c 129 2006-10-31 19:51:47Z eddys $
+/* Easel's interfaces to the GNU Scientific Library
  */
-#include <esl_config.h>
+#ifdef HAVE_LIBGSL
+#include "esl_config.h"
 
 #include <stdlib.h>
-#include <easel/easel.h>
-#include <easel/dmatrix.h>
+#include "easel/easel.h"
+#include "easel/dmatrix.h"
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_permutation.h>
@@ -53,4 +49,18 @@ esl_GSL_MatrixInversion(ESL_DMATRIX *A, ESL_DMATRIX **ret_Ai)
   return eslOK;
 }
 
-#endif /*ESL_WITH_GSL*/
+#endif /*HAVE_LIBGSL*/
+
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: interface_gsl.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/interface_gsl.c $
+ *****************************************************************/
+

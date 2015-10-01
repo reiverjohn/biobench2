@@ -1,10 +1,11 @@
 /* General hidden Markov models (discrete; of alphabetic strings)
  * 
  * SRE, Fri Jul 18 08:54:41 2008 [Janelia] 
- * SVN $Id$
+ * SVN $Id: esl_hmm.h 694 2011-06-14 21:57:16Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_hmm.h $
  */
-#ifndef ESL_HMM_INCLUDED
-#define ESL_HMM_INCLUDED
+#ifndef eslHMM_INCLUDED
+#define eslHMM_INCLUDED
 
 #include "esl_alphabet.h"
 #include "esl_random.h"
@@ -37,6 +38,7 @@ typedef struct {
 
 
 extern ESL_HMM *esl_hmm_Create(const ESL_ALPHABET *abc, int M);
+extern ESL_HMM *esl_hmm_Clone(const ESL_HMM *hmm);
 extern int      esl_hmm_Configure(ESL_HMM *hmm, float *fq);
 extern int      esl_hmm_SetDegeneracies(ESL_HMM *hmm);
 extern void     esl_hmm_Destroy(ESL_HMM *hmm);
@@ -50,11 +52,11 @@ extern int      esl_hmm_Forward(const ESL_DSQ *dsq, int L, const ESL_HMM *hmm, E
 extern int      esl_hmm_Backward(const ESL_DSQ *dsq, int L, const ESL_HMM *hmm, ESL_HMX *bck, float *opt_sc);
 
 
-#endif /*!ESL_HMM_INCLUDED*/
+#endif /*eslHMM_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

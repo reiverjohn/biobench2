@@ -2,9 +2,10 @@
  * 
  * Contents:
  *   1. Routines in the exposed API.
- * 
- * SRE, Fri Mar 23 07:54:02 2007 [Janelia] [Decembrists, Picaresque]
- * SVN $Id: seqmodel.c 2895 2009-09-11 20:16:34Z eddys $
+ *   2. Experiment driver: generating HMMs for hmmsim tests
+ *   3. Unit tests.
+ *   4. Test driver.
+ *   5. Copyright and license.
  */
 
 #include "p7_config.h"
@@ -21,7 +22,6 @@
 
 /* Function:  p7_Seqmodel()
  * Synopsis:  Make a profile HMM from a single sequence.
- * Incept:    SRE, Tue Sep  4 10:29:14 2007 [Janelia]
  *
  * Purpose:   Make a profile HMM from a single sequence, for
  *            probabilistic Smith/Waterman alignment, HMMER3-style.
@@ -102,7 +102,7 @@ p7_Seqmodel(const ESL_ALPHABET *abc, ESL_DSQ *dsq, int M, char *name,
 
 
 /*****************************************************************
- * Experiment driver
+ * 2. Experiment driver
  *****************************************************************/
 
 #ifdef p7EXP_J2_1
@@ -142,7 +142,7 @@ static char banner[] = "collect histograms of probabilistic S/W for E-value calc
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go    = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go    = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   ESL_ALPHABET   *abc   = esl_alphabet_Create(eslAMINO);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *qfile = esl_opt_GetArg(go, 2);
@@ -153,9 +153,7 @@ main(int argc, char **argv)
   ESL_DMATRIX     *Q    = NULL;
   P7_BG           *bg   = p7_bg_Create(abc);		
   P7_HMM          *hmm  = NULL;
-
   double          *fa   = NULL;
-  double          *fb   = NULL;
   double          popen   = esl_opt_GetReal  (go, "-q");
   double          pextend = esl_opt_GetReal  (go, "-r");
   char            *mxfile = esl_opt_GetString(go, "-m");
@@ -170,23 +168,29 @@ main(int argc, char **argv)
    * matrix rows as HMM match emission vectors. This means dividing
    * the joint probs through by f_a.
    */
-  if (mxfile == NULL)  esl_scorematrix_SetBLOSUM62(S);
-  else {
+  if (mxfile == NULL) {
+    if (esl_scorematrix_Set("BLOSUM62", S) != eslOK) esl_fatal("failed to set BLOSUM62 scores");
+  } else {
     ESL_FILEPARSER *efp = NULL;
 
     if ( esl_fileparser_Open(mxfile, NULL,  &efp) != eslOK) esl_fatal("failed to open score file %s",  mxfile);
-    if ( esl_sco_Read(efp, abc, &S)               != eslOK) esl_fatal("failed to read matrix from %s", mxfile);
+    if ( esl_scorematrix_Read(efp, abc, &S)               != eslOK) esl_fatal("failed to read matrix from %s", mxfile);
     esl_fileparser_Close(efp);
   }
-  if (! esl_scorematrix_IsSymmetric(S)) esl_fatal("Score matrix isn't symmetric");
-  esl_sco_Probify(S, &Q, &fa, &fb, &slambda);
-  for (a = 0; a < abc->K; a++)
-    for (b = 0; b < abc->K; b++)
-      Q->mx[a][b] /= fa[a];	/* Q->mx[a][b] is now P(b | a) */
 
+  /* A wasteful conversion of the HMMER single-precision background probs to Easel double-prec */
+  ESL_ALLOC(fa, sizeof(double) * bg->abc->K);
+  esl_vec_F2D(bg->f, bg->abc->K, fa);
 
-  /* Open the query sequence file in FASTA format 
-   */
+  /* Backcalculate joint probabilities Q, given score matrix S and background frequencies fa */
+  status = esl_scorematrix_ProbifyGivenBG(S, fa, fa, &slambda, &Q); 
+  if      (status == eslEINVAL)  esl_fatal("built-in score matrix %s has no valid solution for lambda", matrix);
+  else if (status == eslENOHALT) esl_fatal("failed to solve score matrix %s for lambda", matrix);
+  else if (status != eslOK)      esl_fatal("unexpected error in solving score matrix %s for probability parameters", matrix);
+
+  esl_scorematrix_JointToConditionalOnQuery(abc, Q);
+
+  /* Open the query sequence file in FASTA format */
   status = esl_sqfile_Open(qfile, eslSQFILE_FASTA, NULL, &qfp);
   if      (status == eslENOTFOUND) esl_fatal("No such file %s.", qfile);
   else if (status == eslEFORMAT)   esl_fatal("Format of %s unrecognized.", qfile);
@@ -225,13 +229,87 @@ main(int argc, char **argv)
 #endif /*p7EXP_J2_1*/
 
 
+/*****************************************************************
+ * x. Unit tests.
+ *****************************************************************/
+#ifdef p7SEQMODEL_TESTDRIVE
+#include <string.h>
+
+static void 
+utest_normalization(ESL_GETOPTS *go)
+{
+  char         *msg     = "seqmodel normalization utest failed";
+  ESL_ALPHABET *abc     = esl_alphabet_Create(eslAMINO);
+  char         *seq     = "ACDEFGHIKLMNPQRSTVWYBJZOUX";
+  int           L       = strlen(seq);
+  ESL_DSQ      *dsq     = NULL;
+  float         popen   = 0.1;
+  float         pextend = 0.4;
+  P7_BUILDER   *bld     = NULL;
+  P7_BG        *bg      = p7_bg_Create(abc);
+  P7_HMM       *hmm     = NULL;
+  char          errbuf[eslERRBUFSIZE];
+
+  if ( esl_abc_CreateDsq(abc, seq, &dsq)                                                 != eslOK) esl_fatal(msg);
+  if ( (bld = p7_builder_Create(NULL, abc))                                              == NULL)  esl_fatal(msg);
+  if ( p7_builder_LoadScoreSystem(bld, "BLOSUM62", popen, pextend, bg)                   != eslOK) esl_fatal(msg); 
+  if ( p7_Seqmodel(abc, dsq, L, "aatest", bld->Q, bg->f, bld->popen, bld->pextend, &hmm) != eslOK) esl_fatal(msg);
+
+  if (p7_hmm_Validate(hmm, errbuf, 0.0001) != eslOK) esl_fatal("normalization utest failed\n%s\n", errbuf);
+
+  free(dsq);
+  p7_bg_Destroy(bg);
+  p7_hmm_Destroy(hmm);
+  p7_builder_Destroy(bld);
+  esl_alphabet_Destroy(abc);
+}
+
+#endif /*p7SEQMODEL_TESTDRIVE*/
+/*---------------- end, unit tests ------------------------------*/
+
+/*****************************************************************
+ * x. Test driver
+ *****************************************************************/
+#ifdef p7SEQMODEL_TESTDRIVE
+
+#include "p7_config.h"
+#include "easel.h"
+#include "hmmer.h"
+
+static ESL_OPTIONS options[] = {
+  /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
+  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",           0 },
+  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+};
+static char usage[]  = "[-options]";
+static char banner[] = "unit test driver for seqmodel.c: single sequence query construction";
+
+int
+main(int argc, char **argv)
+{
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+
+  utest_normalization(go);
+
+  esl_getopts_Destroy(go);
+  exit(0); /* success */
+}
+
+#endif /*p7SEQMODEL_TESTDRIVE*/
+/*---------------- end, test driver -----------------------------*/
+
+
+
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ *
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/seqmodel.c $
+ * SVN $Id: seqmodel.c 3878 2012-02-26 15:04:16Z eddys $
  *****************************************************************/

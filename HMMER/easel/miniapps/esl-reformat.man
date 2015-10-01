@@ -28,9 +28,10 @@ argument must (case-insensitively) match a supported sequence file format:
 currently, limited to
 .I fasta,
 .I stockholm,
+.I pfam,
 or
-.I pfam.
-
+.I afa
+(aligned fasta).
 
 .pp
 Unaligned format files cannot be reformatted to
@@ -38,8 +39,6 @@ aligned formats.
 However, aligned formats can be reformatted
 to unaligned formats - gap characters are 
 simply stripped out.
-
-
 
 .SH OPTIONS
 
@@ -114,19 +113,6 @@ every amino acid residue to an N.
 
 .SH EXPERT OPTIONS
 
-.TP
-.B --dewuss
-Convert RNA secondary structure annotation strings from the new
-WUSS notation, <>, back to the old KHS format, ><. If the annotation
-is already in KHS, this option will corrupt it, without warning.
-Only SELEX and Stockholm format files have secondary structure
-markup.
-
-.TP
-.B --fullwuss
-Convert RNA secondary structure annotation strings from simple
-(input) WUSS notation to full (output) WUSS notation.
-
 
 .TP
 .BI --gapsym " <c>"
@@ -150,18 +136,28 @@ the file format.
 .B --mingap
 If 
 .I seqfile
-is an alignment, remove any columns that contain 100% gap
-characters, minimizing the overall length of the alignment.
-(Often useful if you've extracted a subset of aligned
-sequences from a larger alignment.)
+is an alignment, remove any columns that contain 100% gap or missing
+data characters, minimizing the overall length of the alignment.
+(Often useful if you've extracted a subset of aligned sequences from a
+larger alignment.)
+
+.TP
+.B --keeprf
+When used in combination with
+.B --mingap,
+never remove a column that is not a gap in the reference (#=GC RF) 
+annotation, even if the column contains 100% gap characters in 
+all aligned sequences. By default with
+.B --mingap,
+nongap RF columns that are 100% gaps in all sequences are removed.
 
 .TP
 .B --nogap
-Remove any aligned columns that contain any gap symbols
-at all. Useful as a prelude to phylogenetic analyses, where
-you only want to analyze columns containing 100% residues,
-so you want to strip out any columns with gaps in them.
-Only makes sense if the file is an alignment file.
+Remove any aligned columns that contain any gap or missing data
+symbols at all. Useful as a prelude to phylogenetic analyses, where
+you only want to analyze columns containing 100% residues, so you want
+to strip out any columns with gaps in them.  Only makes sense if the
+file is an alignment file.
 
 .TP
 .B --wussify
@@ -171,6 +167,52 @@ and individual) from old "KHS" format, ><, to the new WUSS notation,
 up, without warning. Only SELEX and Stockholm format files have
 secondary structure markup at present.
 
+.TP
+.B --dewuss
+Convert RNA secondary structure annotation strings from the new
+WUSS notation, <>, back to the old KHS format, ><. If the annotation
+is already in KHS, this option will corrupt it, without warning.
+Only SELEX and Stockholm format files have secondary structure
+markup.
+
+.TP
+.B --fullwuss
+Convert RNA secondary structure annotation strings from simple
+(input) WUSS notation to full (output) WUSS notation.
+
+.TP 
+.BI --replace " <s>"
+.I <s>
+must be in the format
+.I <s1>:<s2>
+with equal numbers of characters in 
+.I <s1>
+and 
+.I <s2>
+separated by a ":" symbol. Each character from
+.I <s1>
+in the input file will be replaced by its counterpart (at the same
+position) from
+.I <s2>.
+Note that special characters in 
+.I <s>
+(such as "~") may need to be prefixed by
+a "\\" character. 
+
+.TP
+.B --small
+Operate in small memory mode for input alignment files in 
+Pfam format. If not used, each alignment is stored in memory so the
+required memory will be roughly the size of the largest alignment
+in the input file. With 
+.B --small, 
+input alignments are not stored in memory. 
+This option only works in combination with 
+.BI --informat " pfam"
+and output format 
+.I pfam
+or
+.I afa. 
 
 
 

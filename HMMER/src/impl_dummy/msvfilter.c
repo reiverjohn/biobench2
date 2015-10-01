@@ -15,7 +15,7 @@
  *   6. Copyright and license information
  * 
  * MSF Tue Nov 3, 2009 [Janelia]
- * SVN $Id: msvfilter.c 2902 2009-09-16 13:13:53Z farrarm $
+ * SVN $Id: msvfilter.c 4386 2013-02-06 01:24:42Z wheelert $
  */
 #include "p7_config.h"
 
@@ -56,6 +56,41 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
   return p7_GMSV(dsq, L, om, ox, 2.0, ret_sc);
 }
 /*------------------ end, p7_MSVFilter() ------------------------*/
+
+
+/* Function:  p7_SSVFilter_longtarget()
+ * Synopsis:  Finds windows with MSV scores above some threshold (slow, correct version)
+ *
+ * Purpose:   Calculates the MSV score for regions of sequence <dsq> of length <L>
+ * 			      residues, and captures the positions at which such regions exceed the
+ * 			      score required to be significant in the eyes of the calling function
+ * 			      (usually p=0.02).  Note - this is out of touch with the vectorized
+ *            SSVFilter code. As dummy functions are deprecated, there's no
+ *            need to update it.
+ *
+ * Args:      dsq        - digital target sequence, 1..L
+ *            L          - length of dsq in residues
+ *            om         - optimized profile
+ *            ox         - DP matrix
+ *            msvdata    - compact representation of substitution scores, for backtracking diagonals
+ *            bg         - the background model, required for translating a P-value threshold into a score threshold
+ *            P          - p-value below which a region is captured as being above threshold
+ *            windowlist - RETURN: array of hit windows (start and end of diagonal) for the above-threshold areas
+ *
+ * Note:      Not worried about speed here. Based on p7_GMSV
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINVAL> if <ox> allocation is too small.
+ */
+int
+p7_SSVFilter_longtarget(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, const P7_SCOREDATA *msvdata, P7_BG *bg, double P, P7_HMM_WINDOWLIST *windowlist)
+{
+	  int status;
+	  if ((status = p7_gmx_GrowTo(ox, om->M, L)) != eslOK) return status;
+	  return p7_GMSV_longtarget(dsq, L, om, ox, 2.0, bg, P, windowlist);
+}
+
 
 
 /*****************************************************************
@@ -119,7 +154,7 @@ static char banner[] = "benchmark driver for MSVFilter() implementation";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -138,8 +173,8 @@ main(int argc, char **argv)
   float           sc1, sc2;
   double          base_time, bench_time, Mcs;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -291,7 +326,7 @@ static char banner[] = "test driver for the SSE MSVFilter() implementation";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -366,7 +401,7 @@ static char banner[] = "example of MSV filter algorithm";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -386,8 +421,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   /* Open sequence file for reading */
   sq     = esl_sq_CreateDigital(abc);
@@ -410,7 +445,7 @@ main(int argc, char **argv)
   gx = p7_gmx_Create(gm->M, sq->n);
 
   /* Useful to place and compile in for debugging: 
-     p7_gmx_Dump(stdout, gx);           dumps a generic DP matrix
+     p7_gmx_Dump(stdout, gx, p7_DEFAULT);   dumps a generic DP matrix
   */
 
   while ((status = esl_sqio_Read(sqfp, sq)) == eslOK)
@@ -475,8 +510,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

@@ -11,7 +11,7 @@
 # Example: ./i2-ncbi-indices . . tmp
 #
 # SRE, Tue Feb  2 12:43:04 2010 [Janelia]
-# SVN $Id$ 
+# SVN $Id: i2-ncbi-indices.pl 715 2011-08-03 21:04:24Z eddys $ 
 #
 
 

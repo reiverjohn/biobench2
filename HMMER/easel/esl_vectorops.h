@@ -1,12 +1,7 @@
-/* esl_vectorops.h
- * Header file for vectorops.c
- * 
- * SRE, Tue Oct  1 15:23:37 2002 [St. Louis]
- * SVN $Id: esl_vectorops.h 319 2009-01-27 16:51:36Z eddys $
+/* Vector operations.
  */
-#ifndef ESL_VECTOROPS_INCLUDED
-#define ESL_VECTOROPS_INCLUDED
-
+#ifndef eslVECTOROPS_INCLUDED
+#define eslVECTOROPS_INCLUDED
 
 extern void   esl_vec_DSet(double *vec, int n, double value);
 extern void   esl_vec_FSet(float  *vec, int n, float  value);
@@ -44,25 +39,29 @@ extern void   esl_vec_DSwap(double *vec1, double *vec2, int n);
 extern void   esl_vec_FSwap(float  *vec1, float  *vec2, int n);
 extern void   esl_vec_ISwap(int    *vec1, int    *vec2, int n);
 
+extern void   esl_vec_DReverse(double *vec, double *rev, int n);
+extern void   esl_vec_FReverse(float  *vec, float  *rev, int n);
+extern void   esl_vec_IReverse(int    *vec, int    *rev, int n);
+
 extern double esl_vec_DDot(double *vec1, double *vec2, int n);
 extern float  esl_vec_FDot(float  *vec1, float  *vec2, int n);
 extern int    esl_vec_IDot(int    *vec1, int    *vec2, int n);
 
-extern double esl_vec_DMax(double *vec, int n);
-extern float  esl_vec_FMax(float  *vec, int n);
-extern int    esl_vec_IMax(int    *vec, int n);
+extern double esl_vec_DMax(const double *vec, int n);
+extern float  esl_vec_FMax(const float  *vec, int n);
+extern int    esl_vec_IMax(const int    *vec, int n);
 
-extern double esl_vec_DMin(double *vec, int n);
-extern float  esl_vec_FMin(float  *vec, int n);
-extern int    esl_vec_IMin(int    *vec, int n);
+extern double esl_vec_DMin(const double *vec, int n);
+extern float  esl_vec_FMin(const float  *vec, int n);
+extern int    esl_vec_IMin(const int    *vec, int n);
 
-extern int    esl_vec_DArgMax(double *vec, int n);
-extern int    esl_vec_FArgMax(float  *vec, int n);
-extern int    esl_vec_IArgMax(int    *vec, int n);
+extern int    esl_vec_DArgMax(const double *vec, int n);
+extern int    esl_vec_FArgMax(const float  *vec, int n);
+extern int    esl_vec_IArgMax(const int    *vec, int n);
 
-extern int    esl_vec_DArgMin(double *vec, int n);
-extern int    esl_vec_FArgMin(float  *vec, int n);
-extern int    esl_vec_IArgMin(int    *vec, int n);
+extern int    esl_vec_DArgMin(const double *vec, int n);
+extern int    esl_vec_FArgMin(const float  *vec, int n);
+extern int    esl_vec_IArgMin(const int    *vec, int n);
 
 extern void   esl_vec_DSortIncreasing(double *vec, int n);
 extern void   esl_vec_FSortIncreasing(float  *vec, int n);
@@ -102,10 +101,33 @@ extern float  esl_vec_FLogSum(float  *vec, int n);
 extern void   esl_vec_DLogNorm(double *vec, int n);
 extern void   esl_vec_FLogNorm(float  *vec, int n);
 
+extern void   esl_vec_DCDF(double *p, int n, double *cdf);
+extern void   esl_vec_FCDF(float  *p, int n, float  *cdf);
+
 extern int    esl_vec_DValidate(double *vec, int n, double tol, char *errbuf);
 extern int    esl_vec_FValidate(float  *vec, int n, float  tol, char *errbuf);
 
 extern int    esl_vec_DLogValidate(double *vec, int n, double tol, char *errbuf);
 extern int    esl_vec_FLogValidate(float  *vec, int n, float  tol, char *errbuf);
 
-#endif /* ESL_VECTOROPS_INCLUDED */
+#ifdef eslAUGMENT_RANDOM
+#include "esl_random.h"
+extern int esl_vec_DShuffle(ESL_RANDOMNESS *r, double *v, int n);
+extern int esl_vec_FShuffle(ESL_RANDOMNESS *r, float  *v, int n);
+extern int esl_vec_IShuffle(ESL_RANDOMNESS *r, int    *v, int n);
+#endif
+
+#endif /* eslVECTOROPS_INCLUDED */
+
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_vectorops.h 762 2012-05-11 21:01:15Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_vectorops.h $
+ *****************************************************************/

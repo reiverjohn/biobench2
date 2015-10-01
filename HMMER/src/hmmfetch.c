@@ -1,7 +1,7 @@
 /* Fetch an HMM from an HMM database (such as Pfam)
  * 
  * SRE, Mon Jun 18 09:30:06 2007 [Janelia]
- * SVN $Id: hmmfetch.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: hmmfetch.c 3546 2011-05-23 14:36:44Z eddys $
  */
 #include "esl_config.h"
 
@@ -44,7 +44,7 @@ cmdline_help(char *argv0, ESL_GETOPTS *go)
   esl_usage (stdout, argv0, usage1);
   esl_usage (stdout, argv0, usage2);
   esl_usage (stdout, argv0, usage3);
-  puts("\n where options are:");
+  puts("\nOptions:");
   esl_opt_DisplayHelp(stdout, go, 0, 2, 80);
   exit(0);
 }
@@ -68,9 +68,12 @@ main(int argc, char **argv)
 {
   ESL_GETOPTS  *go      = NULL;	/* application configuration       */
   char         *hmmfile = NULL;	/* HMM file name                   */
+  char         *keyfile = NULL;	/* keyfile name                    */
+  char         *keyname = NULL;	/* key name                        */
   P7_HMMFILE   *hfp     = NULL;	/* open HMM file                   */
   FILE         *ofp     = NULL;	/* output stream for HMMs          */
   int           status;		/* easel/hmmer return code         */
+  char          errbuf[eslERRBUFSIZE];
 
   /***********************************************
    * Parse command line
@@ -81,18 +84,50 @@ main(int argc, char **argv)
   if (esl_opt_GetBoolean(go, "-h") )                   cmdline_help   (argv[0], go);
   if (esl_opt_ArgNumber(go) < 1)                       cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
   
+  /* Check arguments. Consider three modes separately.
+   */
+  if (esl_opt_GetBoolean(go, "--index")) 
+    {
+      if (esl_opt_ArgNumber(go) != 1) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
+
+      hmmfile = esl_opt_GetArg(go, 1);
+      keyfile = NULL;
+      keyname = NULL;
+
+      if (strcmp(hmmfile, "-") == 0) cmdline_failure(argv[0], "Can't use - with --index, can't index <stdin>.\n");
+    }
+
+  else if (esl_opt_GetBoolean(go, "-f"))
+    {
+      if (esl_opt_ArgNumber(go) != 2) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
+
+      hmmfile = esl_opt_GetArg(go, 1);
+      keyfile = esl_opt_GetArg(go, 2);
+      keyname = NULL;
+
+      if (strcmp(hmmfile, "-") == 0 && strcmp(keyfile, "-") == 0) 
+	cmdline_failure(argv[0], "Either <hmmfile> or <keyfile> can be - but not both.\n");
+    }
+  else
+    {
+      if (esl_opt_ArgNumber(go) != 2) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
+
+      hmmfile = esl_opt_GetArg(go, 1);
+      keyfile = NULL;
+      keyname = esl_opt_GetArg(go, 2);
+    }
+    
   /* Open the HMM file.  */
-  hmmfile = esl_opt_GetArg(go, 1);
-  status  = p7_hmmfile_Open(hmmfile, NULL, &hfp);
-  if      (status == eslENOTFOUND) p7_Fail("Failed to open HMM file %s for reading.\n",                   hmmfile);
-  else if (status == eslEFORMAT)   p7_Fail("File %s does not appear to be in a recognized HMM format.\n", hmmfile);
-  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n",       status, hmmfile);  
+  status  = p7_hmmfile_OpenE(hmmfile, NULL, &hfp, errbuf);
+  if      (status == eslENOTFOUND) p7_Fail("File existence/permissions problem in trying to open HMM file %s.\n%s\n", hmmfile, errbuf);
+  else if (status == eslEFORMAT)   p7_Fail("File format problem in trying to open HMM file %s.\n%s\n",                hmmfile, errbuf);
+  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n%s\n",                       status, hmmfile, errbuf);  
 
  /* Open the output file, if any  */
   if (esl_opt_GetBoolean(go, "-O")) 
     {
-      if ((ofp = fopen(esl_opt_GetArg(go, 2), "w")) == NULL)
-	esl_fatal("Failed to open output file %s\n", esl_opt_GetArg(go, 2));
+      if (! keyname)                            p7_Fail("No key name? Can't use -O\n"); 
+      if ((ofp = fopen(keyname, "w")) == NULL)	p7_Fail("Failed to open output file %s\n", keyname);
     }
   else if (esl_opt_GetString(go, "-o") != NULL)
     {
@@ -103,21 +138,12 @@ main(int argc, char **argv)
 
   
   /* Hand off to the appropriate routine */
-  if (esl_opt_GetBoolean(go, "--index")) 
-    {
-      if (esl_opt_ArgNumber(go) != 1) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
-      create_ssi_index(go, hfp);
-    }
-  else if (esl_opt_GetBoolean(go, "-f"))
-    {
-      if (esl_opt_ArgNumber(go) != 2) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
-      multifetch(go, ofp, esl_opt_GetArg(go, 2), hfp);
-    }
+  if     (esl_opt_GetBoolean(go, "--index"))  create_ssi_index(go, hfp);
+  else if (esl_opt_GetBoolean(go, "-f"))      multifetch(go, ofp, keyfile, hfp);
   else 
     {
-      if (esl_opt_ArgNumber(go) != 2) cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");        
-      onefetch(go, ofp, esl_opt_GetArg(go, 2), hfp);
-      if (ofp != stdout) printf("\n\nRetrieved HMM %s.\n",  esl_opt_GetArg(go, 2));
+      onefetch(go, ofp, keyname, hfp);
+      if (ofp != stdout) printf("\n\nRetrieved HMM %s.\n",  keyname);
     }
 
   if (esl_opt_GetBoolean(go, "-O") || esl_opt_GetString(go, "-o") != NULL) fclose(ofp);
@@ -225,7 +251,7 @@ multifetch(ESL_GETOPTS *go, FILE *ofp, char *keyfile, P7_HMMFILE *hfp)
       if (esl_fileparser_GetTokenOnLine(efp, &key, &keylen) != eslOK)
 	p7_Fail("Failed to read HMM name on line %d of file %s\n", efp->linenumber, keyfile);
       
-      status = esl_key_Store(keys, key, &keyidx);
+      status = esl_keyhash_Store(keys, key, -1, &keyidx);
       if (status == eslEDUP) p7_Fail("HMM key %s occurs more than once in file %s\n", key, keyfile);
 	
       if (hfp->ssi != NULL) { onefetch(go, ofp, key, hfp);  nhmm++; }
@@ -240,8 +266,8 @@ multifetch(ESL_GETOPTS *go, FILE *ofp, char *keyfile, P7_HMMFILE *hfp)
 	  else if (status == eslEINCOMPAT) p7_Fail("HMM file %s contains different alphabets",   hfp->fname);
 	  else if (status != eslOK)        p7_Fail("Unexpected error in reading HMMs from %s",   hfp->fname);
 
-	  if (esl_key_Lookup(keys, hmm->name, &keyidx) == eslOK || 
-	      ((hmm->acc) && esl_key_Lookup(keys, hmm->acc, &keyidx) == eslOK))
+	  if (esl_keyhash_Lookup(keys, hmm->name, -1, &keyidx) == eslOK || 
+	      ((hmm->acc) && esl_keyhash_Lookup(keys, hmm->acc, -1, &keyidx) == eslOK))
 	    {
 	      p7_hmmfile_WriteASCII(ofp, -1, hmm);
 	      nhmm++;

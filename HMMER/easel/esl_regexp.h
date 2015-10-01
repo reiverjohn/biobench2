@@ -1,8 +1,8 @@
-/* regexp.h
- * Regular expression matching on strings.
+/* Regular expression matching on strings.
  * 
  * SRE, Sun Jan  2 10:52:34 2005 [Zaragoza]
- * SVN $Id: esl_regexp.h 255 2008-05-30 17:49:15Z eddys $
+ * SVN $Id: esl_regexp.h 862 2013-04-12 18:56:42Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_regexp.h $
  ******************************************************************
  * The regexp module is a wrapper around a modified version of Henry
  * Spencer's regex library. Spencer's copyright notice appears below,
@@ -12,8 +12,8 @@
  * Thanks, Henry!
  *****************************************************************
  */    
-#ifndef ESL_REGEXP_INCLUDED
-#define ESL_REGEXP_INCLUDED
+#ifndef eslREGEXP_INCLUDED
+#define eslREGEXP_INCLUDED
 
 /* ESL_REGEXP_NSUB specifies the maximum number of () expressions
  * in a regexp. The whole regexp counts as one, so 16 allows for 
@@ -65,4 +65,15 @@ extern char *esl_regexp_SubmatchDup(ESL_REGEXP *machine, int elem);
 extern int   esl_regexp_SubmatchCopy(ESL_REGEXP *machine, int elem, char *buffer, int nc);
 extern int   esl_regexp_SubmatchCoords(ESL_REGEXP *machine, char *origin, int elem, 
 				       int *ret_start, int *ret_end);
-#endif /*ESL_REGEXP_INCLUDED*/
+extern int   esl_regexp_ParseCoordString(const char *cstring, uint32_t *ret_start, uint32_t *ret_end);
+
+#endif /*eslREGEXP_INCLUDED*/
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *****************************************************************/

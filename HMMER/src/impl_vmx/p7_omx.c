@@ -9,7 +9,7 @@
  *   p7_omx.ai - figure illustrating the layout of a P7_OMX.
  *
  * SRE, Sun Nov 25 11:26:48 2007 [Casa de Gatos]
- * SVN $Id: p7_omx.c 2884 2009-08-23 21:28:54Z eddys $
+ * SVN $Id: p7_omx.c 3474 2011-01-17 13:25:32Z eddys $
  */
 #include "p7_config.h"
 
@@ -661,8 +661,8 @@ ERROR:
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

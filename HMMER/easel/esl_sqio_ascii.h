@@ -1,9 +1,10 @@
 /* Unaligned ascii sequence file i/o.
  * 
- * SVN $Id: esl_sqio_ascii.h 361 2009-06-30 00:40:48Z farrarm $
+ * SVN $Id: esl_sqio_ascii.h 715 2011-08-03 21:04:24Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_sqio_ascii.h $
  */
-#ifndef ESL_SQIO_ASCII_INCLUDED
-#define ESL_SQIO_ASCII_INCLUDED
+#ifndef eslSQIO_ASCII_INCLUDED
+#define eslSQIO_ASCII_INCLUDED
 
 #include <stdio.h>
 #include "esl_sq.h"
@@ -14,8 +15,11 @@
 #endif
 #ifdef eslAUGMENT_MSA
 #include "esl_msa.h"
+#include "esl_msafile.h"
 #endif
 
+/* set the max residue count to 1 meg when reading a block */
+#define MAX_RESIDUE_COUNT (1024 * 1024)
 
 /* forward declaration */
 struct esl_sqio_s;
@@ -30,6 +34,7 @@ typedef struct esl_sqascii_s {
 
   int   do_gzip;	      /* TRUE if we're reading from gzip -dc pipe */
   int   do_stdin;	      /* TRUE if we're reading from stdin         */
+  int   do_buffer;            /* TRUE if we're reading from a buffer      */
 
   /* all input first gets buffered in memory; this gives us enough
    * recall to use Guess*() functions even in nonrewindable streams
@@ -61,9 +66,9 @@ typedef struct esl_sqascii_s {
 
   /* MSA augmentation confers reading MSA files as sequential seq files. */
 #if defined(eslAUGMENT_MSA)
-  ESL_MSAFILE *afp;	      /* open ESL_MSAFILE for reading           */
-  ESL_MSA     *msa;	      /* preloaded alignment to draw seqs from  */
-  int          idx;	      /* index of next seq to return, 0..nseq-1 */
+  ESLX_MSAFILE *afp;	      /* open ESLX_MSAFILE for reading           */
+  ESL_MSA      *msa;	      /* preloaded alignment to draw seqs from  */
+  int           idx;	      /* index of next seq to return, 0..nseq-1 */
 #else
   void        *afp; 	      /* NULL */
   void        *msa;           /* NULL */
@@ -88,13 +93,14 @@ typedef struct esl_sqascii_s {
 
 extern int  esl_sqascii_Open(char *seqfile, int format, struct esl_sqio_s *sqfp);
 extern int  esl_sqascii_WriteFasta(FILE *fp, ESL_SQ *s, int update);
+extern int  esl_sqascii_Parse(char *buf, int size, ESL_SQ *s, int format);
 
 
-#endif /*!ESL_SQIO_ASCII_INCLUDED*/
+#endif /*eslSQIO_ASCII_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

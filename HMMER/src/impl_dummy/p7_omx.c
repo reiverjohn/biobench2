@@ -6,7 +6,7 @@
  *   3. Copyright and license information
  * 
  * MSF Tue Nov 3, 2009 [Janelia]
- * SVN $Id: p7_omx.c 2790 2009-04-23 12:43:39Z eddys $
+ * SVN $Id: p7_omx.c 3474 2011-01-17 13:25:32Z eddys $
  */
 #include "p7_config.h"
 
@@ -89,7 +89,8 @@ p7_omx_Reuse(P7_OMX *ox)
 void
 p7_omx_Destroy(P7_OMX *ox)
 {
-  return p7_gmx_Destroy(ox);
+  p7_gmx_Destroy(ox);
+  return;
 }
 
 /*------------------- end, P7_OMX structure ---------------------*/
@@ -114,8 +115,8 @@ p7_omx_Destroy(P7_OMX *ox)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

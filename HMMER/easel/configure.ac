@@ -15,7 +15,7 @@
 #        w/ AC_CONFIG_HEADERS -- which means, easel.h.in
 #
 # SRE, Mon Feb 14 10:51:07 2005
-# SVN $Id: configure.ac 521 2010-02-19 20:01:34Z farrarm $
+# SVN $Id: configure.ac 854 2013-02-25 22:00:19Z wheelert $
 #
 # xref autoconf macro archive at:  http://www.gnu.org/software/ac-archive/
 #
@@ -62,7 +62,8 @@
 #     EASEL_VERSION    e.g. "1.9a"
 #
 AC_PREREQ(2.60)
-AC_INIT(Easel, 0.1.snap20080611, eddys@janelia.hhmi.org, easel)
+#AC_INIT(Easel, 0.1.snap20080611, eddys@janelia.hhmi.org, easel)
+AC_INIT(Easel, 0.2.snap20130225, eddys@janelia.hhmi.org, easel)
 AC_MSG_NOTICE([Configuring the Easel library for your system.])
 
 # remember if the user is overriding CFLAGS
@@ -74,7 +75,7 @@ fi
 # 3. Info on the package
 ################################################################
 
-EASEL_DATE="June 2008"
+EASEL_DATE="February 2013"
 EASEL_COPYRIGHT="Copyright (C) 2008 Howard Hughes Medical Institute"
 EASEL_LICENSE="Freely distributed under the Janelia Farm Software License."
 EASEL_VERSION=$PACKAGE_VERSION
@@ -140,10 +141,10 @@ AC_ARG_ENABLE(modular,[AS_HELP_STRING([--enable-modular],[compile and prepare mo
     AC_DEFINE(eslLIBRARY)
   ])
 
-# --enable-debugging      - enable basic debugging code
+# --enable-debugging      - enable basic debugging code (level 1)
 # --enable-debugging=x    - also set verbosity level to <x> (1-3)
 #
-# At all levels, including 0, replaces CFLAGS w/ "-g -Wall" (so it assumes gcc).
+# At all levels, replaces CFLAGS w/ "-g -Wall" (so it assumes gcc).
 # Sets the eslDEBUGLEVEL preprocessor symbol to <x>
 #
 AC_ARG_ENABLE(debugging,
@@ -152,7 +153,7 @@ AS_HELP_STRING([--enable-debugging=x],[also set diagnostics verbosity level to <
 enable_debugging=$enableval, enable_debugging=no)
 
 case $enable_debugging in
-   yes)  AC_DEFINE(eslDEBUGLEVEL, 0);;
+   yes)  AC_DEFINE(eslDEBUGLEVEL, 1);;
      1)  AC_DEFINE(eslDEBUGLEVEL, 1);;
      2)  AC_DEFINE(eslDEBUGLEVEL, 2);;
      3)  AC_DEFINE(eslDEBUGLEVEL, 3);;
@@ -165,7 +166,7 @@ esac
 # Uses ACX_PTHREAD macro from the GNU macro archive.
 # Back to my code to finish enabling pthreads...
 # Define these preprocessor variables:
-#     HMMER_THREADS
+#     HAVE_PTHREAD
 #     HAVE_PTHREAD_SETCONCURRENCY
 #     HAVE_PTHREAD_ATTR_SETSCOPE
 #
@@ -188,7 +189,7 @@ case $enable_threads in
 esac
  
 AS_IF([test "x$check_threads" != xno],
-      [ACX_PTHREAD([AC_DEFINE(HAVE_PTHREADS)
+      [ACX_PTHREAD([AC_DEFINE(HAVE_PTHREAD)
                     AC_SUBST(PTHREAD_LIBS)
                     AC_SUBST(PTHREAD_CFLAGS)],
                    [if test "x$enable_threads" != xcheck; then
@@ -208,6 +209,7 @@ AC_ARG_ENABLE(mpi,[AS_HELP_STRING([--enable-mpi],[enable MPI parallelization])],
 ################################################################
 
 AC_PROG_CC
+AC_PROG_INSTALL
 # MPI :  set @CC@ to mpicc, sets @MPILIBS@, defines HAVE_MPI. 
 if test "$enable_mpi" = "yes"; then
    ACX_MPI(,AC_MSG_ERROR([MPI library not found for --enable-mpi]))
@@ -262,6 +264,11 @@ else
 fi
 fi
 
+# Figure out how to generate PIC code for shared libraries
+# This sets @PIC_FLAGS@ output variable
+ESL_PIC_FLAGS
+
+
 # SSE: figure out our @SIMD_CFLAGS@, define HAVE_SSE2
 # The AC_RUN_IFELSE() is there because it's possible to have 
 # hardware that doesn't support SSE2 instructions, yet the
@@ -269,7 +276,22 @@ fi
 # So we need to test that an SSE2 program actually runs without
 # generating an "illegal instruction" error. The program
 # here is sufficient [xref J3/127].
+# Note: some platforms (Ubuntu 32-bit for example) absolutely
+# must have the -msse2 cflag on in order to detect a working
+# emmintrin.h, so we set SIMD_CFLAGS before running the test.
+if test "$enable_sse" = "yes" || test "$enable_sse" = "check"; then
+   if test "x$SIMD_CFLAGS" = x; then
+     case $ax_cv_c_compiler_vendor in
+       gnu)   AX_CHECK_COMPILER_FLAGS(-msse2,[SIMD_CFLAGS="-msse2"],[]);;
+       *)     ;;
+     esac   
+   fi
+fi
 if test "$enable_sse" = "check" && test "$enable_vmx" != "yes"; then
+   sre_save_CFLAGS="$CFLAGS"
+   sre_save_CPPFLAGS="$CPPFLAGS"
+   CFLAGS="$CFLAGS $SIMD_CFLAGS"
+   CPPFLAGS="$CPPFLAGS $SIMD_CFLAGS"
    AC_CHECK_HEADER([emmintrin.h],[
      AC_MSG_CHECKING([if platform can run SSE/SSE2 instructions])
      AC_RUN_IFELSE([AC_LANG_PROGRAM( [[#include <emmintrin.h>]],
@@ -277,17 +299,12 @@ if test "$enable_sse" = "check" && test "$enable_vmx" != "yes"; then
                    [AC_MSG_RESULT([yes])
                      enable_sse=yes],
                    [AC_MSG_RESULT([no])])])
+   CFLAGS="$sre_save_CFLAGS"
+   CPPFLAGS="$sre_save_CPPFLAGS"
 fi
 if test "$enable_sse" = "yes"; then
-   if test "x$SIMD_CFLAGS" = x; then
-     case $ax_cv_c_compiler_vendor in
-       gnu)   AX_CHECK_COMPILER_FLAGS(-msse2,[SIMD_CFLAGS="-msse2"],[]);;
-       *)     ;;
-     esac   
-   fi
    AC_DEFINE(HAVE_SSE2,1,[Support SSE2 (Streaming SIMD Extensions 2) instructions])
 fi
-
 
 
 # VMX/Altivec (not autodetected yet; must use --enable-vmx to enable)
@@ -347,6 +364,13 @@ fi
 
 AC_SUBST(SIMD_CFLAGS)
 
+# Define HAVE_GZIP if gzip is in $PATH (or if HAVE_GZIP is already set)
+AC_PATH_PROG(HAVE_GZIP, "gzip", "no")
+if test "${HAVE_GZIP}" = "no"; then
+  AC_MSG_WARN([gzip not found])
+else
+  AC_DEFINE(HAVE_GZIP)
+fi
 
 # 5. Checks for libraries.
 LIBGSL=
@@ -365,7 +389,37 @@ AS_IF([test "x$with_gsl" != xno],
 
 # 6. Checks for header files.
 #    Defines preprocessor symbols like HAVE_UNISTD_H
-AC_CHECK_HEADERS([sys/types.h sys/sysctl.h unistd.h stdint.h inttypes.h endian.h])
+AC_CHECK_HEADERS([\
+  endian.h \
+  inttypes.h \
+  stdint.h \
+  unistd.h \
+  sys/types.h \
+  strings.h \
+])
+
+# Check for sysctl.h separately.  On OpenBSD, it requires
+# <sys/param.h> and autoconf needs special logic to deal w. this as
+# follows.
+AC_CHECK_HEADERS([sys/param.h])
+AC_CHECK_HEADERS([sys/sysctl.h], [], [], 
+[[#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+]])
+
+# Vector-specific headers. 
+# Separated, because we may want to implement
+# other vector languages besides SSE
+# For SSE:
+#  xmmintrin.h = SSE
+#  emmintrin.h = SSE2
+#  pmmintrin.h = SSE3
+AC_CHECK_HEADERS([\
+  emmintrin.h\
+  pmmintrin.h\
+  xmmintrin.h
+])
 
 # altivec.h requires the simd cflags
 # For reasons I don't understand, this needs to come after any other CHECK_HEADERS().
@@ -407,11 +461,16 @@ AC_TYPE_OFF_T
 
 AC_CHECK_FUNCS(mkstemp)
 AC_CHECK_FUNCS(popen)
+AC_CHECK_FUNCS(putenv)
 AC_CHECK_FUNCS(strcasecmp)
 AC_CHECK_FUNCS(times)
 AC_CHECK_FUNCS(getpid)
 AC_CHECK_FUNCS(sysctl)
 AC_CHECK_FUNCS(sysconf)
+AC_CHECK_FUNCS(getcwd)
+AC_CHECK_FUNCS(chmod)
+AC_CHECK_FUNCS(stat)
+AC_CHECK_FUNCS(fstat)
 AC_FUNC_FSEEKO
 
 # 11. Checks for system services 
@@ -423,9 +482,10 @@ AC_CONFIG_HEADERS([esl_config.h])
 AC_CONFIG_FILES([miniapps/Makefile])
 AC_CONFIG_FILES([testsuite/Makefile])
 AC_CONFIG_FILES([Makefile])
-if test -e "LICENSE.csh.in"; then
-  AC_CONFIG_FILES(LICENSE.csh)
+if test -e "LICENSE.sh.in"; then
+  AC_CONFIG_FILES(LICENSE.sh)
 fi
+AC_CONFIG_FILES([documentation/Makefile])
 
 
 # 13. voila!
@@ -436,6 +496,7 @@ echo "
 
 Easel configuration:
 
-     compiler:             ${CC} ${CFLAGS} ${SIMD_CFLAGS} ${PTHREAD_CFLAGS}
-     libraries:            ${LIBS} ${LIBGSL} ${PTHREAD_LIBS}
+     compiler:    ${CC} ${CFLAGS} ${SIMD_CFLAGS} ${PTHREAD_CFLAGS} ${PIC_FLAGS}
+     host:        $host
+     libraries:   ${LIBS} ${LIBGSL} ${PTHREAD_LIBS}
 "

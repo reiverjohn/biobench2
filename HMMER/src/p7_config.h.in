@@ -13,11 +13,10 @@
  * header file.
  * 
  * SRE, Mon Jan  1 16:07:28 2007 [Casa de Gatos] [Nirvana, Nevermind]
- * SVN $Id: p7_config.h.in 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: p7_config.h.in 4483 2013-06-12 20:20:21Z wheelert $
  */
 #ifndef P7_CONFIGH_INCLUDED
 #define P7_CONFIGH_INCLUDED
-
 
 /*****************************************************************
  * 1. Compile-time constants that control HMMER's computational 
@@ -48,11 +47,12 @@
  * For proteins, hmmbuild's effective sequence number calculation
  * aims to achieve a certain relative entropy per match emission.
  * (= average score per match emission).
- * These are empirically tuned constants, from the work of Steve Johnson.
+ * These are empirically tuned constants,
  */
-#define p7_ETARGET_AMINO  0.59 /* bits */
-#define p7_ETARGET_DNA    0.59 /* bits */
+#define p7_ETARGET_AMINO  0.59 /* bits,  from the work of Steve Johnson. */
+#define p7_ETARGET_DNA    0.45 /* bits,  from the work of Travis Wheeler. */
 #define p7_ETARGET_OTHER  1.0  /* bits */ /* if you define your own alphabet, set this */
+
 
 #define p7_SEQDBENV          "BLASTDB"
 #define p7_HMMDBENV          "PFAMDB"
@@ -77,19 +77,6 @@
  * string, including \0 and a sign.
  */
 #define p7_MAX_SC_TXTLEN   11	      
-
-/* In Forward algorithm implementations, we use a table lookup in
- * p7_FLogsum() to calculate summed probabilities in log
- * space. p7_INTSCALE defines the precision of the calculation; the
- * default of 1000.0 means rounding differences to the nearest 0.001
- * nat. p7_LOGSUM_TBL defines the size of the lookup table; the
- * default of 16000 means entries are calculated for differences of 0
- * to 16.000 nats (when p7_INTSCALE is 1000.0).  e^{-p7_LOGSUM_TBL /
- * p7_INTSCALE} should be on the order of the machine FLT_EPSILON,
- * typically 1.2e-7.
- */
-#define p7_INTSCALE     1000.0f
-#define p7_LOGSUM_TBL   16000
 
 /* Other stuff.
  */
@@ -121,6 +108,13 @@
 #undef p7_IMPL_VMX
 #undef p7_IMPL_DUMMY
 
+
+/* System headers
+ */
+#undef HAVE_NETINET_IN_H        /* On FreeBSD, you need netinet/in.h for struct sockaddr_in */
+#undef HAVE_SYS_PARAM_H         /* On OpenBSD, sys/sysctl.h needs sys/param.h */
+#undef HAVE_SYS_SYSCTL_H
+
 /* Optional parallel implementations
  */
 #undef HAVE_SSE2
@@ -141,8 +135,8 @@
 #endif /*P7_CONFIGH_INCLUDED*/
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

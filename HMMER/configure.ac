@@ -1,10 +1,9 @@
 # Process this file with autoconf to produce the HMMER configure script.
 #
-# Note that this is synchronized with Easel's configure script,
-# so that HMMER configures Easel in addition to itself; this saves
-# having to do a separate ./configure in Easel. That is,
-# everything that appears in Easel's configure script must also
-# appear here. 
+# This is synchronized with Easel's configure script, so that HMMER
+# configures Easel in addition to itself. This saves having to do a
+# separate ./configure in Easel. That means that everything that
+# appears in Easel's configure script must also appear here.
 #
 # reminders to save re-reading autoconf manual for the n'th time:
 #    output variables:
@@ -19,10 +18,6 @@
 #      -  then #undef FOO in easel.h.in becomes #define FOO, #define FOO 42
 #         I think this only happens in header files that we assign
 #         w/ AC_CONFIG_HEADERS -- which means, easel.h.in
-#
-# SRE, Mon Oct  5 14:55:45 1998
-# SVN $Id: configure.ac 3243 2010-03-28 14:32:29Z eddys $
-# xref autoconf macro archive: //www.gnu.org/software/ac-archive/
 #
 # GNU recommends the following order:
 #   1. autoconf requirements
@@ -42,7 +37,7 @@
 
 # Autoconf 2.61 has a bug in AC_FUNC_FSEEKO; don't use it.
 AC_PREREQ(2.63)
-AC_INIT(HMMER, 3.0, eddys@janelia.hhmi.org, hmmer)
+AC_INIT(HMMER, 3.1b2, eddys@janelia.hhmi.org, hmmer)
 AC_MSG_NOTICE([Configuring HMMER for your system.])
 
 # remember if the user is overriding CFLAGS
@@ -73,14 +68,16 @@ fi
 # to use HMMER as a library inside other packages, with no name clashes.
 ################################################################
 
-HMMER_DATE="March 2010"
-HMMER_COPYRIGHT="Copyright (C) 2010 Howard Hughes Medical Institute."
+HMMER_DATE="February 2015"
+HMMER_COPYRIGHT="Copyright (C) 2015 Howard Hughes Medical Institute."
 HMMER_LICENSE="Freely distributed under the GNU General Public License (GPLv3)."
 HMMER_VERSION=$PACKAGE_VERSION
 HMMER_URL="http://hmmer.org/"
+HMMER_ESLDIR="easel"
+HMMER_SADIR="libdivsufsort"
 
-EASEL_DATE="March 2010"
-EASEL_COPYRIGHT="Copyright (C) 2010 Howard Hughes Medical Institute."
+EASEL_DATE="February 2015"
+EASEL_COPYRIGHT="Copyright (C) 2015 Howard Hughes Medical Institute."
 EASEL_LICENSE="Freely distributed under the Janelia Farm Software License."
 EASEL_VERSION="h$PACKAGE_VERSION"
 EASEL_URL="http://bioeasel.org/"
@@ -91,6 +88,8 @@ AC_SUBST(HMMER_COPYRIGHT)
 AC_SUBST(HMMER_LICENSE)
 AC_SUBST(HMMER_VERSION)
 AC_SUBST(HMMER_URL)
+AC_SUBST(HMMER_ESLDIR)
+AC_SUBST(HMMER_SADIR)
 
 AC_SUBST(EASEL_DATE)
 AC_SUBST(EASEL_COPYRIGHT)
@@ -177,6 +176,20 @@ if test "$ok" = "yes"; then
 fi
 
 
+# --enable-gprof     - compile for gcc code profiling
+#
+# Replaces CC with "gcc" and CFLAGS with "-O -g -pg"
+# Running programs generates a profile data file "gmon.out".
+#
+AC_ARG_ENABLE(gprof,[AS_HELP_STRING([--enable-gprof],[compile for gcc code profiing])], ok=$enableval, ok=no)
+if test "$ok" = "yes"; then
+  AC_MSG_NOTICE([Compiling with gprof instrumentation.])
+  CC="gcc"
+  CFLAGS="-O -g -pg"
+  sre_cflags_env_set=yes
+fi
+
+
 # --enable-sse    Enable the SSE implementation.
 # --enable-vmx    Enable the Altivec/VMX implementation.
 # --enable-dummy  Enable the portable implementation.
@@ -252,7 +265,7 @@ esac
  
 AS_IF([test "x$check_threads" != xno],
       [ACX_PTHREAD([AC_DEFINE(HMMER_THREADS)
-                    AC_DEFINE(HAVE_PTHREADS)
+                    AC_DEFINE(HAVE_PTHREAD)
                     AC_SUBST(PTHREAD_LIBS)
                     AC_SUBST(PTHREAD_CFLAGS)],
                    [if test "x$enable_threads" != xcheck; then
@@ -327,6 +340,7 @@ fi
 # Checks for programs, including choice of compiler ${CC} and ${CFLAGS}.
 #
 AC_PROG_CC
+AC_PROG_INSTALL
 # MPI :  set @CC@ to mpicc, sets @MPILIBS@, defines HAVE_MPI. 
 if test "$enable_mpi" = "yes"; then
    ACX_MPI([AC_DEFINE(HAVE_MPI)
@@ -364,6 +378,10 @@ else
    # by AC_PROG_CC. Instead of rewriting AX_CC_MAXOPT, we fool
    # it.
 fi
+
+# Figure out how to generate PIC code for shared libraries
+# This sets @PIC_FLAGS@ output variable for Easel.
+ESL_PIC_FLAGS
 
 # If we're using SSE, figure out our @SIMD_CFLAGS@
 if test "$impl_choice" = "sse" && test "x$SIMD_CFLAGS" = x; then
@@ -533,7 +551,7 @@ AS_IF([test "x$impl_choice" != xno],
       [AC_MSG_CHECKING([compiler support --start-group])
        LDFLAGS_save=$LDFLAGS
        LDFLAGS="-Wl,--start-group -Wl,--end-group $LDFLAGS"
-       AC_LINK_IFELSE(AC_LANG_PROGRAM([],[]),
+       AC_LINK_IFELSE([AC_LANG_PROGRAM([],[])],
            [AC_MSG_RESULT([yes])
             AC_SUBST([GROUPHMMERLIBS], ["-Wl,--start-group -lhmmer -lhmmerimpl -Wl,--end-group"])],
            [AC_MSG_RESULT([no])
@@ -541,7 +559,15 @@ AS_IF([test "x$impl_choice" != xno],
        LDFLAGS=$LDFLAGS_save],
       [AC_SUBST([GROUPHMMERLIBS], ["-lhmmer"])])
 
-# Checks for libraries
+# Define HAVE_GZIP if gzip is in $PATH (or if HAVE_GZIP is already set)
+AC_PATH_PROG(HAVE_GZIP, "gzip", "no")
+if test "${HAVE_GZIP}" = "no"; then
+  AC_MSG_WARN([gzip not found])
+else
+  AC_DEFINE(HAVE_GZIP)
+fi
+
+# 5. Checks for libraries
 #
 LIBGSL=
 AS_IF([test "x$with_gsl" != xno],
@@ -559,7 +585,26 @@ AS_IF([test "x$with_gsl" != xno],
 
 # Checks for headers
 #
-AC_CHECK_HEADERS([sys/types.h sys/sysctl.h unistd.h stdint.h inttypes.h endian.h])
+# Defines HAVE_SYS_TYPES_H, HAVE_STDINT_H, etc.
+AC_CHECK_HEADERS([ \
+  endian.h\
+  inttypes.h\
+  stdint.h\
+  unistd.h\
+  sys/types.h\
+  netinet/in.h
+]) 
+
+# Check for sysctl.h separately.  On OpenBSD, it requires
+# <sys/param.h> and autoconf needs special logic to deal w. this as
+# follows.
+AC_CHECK_HEADERS([sys/param.h])
+AC_CHECK_HEADERS([sys/sysctl.h], [], [],
+[[#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+]])
+
 
 # altivec.h requires the simd cflags
 # For reasons I don't understand, this needs to come after any other CHECK_HEADERS().
@@ -591,6 +636,9 @@ AC_CHECK_FUNCS(times)
 AC_CHECK_FUNCS(getpid)
 AC_CHECK_FUNCS(sysctl)
 AC_CHECK_FUNCS(sysconf)
+AC_CHECK_FUNCS(getcwd)
+AC_CHECK_FUNCS(stat)
+AC_CHECK_FUNCS(fstat)
 
 AC_CHECK_FUNCS(ntohs, , AC_CHECK_LIB(socket, ntohs))
 AC_CHECK_FUNCS(ntohl, , AC_CHECK_LIB(socket, ntohl))
@@ -610,18 +658,26 @@ AC_SYS_LARGEFILE
 if test -d release-notes; then
   AC_CONFIG_FILES(release-notes/LICENSE.sh)
 fi
-if test -d documentation/userguide; then  
+
+AC_CONFIG_FILES([documentation/Makefile])
+AC_CONFIG_FILES([documentation/man/Makefile])
+if test -d "documentation/userguide"; then 
   AC_CONFIG_FILES([documentation/userguide/Makefile])
-fi
-AC_CONFIG_FILES([src/Makefile testsuite/Makefile profmark/Makefile])
-
+fi  
+AC_CONFIG_FILES([src/Makefile])
+AC_CONFIG_FILES([testsuite/Makefile])
+AC_CONFIG_FILES([profmark/Makefile])
 AC_CONFIG_FILES([src/impl_${impl_choice}/Makefile])
-AC_CONFIG_HEADERS(src/p7_config.h)
-
+AC_CONFIG_HEADERS([src/p7_config.h])
 AC_CONFIG_HEADERS([easel/esl_config.h])
+AC_CONFIG_HEADERS([libdivsufsort/divsufsort.h])
 AC_CONFIG_FILES([easel/miniapps/Makefile])
 AC_CONFIG_FILES([easel/testsuite/Makefile])
+if test -d "easel/documentation"; then
+  AC_CONFIG_FILES([easel/documentation/Makefile])
+fi    
 AC_CONFIG_FILES([easel/Makefile])
+AC_CONFIG_FILES([libdivsufsort/Makefile])
 
 # the following incantation establishes a symlink of
 # src/impl_{whatever} to src/impl in the *build* directory.
@@ -642,18 +698,31 @@ AC_OUTPUT
 echo "
 
 HMMER configuration:
-
-     compiler:             ${CC} ${CFLAGS} ${SIMD_CFLAGS} ${PTHREAD_CFLAGS}
+     compiler:             ${CC} ${CFLAGS} ${SIMD_CFLAGS} ${PTHREAD_CFLAGS} ${PIC_FLAGS}
+     host:                 $host
      linker:               ${LDFLAGS}
      libraries:            ${LIBS} ${LIBGSL} ${PTHREAD_LIBS}
      DP implementation:    ${impl_choice}
 "
 
 if test "$impl_choice" = "dummy"; then
-  AC_MSG_WARN([The "dummy" implementation is a portable ANSI C reference implementation.])
-  AC_MSG_WARN([It is slow, and is not intended for production use.])
+  AC_MSG_WARN([We will compile the "dummy", a portable ANSI C reference implementation.])
+  AC_MSG_WARN([It is slow, about 100x slower than real H3, and is NOT intended for production use!])
+  AC_MSG_WARN([It only intended to show the basics of how HMMER3 works, portably.])
 fi
 
 
-
+#################################################################
+# HMMER - Biological sequence analysis with profile HMMs
+# Version 3.1b2; February 2015
+# Copyright (C) 2015 Howard Hughes Medical Institute.
+# Other copyrights also apply. See the COPYRIGHT file for a full list.
+# 
+# HMMER is distributed under the terms of the GNU General Public License
+# (GPLv3). See the LICENSE file for details.
+# 
+# SVN $Id: configure.ac 4766 2015-02-22 18:22:01Z wheelert $
+# SVN $URL$ 
+# xref autoconf macro archive: //www.gnu.org/software/ac-archive/
+#################################################################
 

@@ -2,11 +2,11 @@
  * and simple and mixture Dirichlet priors.
  * 
  * SRE, Tue Nov  2 14:35:06 2004 [St. Louis]
- * SVN $Id: esl_dirichlet.h 348 2009-06-19 19:09:26Z rivase $
+ * SVN $Id: esl_dirichlet.h 883 2013-08-17 03:37:45Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_dirichlet.h $
  */
-#ifndef ESL_DIRICHLET_INCLUDED
-#define ESL_DIRICHLET_INCLUDED
-
+#ifndef eslDIRICHLET_INCLUDED
+#define eslDIRICHLET_INCLUDED
 
 /* Structure: MIXDCHLET
  * 
@@ -29,8 +29,10 @@ extern int            esl_mixdchlet_Copy(ESL_MIXDCHLET *d, ESL_MIXDCHLET *d_dst)
 extern int            esl_mixdchlet_Dump(FILE *fp, ESL_MIXDCHLET *d);
 extern void           esl_mixdchlet_Destroy(ESL_MIXDCHLET *pri);
 extern int            esl_mixdchlet_MPParameters(double *c, int K,
-						 ESL_MIXDCHLET *pri, double *mix, 
-						 double *p);
+						                                     ESL_MIXDCHLET *pri, double *mix, double *p);
+extern int            esl_mixdchlet_BILD_score(double *c, int K, int N, ESL_MIXDCHLET *pri,
+                                               double *mix, double *bg, double *q);
+
 
 extern int esl_dirichlet_LogProbData(double *c, double *alpha, int K, 
 				     double *ret_answer);
@@ -68,11 +70,11 @@ extern int esl_mixdchlet_Write(FILE *fp,  ESL_MIXDCHLET *d);
 #endif /*eslAUGMENT_FILEPARSER*/
 
 
-#endif /*!ESL_DIRICHLET_INCLUDED*/
+#endif /*eslDIRICHLET_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

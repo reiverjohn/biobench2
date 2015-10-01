@@ -12,9 +12,6 @@
  *   9. Copyright and license information
  * 
  * Stylistic note: elements in a trace path are usually indexed by z.
- * 
- * SRE, Tue Jan  2 2007 [Casa de Gatos] 
- * SVN $Id: p7_trace.c 3041 2009-11-12 12:58:09Z eddys $
  */
 
 #include "p7_config.h"
@@ -1556,9 +1553,9 @@ utest_faux(ESL_MSA *msa, int *matassign, int M)
   esl_msa_Destroy(msa2);
   for (i = 0; i < msa->nseq; i++) p7_trace_Destroy(tr[i]);
 
-  if (p7_trace_FauxFromMSA(msa, matassign, p7_DEFAULT, tr)      != eslOK) esl_fatal(msg);
-  if (p7_tracealign_Seqs(sq, tr, msa->nseq, M, optflags, &msa2) != eslOK) esl_fatal(msg);
-  if (esl_msa_Compare(msa, msa2)                                != eslOK) esl_fatal(msg);
+  if (p7_trace_FauxFromMSA(msa, matassign, p7_DEFAULT, tr)            != eslOK) esl_fatal(msg);
+  if (p7_tracealign_Seqs(sq, tr, msa->nseq, M, optflags, NULL, &msa2) != eslOK) esl_fatal(msg);
+  if (esl_msa_Compare(msa, msa2)                                      != eslOK) esl_fatal(msg);
 
   esl_msa_Destroy(msa2);
   for (i = 0; i < msa->nseq; i++) p7_trace_Destroy(tr[i]);
@@ -1583,6 +1580,8 @@ utest_faux(ESL_MSA *msa, int *matassign, int M)
 
 #include "easel.h"
 #include "esl_getopts.h"
+#include "esl_msa.h"
+#include "esl_msafile.h"
 #include "esl_random.h"
 
 #include "hmmer.h"
@@ -1601,7 +1600,7 @@ int
 main(int argc, char **argv)
 {
   char           *msg       = "p7_trace_utest failed";
-  ESL_GETOPTS    *go        = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go        = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r         = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc       = esl_alphabet_Create(eslAMINO);
   ESL_MSA        *msa       = NULL;
@@ -1637,11 +1636,14 @@ main(int argc, char **argv)
 
 /************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/p7_trace.c $
+ * SVN $Id: p7_trace.c 3474 2011-01-17 13:25:32Z eddys $
  ************************************************************/
 

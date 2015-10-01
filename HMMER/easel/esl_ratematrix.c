@@ -34,15 +34,13 @@
  * See also:
  *   paml   - i/o of rate matrices from/to data files in PAML format
  * 
- *         original: SRE, Tue Jul 13 15:51:23 2004 [St. Louis]
- * upgrade to Easel: SRE, Thu Mar  8 17:59:35 2007 [Janelia]
- * SVN $Id: esl_ratematrix.c 326 2009-02-28 15:49:07Z eddys $
  */
 #include "esl_config.h"
 
 #include <math.h>
 
 #include "easel.h"
+#include "esl_composition.h"
 #include "esl_dmatrix.h"
 #include "esl_vectorops.h"
 #include "esl_ratematrix.h"
@@ -818,10 +816,13 @@ main(void)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_ratematrix.c 849 2013-01-31 15:10:24Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_ratematrix.c $
  *****************************************************************/ 

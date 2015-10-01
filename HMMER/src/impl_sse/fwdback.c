@@ -29,7 +29,7 @@
  *   8. Copyright and license information.
  * 
  * SRE, Thu Jul 31 08:43:20 2008 [Janelia]
- * SVN $Id: fwdback.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: fwdback.c 3665 2011-08-25 13:45:55Z eddys $
  */
 #include "p7_config.h"
 
@@ -771,8 +771,8 @@ static ESL_OPTIONS options[] = {
   { "-x",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-c", "equate scores to trusted implementation (debug)",  0 },
   { "-L",        eslARG_INT,    "400", NULL, "n>0", NULL,  NULL, NULL, "length of random target seqs",                     0 },
   { "-N",        eslARG_INT,  "50000", NULL, "n>0", NULL,  NULL, NULL, "number of random target seqs",                     0 },
-  { "-F",        eslARG_NONE,   FALSE, NULL, "n>0", NULL,  NULL, "-B", "only benchmark Forward",                           0 },
-  { "-B",        eslARG_NONE,   FALSE, NULL, "n>0", NULL,  NULL, "-F", "only benchmark Backward",                          0 },
+  { "-F",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-B", "only benchmark Forward",                           0 },
+  { "-B",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-F", "only benchmark Backward",                          0 },
   { "-P",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "benchmark parsing version, not full version",      0 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
@@ -782,7 +782,7 @@ static char banner[] = "benchmark driver for Forward, Backward implementations";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -805,8 +805,8 @@ main(int argc, char **argv)
 
   p7_FLogsumInit();
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -985,7 +985,7 @@ static char banner[] = "test driver for SSE Forward, Backward implementations";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -1047,11 +1047,17 @@ main(int argc, char **argv)
 #include "hmmer.h"
 #include "impl_sse.h"
 
+#define STYLES     "--fs,--sw,--ls,--s"	               /* Exclusive choice for alignment mode     */
+
 static ESL_OPTIONS options[] = {
-  /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
-  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",             0 },
-  { "-1",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "output in one line awkable format",                0 },
-  { "-P",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "output in profmark format",                        0 },
+  /* name           type      default  env  range  toggles reqs incomp  help                                       docgroup*/
+  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "show brief help on version and usage",             0 },
+  { "-1",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "output in one line awkable format",                0 },
+  { "-P",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "output in profmark format",                        0 },
+  { "--fs",      eslARG_NONE,"default",NULL, NULL, STYLES,  NULL, NULL, "multihit local alignment",                         0 },
+  { "--sw",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit local alignment",                           0 },
+  { "--ls",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "multihit glocal alignment",                        0 },
+  { "--s",       eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit glocal alignment",                          0 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 static char usage[]  = "[-options] <hmmfile> <seqfile>";
@@ -1060,7 +1066,7 @@ static char banner[] = "example of Forward/Backward (SSE versions)";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -1081,8 +1087,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   /* Open sequence file for reading */
   sq     = esl_sq_CreateDigital(abc);
@@ -1096,10 +1102,16 @@ main(int argc, char **argv)
   bg = p7_bg_Create(abc);               
   p7_bg_SetLength(bg, sq->n);
   gm = p7_profile_Create(hmm->M, abc); 
-  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNILOCAL);
+
+  /* Now reconfig the models however we were asked to */
+  if      (esl_opt_GetBoolean(go, "--fs"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_LOCAL);
+  else if (esl_opt_GetBoolean(go, "--sw"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNILOCAL);
+  else if (esl_opt_GetBoolean(go, "--ls"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_GLOCAL);
+  else if (esl_opt_GetBoolean(go, "--s"))   p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNIGLOCAL);
+
+  /* now the optimized profile */
   om = p7_oprofile_Create(gm->M, abc);
   p7_oprofile_Convert(gm, om);
-
   /* p7_oprofile_Dump(stdout, om);  */
 
   /* allocate DP matrices for O(M+L) parsers */
@@ -1135,7 +1147,7 @@ main(int argc, char **argv)
       p7_GForward     (sq->dsq, sq->n, gm, gx,  &gfraw);
       p7_GBackward    (sq->dsq, sq->n, gm, gx,  &gbraw);
 
-      /* p7_gmx_Dump(stdout, gx);  */
+      /* p7_gmx_Dump(stdout, gx, p7_DEFAULT);  */
 
       fsc  =  (fraw-nullsc) / eslCONST_LOG2;
       gfsc = (gfraw-nullsc) / eslCONST_LOG2;
@@ -1186,8 +1198,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

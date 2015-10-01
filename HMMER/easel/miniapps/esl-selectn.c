@@ -1,7 +1,7 @@
 /* Select <n> random lines from a file and print them.
  *
  * SRE, Fri Jun 13 08:17:53 2008 [Janelia]
- * SVN $Id$
+ * SVN $Id: esl-selectn.c 526 2010-02-22 12:45:09Z eddys $
  */
 #include "esl_config.h"
 
@@ -110,8 +110,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

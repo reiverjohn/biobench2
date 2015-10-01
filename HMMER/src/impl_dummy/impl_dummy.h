@@ -2,7 +2,7 @@
  * routines: structures, declarations, and macros.
  * 
  * MSF, Oct 27, 2009 [Janelia]
- * SVN $Id: impl_sse.h 2864 2009-07-22 13:46:50Z farrarm $
+ * SVN $Id: impl_dummy.h 4511 2013-07-08 19:05:40Z wheelert $
  */
 #ifndef P7_IMPL_DUMMY_INCLUDED
 #define P7_IMPL_DUMMY_INCLUDED
@@ -14,12 +14,18 @@
 #include "esl_alphabet.h"
 #include "esl_random.h"
 
+//#include <pmmintrin.h>   /* DENORMAL_MODE */
+
 #include "hmmer.h"
+
 
 /*****************************************************************
  * 1. P7_OPROFILE: an optimized score profile
  *****************************************************************/
 typedef P7_PROFILE P7_OPROFILE;
+
+#define p7O_NTRANS    8    /* 7 core transitions + BMk entry                    */
+enum p7o_tsc_e          { p7O_BM   = 0, p7O_MM   = 1,  p7O_IM = 2,  p7O_DM = 3, p7O_MD   = 4, p7O_MI   = 5,  p7O_II = 6,  p7O_DD = 7 };
 
 typedef struct {
   int            count;       /* number of <P7_OPROFILE> objects in the block */
@@ -40,6 +46,7 @@ p7_oprofile_FGetEmission(const P7_OPROFILE *om, int k, int x)
  *****************************************************************/
 
 typedef P7_GMX P7_OMX;
+
 
 /*****************************************************************
  * 3. Declarations of the external API.
@@ -63,8 +70,10 @@ extern int          p7_omx_DumpFBRow(P7_OMX *ox, int logify, int rowi, int width
 extern P7_OPROFILE *p7_oprofile_Create(int M, const ESL_ALPHABET *abc);
 extern int          p7_oprofile_IsLocal(const P7_OPROFILE *om);
 extern void         p7_oprofile_Destroy(P7_OPROFILE *om);
+extern size_t       p7_oprofile_Sizeof(P7_OPROFILE *om);
 extern P7_OPROFILE *p7_oprofile_Copy(P7_OPROFILE *om);
 extern P7_OPROFILE *p7_oprofile_Clone(P7_OPROFILE *om);
+extern int          p7_oprofile_UpdateFwdEmissionScores(P7_OPROFILE *om, P7_BG *bg, float *fwd_emissions, float *sc_arr);
 
 extern int          p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om);
 extern int          p7_oprofile_ReconfigLength    (P7_OPROFILE *om, int L);
@@ -80,7 +89,10 @@ extern int          p7_oprofile_Compare(P7_OPROFILE *om1, P7_OPROFILE *om2, floa
 extern int          p7_profile_SameAsMF(const P7_OPROFILE *om, P7_PROFILE *gm);
 extern int          p7_profile_SameAsVF(const P7_OPROFILE *om, P7_PROFILE *gm);
 
-
+extern int          p7_oprofile_GetFwdTransitionArray(const P7_OPROFILE *om, int type, float *arr );
+extern int          p7_oprofile_GetSSVEmissionScoreArray(const P7_OPROFILE *om, uint8_t *arr );
+extern int          p7_oprofile_GetFwdEmissionScoreArray(const P7_OPROFILE *om, float *arr );
+extern int          p7_oprofile_GetFwdEmissionArray(const P7_OPROFILE *om, P7_BG *bg, float *arr );
 
 /* decoding.c */
 extern int p7_Decoding      (const P7_OPROFILE *om, const P7_OMX *oxf,       P7_OMX *oxb, P7_OMX *pp);
@@ -103,6 +115,7 @@ extern void p7_oprofile_DestroyBlock(P7_OM_BLOCK *block);
 
 /* msvfilter.c */
 extern int p7_MSVFilter    (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
+extern int p7_SSVFilter_longtarget(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, const P7_SCOREDATA *msvdata, P7_BG *bg, double P, P7_HMM_WINDOWLIST *windowlist);
 
 /* null2.c */
 extern int p7_Null2_ByExpectation(const P7_OPROFILE *om, P7_OMX *pp, float *null2);
@@ -118,6 +131,9 @@ extern int p7_StochasticTrace(ESL_RANDOMNESS *rng, const ESL_DSQ *dsq, int L, co
 
 /* vitfilter.c */
 extern int p7_ViterbiFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
+extern int p7_ViterbiFilter_longtarget(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox,
+                            float filtersc, double P, P7_HMM_WINDOWLIST *windowlist);
+
 
 /* vitscore.c */
 extern int p7_ViterbiScore (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *ret_sc);
@@ -132,12 +148,18 @@ impl_Init(void)
 }
   
 
+static inline void
+impl_ThreadInit(void)
+{
+}
+
+
 #endif /* P7_IMPL_DUMMY_INCLUDED */
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

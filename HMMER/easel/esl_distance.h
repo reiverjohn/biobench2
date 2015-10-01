@@ -1,12 +1,12 @@
-/* esl_distance.h
- * Distances between aligned sequences, including both
+/* Distances between aligned sequences, including both
  * probabilistic evolutionary models and ad hoc measures.
  * 
- * SVN $Id: esl_distance.h 192 2007-06-12 15:06:22Z eddys $
  * SRE, Fri Apr 28 06:41:13 2006 [New York]
+ * SVN $Id: esl_distance.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_distance.h $
  */
-#ifndef ESL_DISTANCE_INCLUDED
-#define ESL_DISTANCE_INCLUDED
+#ifndef eslDISTANCE_INCLUDED
+#define eslDISTANCE_INCLUDED
 
 #include "easel.h"		/* ESL_DSQ declaration      */
 #ifdef eslAUGMENT_ALPHABET
@@ -64,11 +64,11 @@ extern int esl_dst_XAverageId(const ESL_ALPHABET *abc, ESL_DSQ **ax, int N, int 
 #endif
 
 
-#endif /*ESL_DISTANCE_INCLUDED*/
+#endif /*eslDISTANCE_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

@@ -15,7 +15,7 @@
  *   6. Copyright and license information
  * 
  * SRE, Sun Nov 25 11:26:48 2007 [Casa de Gatos]
- * SVN $Id: msvfilter.c 3038 2009-11-05 12:55:34Z eddys $
+ * SVN $Id: msvfilter.c 4699 2014-07-03 14:54:25Z wheelert $
  */
 #include "p7_config.h"
 
@@ -27,6 +27,7 @@
 
 #include "easel.h"
 #include "esl_sse.h"
+#include "esl_gumbel.h"
 
 #include "hmmer.h"
 #include "impl_sse.h"
@@ -34,7 +35,7 @@
 /*****************************************************************
  * 1. The p7_MSVFilter() DP implementation.
  *****************************************************************/
-
+ 
 /* Function:  p7_MSVFilter()
  * Synopsis:  Calculates MSV score, vewy vewy fast, in limited precision.
  * Incept:    SRE, Wed Dec 26 15:12:25 2007 [Janelia]
@@ -87,18 +88,22 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
   __m128i *rsc;			   /* will point at om->rbv[x] for residue x[i]                 */
 
   __m128i xJv;                     /* vector for states score                                   */
-  __m128i tbmv;                    /* vector for B->Mk cost                                     */
+  __m128i tjbmv;                   /* vector for cost of moving from either J or N through B to an M state */
   __m128i tecv;                    /* vector for E->C  cost                                     */
-  __m128i tjbv;                    /* vector for NCJ move cost                                  */
   __m128i basev;                   /* offset for scores                                         */
   __m128i ceilingv;                /* saturateed simd value used to test for overflow           */
   __m128i tempv;                   /* work vector                                               */
 
   int cmp;
+  int status = eslOK;
 
   /* Check that the DP matrix is ok for us. */
   if (Q > ox->allocQ16)  ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small");
   ox->M   = om->M;
+
+  /* Try highly optimized ssv filter first */
+  status = p7_SSVFilter(dsq, L, om, ret_sc);
+  if (status != eslENORESULT) return status;
 
   /* Initialization. In offset unsigned arithmetic, -infinity is 0, and 0 is om->base.
    */
@@ -108,31 +113,28 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
 
   /* saturate simd register for overflow test */
   ceilingv = _mm_cmpeq_epi8(biasv, biasv);
-
   basev = _mm_set1_epi8((int8_t) om->base_b);
 
-  tbmv = _mm_set1_epi8((int8_t) om->tbm_b);
+  tjbmv = _mm_set1_epi8((int8_t) om->tjb_b + (int8_t) om->tbm_b);
   tecv = _mm_set1_epi8((int8_t) om->tec_b);
-  tjbv = _mm_set1_epi8((int8_t) om->tjb_b);
 
   xJv = _mm_subs_epu8(biasv, biasv);
-  xBv = _mm_subs_epu8(basev, tjbv);
+  xBv = _mm_subs_epu8(basev, tjbmv);
 
 #if p7_DEBUGGING
   if (ox->debugging)
-    { 
+  {
       uint8_t xB;
       xB = _mm_extract_epi16(xBv, 0);
       xJ = _mm_extract_epi16(xJv, 0);
       p7_omx_DumpMFRow(ox, 0, 0, 0, xJ, xB, xJ);
-    }
+  }
 #endif
 
   for (i = 1; i <= L; i++)
-    {
+  {
       rsc = om->rbv[dsq[i]];
       xEv = _mm_setzero_si128();      
-      xBv = _mm_subs_epu8(xBv, tbmv);
 
       /* Right shifts by 1 byte. 4,8,12,x becomes x,4,8,12. 
        * Because ia32 is littlendian, this means a left bit shift.
@@ -140,16 +142,16 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
        */
       mpv = _mm_slli_si128(dp[Q-1], 1);   
       for (q = 0; q < Q; q++)
-	{
-	  /* Calculate new MMXo(i,q); don't store it yet, hold it in sv. */
-	  sv   = _mm_max_epu8(mpv, xBv);
-	  sv   = _mm_adds_epu8(sv, biasv);      
-	  sv   = _mm_subs_epu8(sv, *rsc);   rsc++;
-	  xEv  = _mm_max_epu8(xEv, sv);	
+      {
+        /* Calculate new MMXo(i,q); don't store it yet, hold it in sv. */
+        sv   = _mm_max_epu8(mpv, xBv);
+        sv   = _mm_adds_epu8(sv, biasv);
+        sv   = _mm_subs_epu8(sv, *rsc);   rsc++;
+        xEv  = _mm_max_epu8(xEv, sv);
 
-	  mpv   = dp[q];   	  /* Load {MDI}(i-1,q) into mpv */
-	  dp[q] = sv;       	  /* Do delayed store of M(i,q) now that memory is usable */
-	}	  
+        mpv   = dp[q];   	  /* Load {MDI}(i-1,q) into mpv */
+        dp[q] = sv;       	  /* Do delayed store of M(i,q) now that memory is usable */
+      }
 
       /* test for the overflow condition */
       tempv = _mm_adds_epu8(xEv, biasv);
@@ -174,28 +176,28 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
 
       /* immediately detect overflow */
       if (cmp != 0x0000)
-	{ 
-	  *ret_sc = eslINFINITY; 
-	  return eslERANGE; 
-	}
+      {
+        *ret_sc = eslINFINITY;
+        return eslERANGE;
+      }
 
       xEv = _mm_subs_epu8(xEv, tecv);
       xJv = _mm_max_epu8(xJv,xEv);
       
       xBv = _mm_max_epu8(basev, xJv);
-      xBv = _mm_subs_epu8(xBv, tjbv);
+      xBv = _mm_subs_epu8(xBv, tjbmv);
 	  
 #if p7_DEBUGGING
       if (ox->debugging)
-	{
-	  uint8_t xB, xE;
-	  xB = _mm_extract_epi16(xBv, 0);
-	  xE = _mm_extract_epi16(xEv, 0);
-	  xJ = _mm_extract_epi16(xJv, 0);
-	  p7_omx_DumpMFRow(ox, i, xE, 0, xJ, xB, xJ);   
-	}
+      {
+        uint8_t xB, xE;
+        xB = _mm_extract_epi16(xBv, 0);
+        xE = _mm_extract_epi16(xEv, 0);
+        xJ = _mm_extract_epi16(xJv, 0);
+        p7_omx_DumpMFRow(ox, i, xE, 0, xJ, xB, xJ);
+      }
 #endif
-    } /* end loop over sequence residues 1..L */
+  } /* end loop over sequence residues 1..L */
 
   xJ = (uint8_t) _mm_extract_epi16(xJv, 0);
 
@@ -207,6 +209,244 @@ p7_MSVFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float
   return eslOK;
 }
 /*------------------ end, p7_MSVFilter() ------------------------*/
+
+
+
+/* Function:  p7_SSVFilter_longtarget()
+ * Synopsis:  Finds windows with SSV scores above some threshold (vewy vewy fast, in limited precision)
+ *
+ * Purpose:   Calculates an approximation of the SSV (single ungapped diagonal)
+ *            score for regions of sequence <dsq> of length <L> residues, using
+ *            optimized profile <om>, and a preallocated one-row DP matrix <ox>,
+ *            and captures the positions at which such regions exceed the score
+ *            required to be significant in the eyes of the calling function,
+ *            which depends on the <bg> and <p> (usually p=0.02 for nhmmer).
+ *            Note that this variant performs only SSV computations, never
+ *            passing through the J state - the score required to pass SSV at
+ *            the default threshold (or less restrictive) is sufficient to
+ *            pass MSV in essentially all DNA models we've tested.
+ *
+ *            Above-threshold diagonals are captured into a preallocated list
+ *            <windowlist>. Rather than simply capturing positions at which a
+ *            score threshold is reached, this function establishes windows
+ *            around those high-scoring positions, using scores in <msvdata>.
+ *            These windows can be merged by the calling function.
+ *
+ *
+ * Args:      dsq     - digital target sequence, 1..L
+ *            L       - length of dsq in residues
+ *            om      - optimized profile
+ *            ox      - DP matrix
+ *            msvdata    - compact representation of substitution scores, for backtracking diagonals
+ *            bg         - the background model, required for translating a P-value threshold into a score threshold
+ *            P          - p-value below which a region is captured as being above threshold
+ *            windowlist - preallocated container for all hits (resized if necessary)
+ *
+ *
+ * Note:      We misuse the matrix <ox> here, using only a third of the
+ *            first dp row, accessing it as <dp[0..Q-1]> rather than
+ *            in triplets via <{MDI}MX(q)> macros, since we only need
+ *            to store M state values. We know that if <ox> was big
+ *            enough for normal DP calculations, it must be big enough
+ *            to hold the MSVFilter calculation.
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINVAL> if <ox> allocation is too small.
+ */
+int
+p7_SSVFilter_longtarget(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, const P7_SCOREDATA *ssvdata,
+                        P7_BG *bg, double P, P7_HMM_WINDOWLIST *windowlist)
+{
+
+  register __m128i mpv;            /* previous row values                                       */
+  register __m128i xEv;		   /* E state: keeps max for Mk->E for a single iteration       */
+  register __m128i xBv;		   /* B state: splatted vector of B[i-1] for B->Mk calculations */
+  register __m128i sv;		   /* temp storage of 1 curr row value in progress              */
+  register __m128i biasv;	   /* emission bias in a vector                                 */
+  uint8_t  xJ;                     /* special states' scores                                    */
+  int i;			   /* counter over sequence positions 1..L                      */
+  int q;			   /* counter over vectors 0..nq-1                              */
+  int Q        = p7O_NQB(om->M);   /* segment length: # of vectors                              */
+  __m128i *dp  = ox->dpb[0];	   /* we're going to use dp[0][0..q..Q-1], not {MDI}MX(q) macros*/
+  __m128i *rsc;			   /* will point at om->rbv[x] for residue x[i]                 */
+  __m128i tecv;                    /* vector for E->C  cost                                     */
+  __m128i tjbmv;                   /* vector for J->B move cost + B->M move costs               */
+  __m128i basev;                   /* offset for scores                                         */
+  __m128i ceilingv;                /* saturated simd value used to test for overflow           */
+  __m128i tempv;                   /* work vector                                               */
+  int cmp;
+  int k;
+  int n;
+  int end;
+  int rem_sc;
+  int start;
+  int target_end;
+  int target_start;
+  int max_end;
+  int max_sc;
+  int sc;
+  int pos_since_max;
+  float ret_sc;
+
+  union { __m128i v; uint8_t b[16]; } u;
+
+  /*
+   * Computing the score required to let P meet the F1 prob threshold
+   * In original code, converting from a scaled int MSV
+   * score S (the score getting to state E) to a probability goes like this:
+   *  usc =  S - om->tec_b - om->tjb_b - om->base_b;
+   *  usc /= om->scale_b;
+   *  usc -= 3.0;
+   *  P = f ( (usc - nullsc) / eslCONST_LOG2 , mu, lambda)
+   * and we're computing the threshold usc, so reverse it:
+   *  (usc - nullsc) /  eslCONST_LOG2 = inv_f( P, mu, lambda)
+   *  usc = nullsc + eslCONST_LOG2 * inv_f( P, mu, lambda)
+   *  usc += 3
+   *  usc *= om->scale_b
+   *  S = usc + om->tec_b + om->tjb_b + om->base_b
+   *
+   *  Here, I compute threshold with length model based on max_length.  Doesn't
+   *  matter much - in any case, both the bg and om models will change with roughly
+   *  1 bit for each doubling of the length model, so they offset.
+   */
+  float nullsc;
+  __m128i sc_threshv;
+  uint8_t sc_thresh;
+  float invP = esl_gumbel_invsurv(P, om->evparam[p7_MMU],  om->evparam[p7_MLAMBDA]);
+
+
+  /* Check that the DP matrix is ok for us. */
+  if (Q > ox->allocQ16)  ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small");
+  ox->M   = om->M;
+
+
+  p7_bg_SetLength(bg, om->max_length);
+  p7_oprofile_ReconfigMSVLength(om, om->max_length);
+  p7_bg_NullOne  (bg, dsq, om->max_length, &nullsc);
+
+  sc_thresh = (int) ceil( ( ( nullsc  + (invP * eslCONST_LOG2) + 3.0 )  * om->scale_b ) + om->base_b +  om->tec_b  + om->tjb_b );
+  sc_threshv = _mm_set1_epi8((int8_t) 255 - sc_thresh);
+
+  /* Initialization. In offset unsigned  arithmetic, -infinity is 0, and 0 is om->base.
+   */
+  biasv = _mm_set1_epi8((int8_t) om->bias_b); /* yes, you can set1() an unsigned char vector this way */
+  ceilingv = _mm_cmpeq_epi8(biasv, biasv);
+  for (q = 0; q < Q; q++) dp[q] = _mm_setzero_si128();
+  xJ   = 0;
+
+  basev = _mm_set1_epi8((int8_t) om->base_b);
+  tecv = _mm_set1_epi8((int8_t) om->tec_b);
+  tjbmv = _mm_set1_epi8((int8_t) om->tjb_b + (int8_t) om->tbm_b);
+
+  xBv = _mm_subs_epu8(basev, tjbmv);
+
+  for (i = 1; i <= L; i++) {
+    rsc = om->rbv[dsq[i]];
+    xEv = _mm_setzero_si128();
+
+	  /* Right shifts by 1 byte. 4,8,12,x becomes x,4,8,12.
+	   * Because ia32 is littlendian, this means a left bit shift.
+	   * Zeros shift on automatically, which is our -infinity.
+	   */
+	  mpv = _mm_slli_si128(dp[Q-1], 1);
+	  for (q = 0; q < Q; q++) {
+		  /* Calculate new MMXo(i,q); don't store it yet, hold it in sv. */
+		  sv   = _mm_max_epu8(mpv, xBv);
+		  sv   = _mm_adds_epu8(sv, biasv);
+		  sv   = _mm_subs_epu8(sv, *rsc);   rsc++;
+		  xEv  = _mm_max_epu8(xEv, sv);
+
+		  mpv   = dp[q];   	  /* Load {MDI}(i-1,q) into mpv */
+		  dp[q] = sv;       	  /* Do delayed store of M(i,q) now that memory is usable */
+	  }
+
+	  /* test if the pthresh significance threshold has been reached;
+	   * note: don't use _mm_cmpgt_epi8, because it's a signed comparison, which won't work on uint8s */
+	  tempv = _mm_adds_epu8(xEv, sc_threshv);
+	  tempv = _mm_cmpeq_epi8(tempv, ceilingv);
+	  cmp = _mm_movemask_epi8(tempv);
+
+	  if (cmp != 0) {  //hit pthresh, so add position to list and reset values
+	    //figure out which model state hit threshold
+	    end = -1;
+	    rem_sc = -1;
+	    for (q = 0; q < Q; q++) {  /// Unpack and unstripe, so we can find the state that exceeded pthresh
+          u.v = dp[q];
+          for (k = 0; k < 16; k++) { // unstripe
+            //(q+Q*k+1) is the model position k at which the xE score is found
+            if (u.b[k] >= sc_thresh && u.b[k] > rem_sc && (q+Q*k+1) <= om->M) {
+              end = (q+Q*k+1);
+              rem_sc = u.b[k];
+            }
+          }
+          dp[q] = _mm_set1_epi8(0); // while we're here ... this will cause values to get reset to xB in next dp iteration
+	    }
+
+	    //recover the diagonal that hit threshold
+	    start = end;                    // model position
+	    target_end = target_start = i;  // target position
+	    sc = rem_sc;
+	    while (rem_sc > om->base_b - om->tjb_b - om->tbm_b) {
+	      rem_sc -= om->bias_b -  ssvdata->ssv_scores[start*om->abc->Kp + dsq[target_start]];
+	      --start;
+	      --target_start;
+	    }
+	    start++;
+	    target_start++;
+
+
+	    //extend diagonal further with single diagonal extension
+	    k = end+1;
+	    n = target_end+1;
+	    max_end = target_end;
+	    max_sc = sc;
+	    pos_since_max = 0;
+	    while (k<om->M && n<=L) {
+	      sc += om->bias_b -  ssvdata->ssv_scores[k*om->abc->Kp + dsq[n]];
+
+	      if (sc >= max_sc) {
+	        max_sc = sc;
+	        max_end = n;
+	        pos_since_max=0;
+	      } else {
+	        pos_since_max++;
+	        if (pos_since_max == 5)
+	          break;
+	      }
+	      k++;
+	      n++;
+	    }
+
+	    end  +=  (max_end - target_end);
+      //k    +=  (max_end - target_end);
+      target_end = max_end;
+
+      ret_sc = ((float) (max_sc - om->tjb_b) - (float) om->base_b);
+      ret_sc /= om->scale_b;
+      ret_sc -= 3.0; // that's ~ L \log \frac{L}{L+3}, for our NN,CC,JJ
+
+      p7_hmmwindow_new(  windowlist,
+                         0,                  // sequence_id; used in the FM-based filter, but not here
+                         target_start,       // position in the target at which the diagonal starts
+                         0,                  // position in the target fm_index at which diagonal starts;  not used here, just in FM-based filter
+                         end,                // position in the model at which the diagonal ends
+                         end-start+1 ,       // length of diagonal
+                         ret_sc,             // score of diagonal
+                         p7_NOCOMPLEMENT,    // always p7_NOCOMPLEMENT here;  varies in FM-based filter
+                         L
+                       );
+
+      i = target_end; // skip forward
+	  }
+
+
+  } /* end loop over sequence residues 1..L */
+
+  return eslOK;
+
+}
+/*------------------ end, p7_SSVFilter_longtarget() ------------------------*/
 
 
 
@@ -272,7 +512,7 @@ static char banner[] = "benchmark driver for MSVFilter() implementation";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -291,8 +531,8 @@ main(int argc, char **argv)
   float           sc1, sc2;
   double          base_time, bench_time, Mcs;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -394,8 +634,8 @@ utest_msv_filter(ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, int M, int L, 
   p7_oprofile_Sample(r, abc, bg, M, L, &hmm, &gm, &om);
   p7_profile_SameAsMF(om, gm);
 #if 0
-  p7_oprofile_Dump(stdout, om);              //dumps the optimized profile
-  p7_omx_SetDumpMode(stdout, ox, TRUE);      //makes the fast DP algorithms dump their matrices
+  p7_oprofile_Dump(stdout, om);              /* dumps the optimized profile */
+  p7_omx_SetDumpMode(stdout, ox, TRUE);      /* makes the fast DP algorithms dump their matrices */
 #endif
 
   while (N--)
@@ -404,7 +644,7 @@ utest_msv_filter(ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, int M, int L, 
       p7_MSVFilter(dsq, L, om, ox, &sc1);
       p7_GViterbi (dsq, L, gm, gx, &sc2);
 #if 0
-      p7_gmx_Dump(stdout, gx);           //dumps a generic DP matrix
+      p7_gmx_Dump(stdout, gx, p7_DEFAULT);   /* dumps a generic DP matrix */
 #endif
 
       sc2 = sc2 / om->scale_b - 3.0f;
@@ -457,7 +697,7 @@ static char banner[] = "test driver for the SSE MSVFilter() implementation";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -532,7 +772,7 @@ static char banner[] = "example of MSV filter algorithm";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -552,8 +792,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   /* Open sequence file for reading */
   sq     = esl_sq_CreateDigital(abc);
@@ -576,9 +816,9 @@ main(int argc, char **argv)
   gx = p7_gmx_Create(gm->M, sq->n);
 
   /* Useful to place and compile in for debugging: 
-     p7_oprofile_Dump(stdout, om);      dumps the optimized profile
+     p7_oprofile_Dump(stdout, om);              dumps the optimized profile
      p7_omx_SetDumpMode(stdout, ox, TRUE);      makes the fast DP algorithms dump their matrices
-     p7_gmx_Dump(stdout, gx);           dumps a generic DP matrix
+     p7_gmx_Dump(stdout, gx, p7_DEFAULT);       dumps a generic DP matrix
      p7_oprofile_SameMSV(om, gm);
   */
   //p7_oprofile_Dump(stdout, om);
@@ -603,11 +843,11 @@ main(int argc, char **argv)
 
       if (esl_opt_GetBoolean(go, "-1"))
 	{
-	  printf("%-30s\t%-20s\t%9.2g\t%7.2f\t%9.2g\t%7.2f\n", sq->name, hmm->name, P, msvscore, gP, gscore);
+	  printf("%-30s  %-20s  %9.2g  %7.2f  %9.2g  %7.2f\n", sq->name, hmm->name, P, msvscore, gP, gscore);
 	}
       else if (esl_opt_GetBoolean(go, "-P"))
 	{ /* output suitable for direct use in profmark benchmark postprocessors: */
-	  printf("%g\t%.2f\t%s\t%s\n", P, msvscore, sq->name, hmm->name);
+	  printf("%g  %.2f  %s  %s\n", P, msvscore, sq->name, hmm->name);
 	}
       else
 	{
@@ -642,14 +882,15 @@ main(int argc, char **argv)
 /*---------------------- end, example ---------------------------*/
 
 
-
-
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
  *****************************************************************/
+
+
+

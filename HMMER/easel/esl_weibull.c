@@ -1,8 +1,14 @@
-/* esl_weibull.c
- * Statistical routines for Weibull distributions.
- * 
- * SRE, Tue Aug  9 10:35:06 2005 [St. Louis]
- * SVN $Id: esl_weibull.c 326 2009-02-28 15:49:07Z eddys $
+/* Statistical routines for Weibull distributions.
+ *
+ * Contents:
+ *   1. Routines for evaluating densities and distributions.
+ *   2. Generic API routines, for general interface w/ histogram module
+ *   3. Routines for dumping plots to files
+ *   4. Routines for sampling (requires augmentation w/ random module)
+ *   5. Maximum likelihood fitting (requires augmentation w/ minimizer)
+ *   6. Test driver
+ *   7. Example 
+ *   8. Copyright and licence information.
  */
 #include "esl_config.h"
 
@@ -26,7 +32,7 @@
 
 
 /****************************************************************************
- * Routines for evaluating densities and distributions
+ * 1. Routines for evaluating densities and distributions
  ****************************************************************************/ 
 /* mu <= x < infinity   
  *    However, x=mu can be a problem: 
@@ -39,7 +45,6 @@
 
 
 /* Function:  esl_wei_pdf()
- * Incept:    SRE, Tue Aug  9 13:42:17 2005 [St. Louis]
  *
  * Purpose:   Calculates the Weibull pdf $P(X=x)$, given quantile <x>,
  *            offset <mu>, and parameters <lambda> and <tau>.
@@ -64,7 +69,6 @@ esl_wei_pdf(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_wei_logpdf()
- * Incept:    SRE, Tue Aug  9 13:42:07 2005 [St. Louis]
  *
  * Purpose:   Calculates the log probability density function for the
  *            Weibull, $\log P(X=x)$, given quantile <x>,
@@ -88,7 +92,6 @@ esl_wei_logpdf(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_wei_cdf()
- * Incept:    SRE, Tue Aug  9 15:19:06 2005 [St. Louis]
  *
  * Purpose:   Calculates the cumulative distribution function for the
  *            Weibull, $P(X \leq x)$, given quantile <x>,
@@ -101,12 +104,11 @@ esl_wei_cdf(double x, double mu, double lambda, double tau)
   double tly = tau * log(y);
 
   if      (x <= mu)                return 0.0;
-  else if (fabs(tly) < eslSMALLX1) return exp(tly);
+  else if (fabs(tly) < eslSMALLX1) return exp(tly); 
   else                             return 1 - exp(-exp(tly));
 }
 
 /* Function:  esl_wei_logcdf()
- * Incept:    SRE, Tue Aug  9 15:21:52 2005 [St. Louis]
  *
  * Purpose:   Calculates the log of the cumulative distribution function for a
  *            Weibull, $P(X \leq x)$, given quantile <x>,
@@ -127,7 +129,6 @@ esl_wei_logcdf(double x, double mu, double lambda, double tau)
 
 
 /* Function:  esl_wei_surv()
- * Incept:    SRE, Tue Aug  9 15:23:06 2005 [St. Louis]
  *
  * Purpose:   Calculates the survivor function, $P(X>x)$ (that is, 1-CDF,
  *            the right tail probability mass) for a Weibull
@@ -146,7 +147,6 @@ esl_wei_surv(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_wei_logsurv()
- * Incept:    SRE, Tue Aug  9 15:33:53 2005 [St. Louis]
  *
  * Purpose:   Calculates the log survivor function, $\log P(X>x)$ (that is, 
  *            log(1-CDF), the right tail log probability mass) for a 
@@ -165,7 +165,6 @@ esl_wei_logsurv(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_wei_invcdf()
- * Incept:    SRE, Sun Aug 21 14:50:00 2005 [St. Louis]
  *
  * Purpose:   Calculates the inverse CDF for a Weibull distribution
  *            with parameters <mu>, <lambda>, and <tau>, returning
@@ -182,11 +181,10 @@ esl_wei_invcdf(double p, double mu, double lambda, double tau)
 
 
 /****************************************************************************
- * Generic API routines: for general interface w/ histogram module
+ * 2. Generic API routines: for general interface w/ histogram module
  ****************************************************************************/ 
 
 /* Function:  esl_wei_generic_pdf()
- * Incept:    SRE, Thu Aug 25 08:04:48 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_wei_pdf()>, taking
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -200,7 +198,6 @@ esl_wei_generic_pdf(double x, void *params)
 }
 
 /* Function:  esl_wei_generic_cdf()
- * Incept:    SRE, Fri Aug 19 09:34:26 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_wei_cdf()>, taking
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -214,7 +211,6 @@ esl_wei_generic_cdf(double x, void *params)
 }
 
 /* Function:  esl_wei_generic_surv()
- * Incept:    SRE, Fri Aug 19 09:34:26 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_wei_surv()>, taking
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -228,7 +224,6 @@ esl_wei_generic_surv(double x, void *params)
 }
 
 /* Function:  esl_wei_generic_invcdf()
- * Incept:    SRE, Sun Aug 21 14:51:33 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_wei_invcdf()>, taking
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -245,18 +240,19 @@ esl_wei_generic_invcdf(double p, void *params)
 
 
 /****************************************************************************
- * Routines for dumping plots for files
+ * 3. Routines for dumping plots for files
  ****************************************************************************/ 
 
 /* Function:  esl_wei_Plot()
- * Incept:    SRE, Fri Aug 19 09:38:02 2005 [St. Louis]
  *
  * Purpose:   Plot some Weibull function <func> (for instance, <esl_wei_pdf()>)
  *            for Weibull parameters <mu>, <lambda>, and <tau>, for a range of
  *            quantiles x from <xmin> to <xmax> in steps of <xstep>;
  *            output to an open stream <fp> in xmgrace XY input format.
  *
- * Returns:   <eslOK>.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEWRITE> on any system write error, such as filled disk.
  */
 int
 esl_wei_Plot(FILE *fp, double mu, double lambda, double tau,
@@ -266,8 +262,8 @@ esl_wei_Plot(FILE *fp, double mu, double lambda, double tau,
   double x;
   for (x = xmin; x <= xmax; x += xstep)
     if (x > mu || tau >= 1.) /* don't try to plot at mu where pdf blows up */
-      fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda, tau));
-  fprintf(fp, "&\n");
+      if (fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda, tau)) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "weibull plot write failed");
+  if (fprintf(fp, "&\n")                                          < 0) ESL_EXCEPTION_SYS(eslEWRITE, "weibull plot write failed");
   return eslOK;
 }
 /*-------------------- end plot dumping routines ---------------------------*/
@@ -277,12 +273,11 @@ esl_wei_Plot(FILE *fp, double mu, double lambda, double tau,
 
 
 /****************************************************************************
- * Routines for sampling (requires augmentation w/ random module)
+ * 4. Routines for sampling (requires augmentation w/ random module)
  ****************************************************************************/ 
 #ifdef eslAUGMENT_RANDOM
 
 /* Function:  esl_wei_Sample()
- * Incept:    SRE, Tue Aug  9 13:42:28 2005 [St. Louis]
  *
  * Purpose:   Sample a Weibull random variate,
  *            by the transformation method.
@@ -299,7 +294,7 @@ esl_wei_Sample(ESL_RANDOMNESS *r, double mu, double lambda, double tau)
 
 
 /****************************************************************************
- * Maximum likelihood fitting
+ * 5. Maximum likelihood fitting
  ****************************************************************************/ 
 #ifdef eslAUGMENT_MINIMIZER
 /* Easel's conjugate gradient descent code allows a single void ptr to
@@ -340,7 +335,6 @@ wei_func(double *p, int nparam, void *dptr)
 }
 
 /* Function:  esl_wei_FitComplete()
- * Incept:    SRE, Tue Aug  9 13:55:37 2005 [St. Louis]
  *
  * Purpose:   Given an array of <n> samples <x[0]..x[n-1>, fit
  *            them to a stretched exponential distribution starting
@@ -448,8 +442,10 @@ wei_binned_func(double *p, int nparam, void *dptr)
       tmp = esl_wei_cdf(bi, data->mu, lambda, tau) -
             esl_wei_cdf(ai, data->mu, lambda, tau);
 
-      if (tmp == 0.) return eslINFINITY;
-      ESL_DASSERT1( (tmp > 0.)); 
+      /* for cdf~1.0, numerical roundoff error can create tmp<0 by a
+       * teensy amount; tolerate that, but catch anything worse */
+      ESL_DASSERT1( (tmp + 1e-7 > 0.)); 
+      if (tmp <= 0.) return eslINFINITY;
 
       logL += h->obs[i] * log(tmp);
     }
@@ -457,7 +453,6 @@ wei_binned_func(double *p, int nparam, void *dptr)
 }
 
 /* Function:  esl_wei_FitCompleteBinned()
- * Incept:    SRE, Sun Aug 21 15:17:45 2005 [St. Louis]
  *
  * Purpose:   Given a histogram <g> with binned observations, where each
  *            bin i holds some number of observed samples x with values from 
@@ -544,8 +539,129 @@ esl_wei_FitCompleteBinned(ESL_HISTOGRAM *h, double *ret_mu,
 /*--------------------------- end fitting ----------------------------------*/
 
 
+
+
 /****************************************************************************
- * Example main()
+ * 6. Test driver
+ ****************************************************************************/ 
+#ifdef eslWEIBULL_TESTDRIVE
+/* Compile:
+   gcc -g -Wall -I. -I ~/src/easel -L ~/src/easel -o test -DeslWEIBULL_TESTDRIVE\
+      esl_weibull.c -leasel -lm
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "easel.h"
+#include "esl_getopts.h"
+#include "esl_random.h"
+#include "esl_histogram.h"
+#include "esl_weibull.h"
+
+static ESL_OPTIONS options[] = {
+  /* name           type      default  env  range toggles reqs incomp  help                                                  docgroup*/
+  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",                     0 }, 
+  { "-l",        eslARG_REAL,   "1.0", NULL, NULL,  NULL,  NULL, NULL, "set slope of sampled variates (lambda parameter) to <x> ", 0 }, 
+  { "-m",        eslARG_REAL,  "10.0", NULL, NULL,  NULL,  NULL, NULL, "set location of sampled variates (mu parameter) to <x>",   0 }, 
+  { "-n",        eslARG_INT,  "10000", NULL, NULL,  NULL,  NULL, NULL, "set # of sampled variates to <n>",                         0 }, 
+  { "-o",    eslARG_OUTFILE,     NULL, NULL, NULL,  NULL,  NULL, NULL, "output histogram to file <f>",                             0 }, 
+  { "-s",        eslARG_INT,      "0", NULL, NULL,  NULL,  NULL, NULL, "set random number seed to <n>",                            0 },
+  { "-t",        eslARG_REAL,   "0.7", NULL, NULL,  NULL,  NULL, NULL, "set shape of sampled variates (tau parameter) to <x>",     0 }, 
+  { "-v",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "be more verbose in output",                                0 }, 
+  { "-w",        eslARG_REAL,   "0.1", NULL, NULL,  NULL,  NULL, NULL, "set width of histogram bins to <x>",                       0 }, 
+  { "--cdf",     eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of cumulative distribution",                     0 }, 
+  { "--logcdf",  eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of log cumulative distribution",                 0 }, 
+  { "--pdf",     eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of probability density",                         0 }, 
+  { "--logpdf",  eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of log probability density",                     0 }, 
+  { "--surv",    eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of survival P(s>x)",                             0 }, 
+  { "--logsurv", eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "dump plot of log survival, log(P(s>x))",                   0 }, 
+  { "--xL",      eslARG_REAL,    NULL, NULL, NULL,  NULL,  NULL, NULL, "set minimum x-axis value on dumped plots to <x>",          0 }, 
+  { "--xH",      eslARG_REAL,    NULL, NULL, NULL,  NULL,  NULL, NULL, "set maximum x-axis value on dumped plots to <x>",          0 }, 
+  { "--xS",      eslARG_REAL,    NULL, NULL, NULL,  NULL,  NULL, NULL, "set x-axis increment value on dumped plots to <x>",        0 }, 
+  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+};
+static char usage[]  = "[-options]";
+static char banner[] = "test driver for Easel's Weibull distribution module";
+
+int
+main(int argc, char **argv)
+{
+  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_RANDOMNESS *rng  = esl_randomness_Create(esl_opt_GetInteger(go, "-s"));
+  double  mu           = esl_opt_GetReal   (go, "-m");
+  double  lambda       = esl_opt_GetReal   (go, "-l");
+  double  tau          = esl_opt_GetReal   (go, "-t");
+  int     n            = esl_opt_GetInteger(go, "-n");
+  double  binwidth     = esl_opt_GetReal   (go, "-w");
+  int     plot_cdf     = esl_opt_GetBoolean(go, "--cdf");
+  int     plot_logcdf  = esl_opt_GetBoolean(go, "--logcdf");
+  int     plot_pdf     = esl_opt_GetBoolean(go, "--pdf");
+  int     plot_logpdf  = esl_opt_GetBoolean(go, "--logpdf");
+  int     plot_surv    = esl_opt_GetBoolean(go, "--surv");
+  int     plot_logsurv = esl_opt_GetBoolean(go, "--logsurv");
+  int     be_verbose   = esl_opt_GetBoolean(go, "-v");
+  char   *plotfile     = esl_opt_GetString (go, "-o");
+  ESL_HISTOGRAM  *h    = NULL;
+  int     xmin_set     = esl_opt_IsOn(go, "--xL");
+  double  xmin         = xmin_set ? esl_opt_GetReal(go, "--xL") : mu;
+  int     xmax_set     = esl_opt_IsOn(go, "--xH");
+  double  xmax         = xmax_set ? esl_opt_GetReal(go, "--xH") : mu+40*(1./lambda);
+  int     xstep_set    = esl_opt_IsOn(go, "--xH");
+  double  xstep        = xstep_set ? esl_opt_GetReal(go, "--xS") : 0.1;
+  FILE   *pfp          = stdout;
+  double  emu, elambda, etau;
+  int     i;
+  double  x;
+  double *data;
+  int     ndata;
+
+  fprintf(stderr, "## %s\n", argv[0]);
+  fprintf(stderr, "#  rng seed = %" PRIu32 "\n", esl_randomness_GetSeed(rng));
+
+  if (be_verbose) printf("Parametric:  mu = %f   lambda = %f    tau = %f\n", mu, lambda, tau);
+
+  h = esl_histogram_CreateFull(mu, 100., binwidth);
+  if (plotfile && (pfp = fopen(plotfile, "w")) == NULL) ESL_EXCEPTION(eslFAIL, "Failed to open plotfile");
+
+  for (i = 0; i < n; i++)
+    {
+      x = esl_wei_Sample(rng, mu, lambda, tau);
+      esl_histogram_Add(h, x);
+    }
+  esl_histogram_GetData(h, &data, &ndata);
+
+  esl_wei_FitComplete(data, ndata, &emu, &elambda, &etau);
+  if (be_verbose) printf("Complete data fit:  mu = %f   lambda = %f   tau = %f\n", emu, elambda, etau);
+  if (fabs( (emu-mu)/mu ) > 0.01)             ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted mu > 1%\n");
+  if (fabs( (elambda-lambda)/lambda ) > 0.10) ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted lambda > 10%\n");
+  if (fabs( (etau-tau)/tau ) > 0.10)          ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted tau > 10%\n");
+
+  esl_wei_FitCompleteBinned(h, &emu, &elambda, &etau);
+  if (be_verbose)    printf("Binned data fit:  mu = %f   lambda = %f   tau = %f\n", emu, elambda, etau);
+  if (fabs( (emu-mu)/mu ) > 0.01)             ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted mu > 1%\n");
+  if (fabs( (elambda-lambda)/lambda ) > 0.10) ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted lambda > 10%\n");
+  if (fabs( (etau-tau)/tau ) > 0.10)          ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted lambda > 10%\n");
+
+  if (plot_pdf)     esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_pdf,     xmin, xmax, xstep);
+  if (plot_logpdf)  esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logpdf,  xmin, xmax, xstep);
+  if (plot_cdf)     esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_cdf,     xmin, xmax, xstep);
+  if (plot_logcdf)  esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logcdf,  xmin, xmax, xstep);
+  if (plot_surv)    esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_surv,    xmin, xmax, xstep);
+  if (plot_logsurv) esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logsurv, xmin, xmax, xstep);
+
+  if (plotfile) fclose(pfp);
+  esl_histogram_Destroy(h);
+  esl_randomness_Destroy(rng);
+  esl_getopts_Destroy(go);
+
+  fprintf(stderr, "#  status = ok\n");
+  return 0;
+}
+#endif /*eslWEIBULL_TESTDRIVE*/
+
+/****************************************************************************
+ * 7. Example main()
  ****************************************************************************/ 
 #ifdef eslWEIBULL_EXAMPLE
 /*::cexcerpt::wei_example::begin::*/
@@ -607,142 +723,15 @@ main(int argc, char **argv)
 #endif /*eslWEIBULL_EXAMPLE*/
 
 
-
-
-
-/****************************************************************************
- * Test driver
- ****************************************************************************/ 
-#ifdef eslWEIBULL_TESTDRIVE
-/* Compile:
-   gcc -g -Wall -I. -I ~/src/easel -L ~/src/easel -o test -DeslWEIBULL_TESTDRIVE\
-    esl_weibull.c -leasel -lm
-*/
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "easel.h"
-#include "esl_random.h"
-#include "esl_histogram.h"
-#include "esl_weibull.h"
-
-int
-main(int argc, char **argv)
-{
-  ESL_HISTOGRAM  *h;
-  ESL_RANDOMNESS *r;
-  double  mu        = 10.0;
-  double  lambda    =  1.0;  
-  double  tau       =  0.7;
-  int     n         = 10000;
-  double  binwidth  = 0.1;
-  double  emu, elambda, etau;
-  int     i;
-  double  x;
-  double *data;
-  int     ndata;
-
-  int     opti;
-  int     be_verbose   = FALSE;
-  char   *plotfile     = NULL;
-  FILE   *pfp          = stdout;
-  int     plot_pdf     = FALSE;
-  int     plot_logpdf  = FALSE;
-  int     plot_cdf     = FALSE;
-  int     plot_logcdf  = FALSE;
-  int     plot_surv    = FALSE;
-  int     plot_logsurv = FALSE;
-  int     xmin_set     = FALSE;
-  double  xmin;
-  int     xmax_set     = FALSE;
-  double  xmax;
-  int     xstep_set    = FALSE;
-  double  xstep;
-
-  for (opti = 1; opti < argc && *(argv[opti]) == '-'; opti++)
-    {
-      if      (strcmp(argv[opti], "-m")  == 0) mu           = atof(argv[++opti]);
-      else if (strcmp(argv[opti], "-l")  == 0) lambda       = atof(argv[++opti]);
-      else if (strcmp(argv[opti], "-n")  == 0) n            = atoi(argv[++opti]);
-      else if (strcmp(argv[opti], "-o")  == 0) plotfile     = argv[++opti];
-      else if (strcmp(argv[opti], "-v")  == 0) be_verbose   = TRUE;
-      else if (strcmp(argv[opti], "-t")  == 0) tau          = atof(argv[++opti]);
-      else if (strcmp(argv[opti], "-w")  == 0) binwidth     = atof(argv[++opti]);
-      else if (strcmp(argv[opti], "-C")  == 0) plot_cdf     = TRUE;
-      else if (strcmp(argv[opti], "-LC") == 0) plot_logcdf  = TRUE;
-      else if (strcmp(argv[opti], "-P")  == 0) plot_pdf     = TRUE;
-      else if (strcmp(argv[opti], "-LP") == 0) plot_logpdf  = TRUE;
-      else if (strcmp(argv[opti], "-S")  == 0) plot_surv    = TRUE;
-      else if (strcmp(argv[opti], "-LS") == 0) plot_logsurv = TRUE;
-      else if (strcmp(argv[opti], "-XL") == 0) { xmin_set  = TRUE; xmin  = atof(argv[++opti]); }
-      else if (strcmp(argv[opti], "-XH") == 0) { xmax_set  = TRUE; xmax  = atof(argv[++opti]); }
-      else if (strcmp(argv[opti], "-XS") == 0) { xstep_set = TRUE; xstep = atof(argv[++opti]); }
-      else ESL_EXCEPTION(eslEINVAL, "bad option");
-    }
-
-  if (be_verbose)
-    printf("Parametric:  mu = %f   lambda = %f    tau = %f\n", mu, lambda, tau);
-
-  r = esl_randomness_Create(0);
-  h = esl_histogram_CreateFull(mu, 100., binwidth);
-  if (plotfile != NULL) {
-    if ((pfp = fopen(plotfile, "w")) == NULL) 
-      ESL_EXCEPTION(eslFAIL, "Failed to open plotfile");
-  }
-  if (! xmin_set)  xmin  = mu;
-  if (! xmax_set)  xmax  = mu+40*(1./lambda);
-  if (! xstep_set) xstep = 0.1;
-
-  for (i = 0; i < n; i++)
-    {
-      x = esl_wei_Sample(r, mu, lambda, tau);
-      esl_histogram_Add(h, x);
-    }
-  esl_histogram_GetData(h, &data, &ndata);
-
-  esl_wei_FitComplete(data, ndata, &emu, &elambda, &etau);
-  if (be_verbose)
-    printf("Complete data fit:  mu = %f   lambda = %f   tau = %f\n", 
-	   emu, elambda, etau);
-  if (fabs( (emu-mu)/mu ) > 0.01)
-     ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted mu > 1%\n");
-  if (fabs( (elambda-lambda)/lambda ) > 0.10)
-     ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted lambda > 10%\n");
-  if (fabs( (etau-tau)/tau ) > 0.10)
-     ESL_EXCEPTION(eslFAIL, "Error in (complete) fitted tau > 10%\n");
-
-  esl_wei_FitCompleteBinned(h, &emu, &elambda, &etau);
-  if (be_verbose)
-    printf("Binned data fit:  mu = %f   lambda = %f   tau = %f\n", 
-	   emu, elambda, etau);
-  if (fabs( (emu-mu)/mu ) > 0.01)
-     ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted mu > 1%\n");
-  if (fabs( (elambda-lambda)/lambda ) > 0.10)
-     ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted lambda > 10%\n");
-  if (fabs( (etau-tau)/tau ) > 0.10)
-     ESL_EXCEPTION(eslFAIL, "Error in (binned) fitted lambda > 10%\n");
-
-  if (plot_pdf)     esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_pdf,     xmin, xmax, xstep);
-  if (plot_logpdf)  esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logpdf,  xmin, xmax, xstep);
-  if (plot_cdf)     esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_cdf,     xmin, xmax, xstep);
-  if (plot_logcdf)  esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logcdf,  xmin, xmax, xstep);
-  if (plot_surv)    esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_surv,    xmin, xmax, xstep);
-  if (plot_logsurv) esl_wei_Plot(pfp, mu, lambda, tau, &esl_wei_logsurv, xmin, xmax, xstep);
-
-  if (plotfile != NULL) fclose(pfp);
-  esl_histogram_Destroy(h);
-  esl_randomness_Destroy(r);
-  return 0;
-}
-#endif /*eslWEIBULL_TESTDRIVE*/
-
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_weibull.c 827 2012-12-04 23:11:38Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_weibull.c $
  *****************************************************************/

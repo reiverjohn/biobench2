@@ -17,7 +17,7 @@ print ALIFILE << "EOF";
 # STOCKHOLM 1.0
 seq1     aaAAAA.AAAA...Cc.cCCCCCC.C..GGGGGgggg
 seq2     ..AAAAaAAAAaacCcccCCCCCCcCccGGGGG....
-#=GC RF ..AAAA.AAAA...C...CCCCCC.c..GGGGG....
+#=GC RF  ..AAAA.AAAA...C...CCCCCC.c..GGGGG....
 //
 EOF
 close ALIFILE;
@@ -25,17 +25,50 @@ close ALIFILE;
 open(ALIFILE, ">$tmppfx.2") || die "FAIL: couldn't open $tmppfx.2 for writing alifile";
 print ALIFILE << "EOF";
 # STOCKHOLM 1.0
-#=GS seq3 sequence 3 is the best!
+#=GS seq3 DE sequence 3 is the best!
 seq3     AAAAA..AAA.....CCC..CCCC....c..G..GG..GG.
 seq4     AAAAAaaAAAaccccC-CccCCCCccccccgGggGGggGGg
-#=GC RF AAAAA..AAA.....CCC..CCCC....c..G..GG..GG.
+#=GC RF  AAAAA..AAA.....CCC..CCCC~...c..G..GG..GG.
+//
+EOF
+close ALIFILE;
+
+open(ALIFILE, ">$tmppfx.3") || die "FAIL: couldn't open $tmppfx.3 for writing alifile";
+print ALIFILE << "EOF";
+# STOCKHOLM 1.0
+#=GS seq5 DE kachow
+seq5     AAAAA..AAA.....CCC..CCCC....c..G..GG..GG.
+seq6     AAAAAaaAAAaccccC-CccCCCCccccccgGggGGggGGg
+#=GC RF  AAAAA..AAA.....CCC..CCCC~~..c..G..GG..GG.
+//
+EOF
+close ALIFILE;
+
+open(ALIFILE, ">$tmppfx.4") || die "FAIL: couldn't open $tmppfx.4 for writing alifile";
+print ALIFILE << "EOF";
+# STOCKHOLM 1.0
+#=GS seq5 DE kachow
+seq5     ~~~AAAAA..AAA.....CCC..CCCC....c..G..GG..GG~~~~
+seq6     ...AAAAAaaAAAaccccC-CccCCCCccccccgGggGGggGGgggg
+#=GC RF  ...AAAAA..AAA.....CCC..CCCC~~..c..G..GG..GG....
+//
+EOF
+close ALIFILE;
+
+open(ALIFILE, ">$tmppfx.5") || die "FAIL: couldn't open $tmppfx.5 for writing alifile";
+print ALIFILE << "EOF";
+# STOCKHOLM 1.0
+seq7     ~CAAAA..AAA.....CCC..CCCC....c..G..GG..GC~
+seq8     .CAAAAaaAAAaccccC-CccCCCCccccccgGggGGggGGg
+#=GC RF  .AAAAA..AAA.....CCC..CCCC~~..c..G..GG..GG.
 //
 EOF
 close ALIFILE;
 
 open(LISTFILE, ">$tmppfx.list") || die "FAIL: couldn't open $tmppfx.list for writing list file";
-print LISTFILE "$tmppfx.1\n";
 print LISTFILE "$tmppfx.2\n";
+print LISTFILE "$tmppfx.1\n";
+print LISTFILE "$tmppfx.3\n";
 close LISTFILE;
 
 $output = `$eslalimerge -h`;
@@ -61,11 +94,10 @@ if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.C\.\.G\.\.GG\.\
 if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccccccgGggGGggGGg\.\.\./)            { die "FAIL: alignments merged incorrectly"; }
 
 $output = `$eslalimerge --rna --list $tmppfx.list 2>&1`;
-if ($? != 0)                                                                              { die "FAIL: esl-alimerge failed unexpectedly"; }
-if ($output !~ /sequence 3 is the best/)                                                  { die "FAIL: alignments merged incorrectly"; }
-if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.C\.\.G\.\.GG\.\.GGgggg/) { die "FAIL: alignments merged incorrectly"; }
-if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccccccgGggGGggGGg\.\.\./)            { die "FAIL: alignments merged incorrectly"; }
-
+if ($? != 0)                                                                                 { die "FAIL: esl-alimerge failed unexpectedly"; }
+if ($output !~ /sequence 3 is the best/)                                                     { die "FAIL: alignments merged incorrectly"; }
+if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.\.C\.\.G\.\.GG\.\.GGgggg/)  { die "FAIL: alignments merged incorrectly"; }
+if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccc\.cccgGggGGggGGg\.\.\./)             { die "FAIL: alignments merged incorrectly"; }
 system("$eslalimerge --rna -o $tmppfx.out $tmppfx.1 $tmppfx.2 > /dev/null");
 if ($? != 0)                                                                              { die "FAIL: esl-alimerge failed unexpectedly"; }
 $output = `cat $tmppfx.out`;
@@ -109,6 +141,11 @@ if ($output !~ /sequence 3 is the best/)  { die "FAIL: alignments merged incorre
 if ($output !~ /AAAAAAAACCCCCCCCGGGGG/)   { die "FAIL: alignments merged incorrectly"; }
 if ($output !~ /AAAAAAAAC\-CCCCCcGGGGG/)  { die "FAIL: alignments merged incorrectly"; }
 
+# test that hmmer3 fragment annotation is correctly handled (this WILL NOT WORK currently with --small!)
+$output = `$eslalimerge --rna $tmppfx.4 $tmppfx.5 2>&1`;
+if ($? != 0)                                                     { die "FAIL: esl-alimerge failed unexpectedly"; }
+if ($output !~ /~~~CAAAA..AAA.....CCC..CCCC....c..G..GG..GC~~~/) { die "FAIL: alignments merged incorrectly"; }
+
 # repeat all the same tests (except a2m and psiblast output) but now in small memory mode
 $output = `$eslalimerge --small --rna $tmppfx.1 $tmppfx.2 2>&1`;
 if ($? != 0)                                                                              { die "FAIL: esl-alimerge failed unexpectedly"; }
@@ -129,10 +166,10 @@ if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.C\.\.G\.\.GG\.\
 if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccccccgGggGGggGGg\.\.\./)            { die "FAIL: alignments merged incorrectly"; }
 
 $output = `$eslalimerge --small --rna --list $tmppfx.list 2>&1`;
-if ($? != 0)                                                                              { die "FAIL: esl-alimerge failed unexpectedly"; }
-if ($output !~ /sequence 3 is the best/)                                                  { die "FAIL: alignments merged incorrectly"; }
-if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.C\.\.G\.\.GG\.\.GGgggg/) { die "FAIL: alignments merged incorrectly"; }
-if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccccccgGggGGggGGg\.\.\./)            { die "FAIL: alignments merged incorrectly"; }
+if ($? != 0)                                                                                { die "FAIL: esl-alimerge failed unexpectedly"; }
+if ($output !~ /sequence 3 is the best/)                                                    { die "FAIL: alignments merged incorrectly"; }
+if ($output !~ /aaAAAA\.A\.\.AAA\.\.\.\.\.Cc\.cCC\.\.CCCC\.\.\.\.\.C\.\.G\.\.GG\.\.GGgggg/) { die "FAIL: alignments merged incorrectly"; }
+if ($output !~ /\.\.AAAA\.AaaAAAaccccC\.\.\.\-CccCCCCccc\.cccgGggGGggGGg\.\.\./)            { die "FAIL: alignments merged incorrectly"; }
 
 system("$eslalimerge --small --rna -o $tmppfx.out $tmppfx.1 $tmppfx.2 > /dev/null");
 if ($? != 0)                                                                              { die "FAIL: esl-alimerge failed unexpectedly"; }
@@ -166,6 +203,9 @@ if ($output !~ /AAAAAAAAC\-CCCCCcGGGGG/)  { die "FAIL: alignments merged incorre
 print "ok\n"; 
 unlink "$tmppfx.1";
 unlink "$tmppfx.2";
+unlink "$tmppfx.3";
+unlink "$tmppfx.4";
+unlink "$tmppfx.5";
 unlink "$tmppfx.list";
 unlink "$tmppfx.out";
 exit 0;

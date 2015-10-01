@@ -1,10 +1,12 @@
 /* Simple master/worker data parallelization using POSIX threads.
  * 
- * SVN $Id: esl_threads.h 385 2009-08-23 14:17:56Z eddys $
+ * SVN $Id: esl_threads.h 753 2012-03-09 04:09:05Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_threads.h $
  */
-#ifndef ESL_THREADS_INCLUDED
-#define ESL_THREADS_INCLUDED
+#ifndef eslTHREADS_INCLUDED
+#define eslTHREADS_INCLUDED
 
+#include <pthread.h>
 
 typedef struct {
   int             threadCount;      /* number of active worker threads                           */
@@ -33,12 +35,11 @@ extern int   esl_threads_Finished(ESL_THREADS *obj, int workeridx);
 
 extern int esl_threads_CPUCount(int *ret_ncpu);
 
-#endif /*ESL_THREADS_INCLUDED*/
-
+#endif /*eslTHREADS_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

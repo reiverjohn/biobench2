@@ -1,18 +1,40 @@
 /* Support for MPI parallelization.
  * 
- * SRE, Sat Jun  2 09:07:25 2007 [Janelia]
- * SVN $Id: esl_mpi.h 293 2008-09-19 19:08:30Z eddys $
  */
-
 #if defined(HAVE_MPI) && defined(eslLIBRARY)
 #ifndef eslMPI_INCLUDED
 #define eslMPI_INCLUDED
-#include "mpi.h"
+#include <mpi.h>
 
 #include "esl_alphabet.h"
 #include "esl_msa.h"
 #include "esl_sq.h"
 #include "esl_stopwatch.h"
+
+/* Many MPI implementations are not MPI2.2 compliant, and do not
+ * support new MPI2.2 datatypes; work around that absence. [J10/152]
+ * This configuration is better here than esl_config.h.in, because
+ * we need to #include <mpi.h> first to see if the system MPI does
+ * the right thing, and esl_config.h.in is intended to be included
+ * BEFORE any system includes.
+ */
+#if MPI_VERSION < 2 || MPI_SUBVERSION < 2
+#ifndef MPI_INT64_T
+#define MPI_INT64_T  MPI_LONG_LONG_INT
+#endif
+#ifndef MPI_UINT64_T
+#define MPI_UINT64_T MPI_UNSIGNED_LONG_LONG
+#endif
+#ifndef MPI_UINT32_T
+#define MPI_UINT32_T MPI_UNSIGNED
+#endif
+#ifndef MPI_INT16_T
+#define MPI_INT16_T  MPI_SHORT
+#endif
+#ifndef MPI_UINT8_T
+#define MPI_UINT8_T  MPI_UNSIGNED_CHAR
+#endif
+#endif /*MPI_VERSION,MPI_SUBVERSION*/
 
 /* 1. Communicating optional arrays */
 extern int esl_mpi_PackOpt(void *inbuf, int incount, MPI_Datatype type, void *pack_buf, 
@@ -45,10 +67,14 @@ extern int esl_stopwatch_MPIReduce(ESL_STOPWATCH *w, int root, MPI_Comm comm);
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SRE, Sat Jun  2 09:07:25 2007 [Janelia]
+ * SVN $Id: esl_mpi.h 842 2013-01-06 16:38:46Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_mpi.h $
  *****************************************************************/

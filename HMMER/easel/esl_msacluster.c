@@ -11,16 +11,12 @@
  * 
  *  Augmentations:
  *    eslAUGMENT_ALPHABET:  adds support for digital MSAs
- *    
  *  
- * (Why isn't this just part of the cluster or MSA modules?  cluster
- * itself is a core module, dependent only on easel. MSA clustering
- * involves at least the distance, cluster, and msa modules. So we're
- * better off separating its functionality away into a more highly
- * derived module.)
- *   
- * SRE, Sun Nov  5 10:06:53 2006 [Janelia]
- * SVN $Id: esl_msacluster.c 393 2009-09-27 12:04:55Z eddys $
+ * (Wondering why isn't this just part of the cluster or MSA modules?
+ * esl_cluster itself is a core module, dependent only on easel. MSA
+ * clustering involves at least the distance, cluster, and msa
+ * modules. We're better off separating its functionality away into a
+ * more highly derived module.)
  */
 #include "esl_config.h"
 
@@ -309,7 +305,9 @@ utest_SingleLinkage(ESL_GETOPTS *go, const ESL_MSA *msa, double maxid, int expec
 #include "easel.h"
 #include "esl_alphabet.h"
 #include "esl_getopts.h"
+#include "esl_msa.h"
 #include "esl_msacluster.h"
+#include "esl_msafile.h"
 
 static ESL_OPTIONS options[] = {
   /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
@@ -374,16 +372,17 @@ seq11 MMMMMMMMMM\n\
  */
 #include <stdio.h>
 #include "easel.h"
+#include "esl_msa.h"
 #include "esl_msacluster.h"
+#include "esl_msafile.h"
 
 int
 main(int argc, char **argv)
 {
   char        *filename   = argv[1];
   int          fmt        = eslMSAFILE_UNKNOWN; 
-  int          type       = eslUNKNOWN;
   ESL_ALPHABET *abc       = NULL;
-  ESL_MSAFILE *afp        = NULL;
+  ESLX_MSAFILE *afp       = NULL;
   ESL_MSA     *msa        = NULL;
   double       maxid      = 0.62; /* cluster at 62% identity: the BLOSUM62 rule */
   int         *assignment = NULL;
@@ -393,25 +392,12 @@ main(int argc, char **argv)
   int          status;
 
   /* Open; guess alphabet; set to digital mode */
-  status = esl_msafile_Open(filename, fmt, NULL, &afp);
-  if (status == eslENOTFOUND)    esl_fatal("Alignment file %s isn't readable", filename);
-  else if (status == eslEFORMAT) esl_fatal("Couldn't determine format of %s",  filename);
-  else if (status != eslOK)      esl_fatal("Alignment file open failed (error code %d)", status);
-
-  status = esl_msafile_GuessAlphabet(afp, &type);
-  if      (status == eslEAMBIGUOUS) esl_fatal("Couldn't guess alphabet from first alignment in %s", filename);
-  else if (status == eslEFORMAT)    esl_fatal("Alignment file parse error, line %d of file %s:\n%s\nBad line is: %s\n",
-					       afp->linenumber, afp->fname, afp->errbuf, afp->buf);
-  else if (status == eslENODATA)    esl_fatal("Alignment file %s contains no data?", filename);
-  else if (status != eslOK)         esl_fatal("Failed to guess alphabet (error code %d)\n", status);
-
-  abc = esl_alphabet_Create(type);
-  esl_msafile_SetDigital(afp, abc);
+  if ((status = eslx_msafile_Open(&abc, filename, NULL, fmt, NULL, &afp)) != eslOK)
+    eslx_msafile_OpenFailure(afp, status);
 
   /* read one alignment */
-  status = esl_msa_Read(afp, &msa);
-  if      (status == eslEFORMAT)  esl_fatal("alignment file %s: %s\n", afp->fname, afp->errbuf);
-  else if (status != eslOK)       esl_fatal("Alignment file read failed with error code %d\n", status);
+  if ((status = eslx_msafile_Read(afp, &msa)) != eslOK)
+    eslx_msafile_ReadFailure(afp, status);
 
   /* do the clustering */
   esl_msacluster_SingleLinkage(msa, maxid, &assignment, &nin, &nclusters);
@@ -424,7 +410,7 @@ main(int argc, char **argv)
   }
 
   esl_msa_Destroy(msa);
-  esl_msafile_Close(afp);
+  eslx_msafile_Close(afp);
   free(assignment);
   free(nin);
   return 0;
@@ -438,11 +424,14 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_msacluster.c 715 2011-08-03 21:04:24Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_msacluster.c $
  *****************************************************************/
 

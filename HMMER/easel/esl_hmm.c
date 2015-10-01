@@ -1,12 +1,10 @@
 /* General hidden Markov models (discrete, of alphabetic strings)
- * 
- * SRE, Fri Jul 18 09:00:14 2008 [Janelia]
- * SVN $Id$
  */
 #include "esl_config.h"
 
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "easel.h"
 #include "esl_alphabet.h"
@@ -16,7 +14,6 @@
 
 /* Function:  esl_hmm_Create()
  * Synopsis:  Allocates a new HMM.
- * Incept:    SRE, Fri Jul 18 09:01:54 2008 [Janelia]
  *
  * Purpose:   Allocates a new HMM of <M> states for
  *            generating or modeling strings in the
@@ -46,7 +43,7 @@ esl_hmm_Create(const ESL_ALPHABET *abc, int M)
 
   ESL_ALLOC(hmm->t[0],  sizeof(float) * M * (M+1));  /* state M is the implicit end state */
   ESL_ALLOC(hmm->e[0],  sizeof(float) * M * abc->K);
-  ESL_ALLOC(hmm->eo[0], sizeof(float) * M * abc->Kp);
+  ESL_ALLOC(hmm->eo[0], sizeof(float) * abc->Kp * M);
   ESL_ALLOC(hmm->pi,    sizeof(float) * (M+1));      /* initial transition to state M means a L=0 sequence */
   
   for (k = 1; k < M; k++)
@@ -67,9 +64,38 @@ esl_hmm_Create(const ESL_ALPHABET *abc, int M)
   return NULL;
 }
 
+/* Function:  esl_hmm_Clone()
+ * Synopsis:  Duplicate an HMM.
+ *
+ * Purpose:   Make a newly allocated duplicate of the HMM <hmm>,
+ *            and return a pointer to the duplicate.
+ *
+ * Throws:    <NULL> on allocation failure.
+ */
+ESL_HMM *
+esl_hmm_Clone(const ESL_HMM *hmm)
+{
+  ESL_HMM *dup = NULL;
+  int      k, x;
+
+  if ((dup = esl_hmm_Create(hmm->abc, hmm->M)) == NULL) return NULL;
+
+  for (k = 0; k < hmm->M; k++)
+    {
+      memcpy(dup->t[k],  hmm->t[k],  sizeof(float) * (hmm->M+1));
+      memcpy(dup->e[k],  hmm->e[k],  sizeof(float) * (hmm->abc->K));
+    }
+  for (x = 0; x < hmm->abc->Kp; x++)
+    {
+      memcpy(dup->eo[x], hmm->eo[x], sizeof(float) * (hmm->M));
+    }
+  memcpy(dup->pi, hmm->pi, sizeof(float) * (hmm->M+1));
+  return dup;
+}
+
+
 /* Function:  esl_hmm_Configure()
  * Synopsis:  Set an HMM's emission odds ratios, including degenerate residues.
- * Incept:    SRE, Thu Feb 26 11:49:54 2009 [Janelia]
  *
  * Purpose:   Given a parameterized <hmm>, and some background
  *            residue frequencies <fq>, set the emission odds ratios
@@ -129,7 +155,6 @@ esl_hmm_Configure(ESL_HMM *hmm, float *fq)
 
 /* Function:  esl_hmm_Destroy()
  * Synopsis:  Destroys an HMM.
- * Incept:    SRE, Fri Jul 18 09:06:22 2008 [Janelia]
  *
  * Purpose:   Frees an HMM.
  */
@@ -262,7 +287,6 @@ esl_hmx_Destroy(ESL_HMX *mx)
 
 /* Function:  esl_hmm_Emit()
  * Synopsis:  Emit a sequence from an HMM.
- * Incept:    SRE, Fri Jul 18 13:16:20 2008 [Janelia]
  *
  * Purpose:   Sample one sequence from an <hmm>, using random
  *            number generator <r>. Optionally return the sequence,
@@ -781,10 +805,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_hmm.c 694 2011-06-14 21:57:16Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_hmm.c $
  *****************************************************************/

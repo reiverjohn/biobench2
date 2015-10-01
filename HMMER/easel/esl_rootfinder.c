@@ -8,8 +8,6 @@
  *   5. Examples.
  *   6. Copyright and license information.
  * 
- * SRE, Fri Apr  6 09:14:13 2007 [Janelia]
- * SVN $Id: esl_rootfinder.c 241 2008-04-01 19:01:52Z eddys $
  */
 #include "esl_config.h"
 
@@ -333,7 +331,7 @@ esl_root_NewtonRaphson(ESL_ROOTFINDER *R, double guess, double *ret_x)
 
     /* Test for convergence. */
     if (R->fx == 0) break;	/* an exact root, lucky */
-    if ( (fabs(R->x - R->x0) < R->abs_tolerance + R->rel_tolerance*R->x) || fabs(R->fx < R->residual_tol)) break;
+    if ( (fabs(R->x - R->x0) < R->abs_tolerance + R->rel_tolerance*R->x) || fabs(R->fx) < R->residual_tol) break;
   }
 
   *ret_x = R->x;
@@ -531,10 +529,13 @@ int main(void)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_rootfinder.c 725 2011-10-13 11:27:39Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_rootfinder.c $
  *****************************************************************/

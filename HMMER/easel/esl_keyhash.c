@@ -11,12 +11,6 @@
  *    7. Example.
  *    8. Copyright and license information.
  * 
- * SRE, Sun Jan 30 09:14:21 2005; from squid's gki.c, 1999.
- * SVN $Id: esl_keyhash.c 509 2010-02-07 22:56:55Z eddys $
- *
- * Reimplemented April 2008 (J3/14) with improved hash function
- * with larger dynamic range, and improved (pointerless) internals
- * in <ESL_KEYHASH>.
  */
 #include "esl_config.h"
 
@@ -26,10 +20,11 @@
 #include <limits.h>
 
 #include "easel.h"
+#include "esl_mem.h"
 #include "esl_keyhash.h"
 
 static ESL_KEYHASH *keyhash_create(uint32_t hashsize, int init_key_alloc, int init_string_alloc);
-static uint32_t     jenkins_hash(const char *key, uint32_t hashsize);
+static uint32_t     jenkins_hash(const char *key, esl_pos_t n, uint32_t hashsize);
 static int          key_upsize(ESL_KEYHASH *kh);
 
 
@@ -39,12 +34,14 @@ static int          key_upsize(ESL_KEYHASH *kh);
 
 /* Function:  esl_keyhash_Create()
  * Synopsis:  Allocates a new keyhash.
- * Incept:    SRE, Sun Jan 30 09:17:20 2005 [St. Louis]
  *
  * Purpose:   Create a new hash table for key indexing, and returns
  *            a pointer to it.
- *
+ *            
  * Throws:    <NULL> on allocation failure.
+ *            
+ * Note:      128*sizeof(int)*3 + 2048*sizeof(char) + sizeof(ESL_KEYHASH):
+ *            about 2400 bytes for an initial KEYHASH.
  */
 ESL_KEYHASH *
 esl_keyhash_Create(void)
@@ -54,9 +51,33 @@ esl_keyhash_Create(void)
 			2048); /* initial alloc for keys totalling up to 2048 chars */
 }
 
+
+/* Function:  esl_keyhash_CreateCustom()
+ * Synopsis:  Allocate a new keyhash with customized initial allocations.
+ *
+ * Purpose:   Create a new hash table, initially allocating for
+ *            a hash table of size <hashsize> entries, <kalloc> 
+ *            keys, and a total key string length of <salloc>.
+ *            <hashsize> must be a power of 2, and all allocations
+ *            must be $\geq 0$. 
+ *            
+ *            The object will still expand as needed, so the reason to
+ *            use a customized allocation is when you're trying to
+ *            minimize memory footprint and you expect your keyhash to
+ *            be smaller than the default (of up to 128 keys, of total
+ *            length up to 2048).
+ *
+ * Throws:    <NULL> on allocation failure.
+ */
+ESL_KEYHASH *
+esl_keyhash_CreateCustom(uint32_t hashsize, int kalloc, int salloc)
+{
+  ESL_DASSERT1((hashsize && ((hashsize & (hashsize-1)) == 0))); /* hashsize is a power of 2 (bitshifting trickery) */
+  return keyhash_create(hashsize, kalloc, salloc);
+}
+
 /* Function:  esl_keyhash_Clone()
  * Synopsis:  Duplicates a keyhash.
- * Incept:    SRE, Fri Feb 15 18:57:50 2008 [Janelia]
  *
  * Purpose:   Allocates and duplicates a keyhash <kh>. Returns a
  *            pointer to the duplicate.
@@ -93,7 +114,6 @@ esl_keyhash_Clone(const ESL_KEYHASH *kh)
 
 /* Function:  esl_keyhash_Get()
  * Synopsis:  Returns a key name, given its index.
- * Incept:    SRE, Tue Jul 15 09:40:56 2008 [Janelia]
  *
  * Purpose:   Returns a pointer to the key name associated
  *            with index <idx>. The key name is a <NUL>-terminated 
@@ -108,7 +128,6 @@ esl_keyhash_Get(const ESL_KEYHASH *kh, int idx)
 
 /* Function:  esl_keyhash_GetNumber()
  * Synopsis:  Returns the total number of keys stored.
- * Incept:    SRE, Tue Jul 15 09:42:46 2008 [Janelia]
  *
  * Purpose:   Returns the total number of keys currently stored in the
  *            keyhash <kh>.
@@ -119,10 +138,23 @@ esl_keyhash_GetNumber(const ESL_KEYHASH *kh)
   return kh->nkeys;
 }
 
+/* Function:  esl_keyhash_Sizeof()
+ * Synopsis:  Returns the size of a keyhash object, in bytes.
+ */
+size_t
+esl_keyhash_Sizeof(const ESL_KEYHASH *kh)
+{
+  size_t n = 0;
+
+  n += sizeof(ESL_KEYHASH);
+  n += sizeof(int)  * kh->hashsize;
+  n += sizeof(int)  * kh->kalloc * 2;
+  n += sizeof(char) * kh->salloc;
+  return n;
+}
 
 /* Function:  esl_keyhash_Reuse()
- * Synopsis:  Reuse a keyhash.
- * Incept:    SRE, Sun Feb  8 17:24:53 2009 [Casa de Gatos]
+ * Synopsis:  Recycle a keyhash.
  *
  * Purpose:   Empties keyhash <kh> so it can be reused without
  *            creating a new one. 
@@ -144,7 +176,6 @@ esl_keyhash_Reuse(ESL_KEYHASH *kh)
 
 /* Function:  esl_keyhash_Destroy()
  * Synopsis:  Frees a keyhash.
- * Incept:    SRE, Sun Jan 30 09:19:19 2005 [St. Louis]
  *
  * Purpose:   Destroys <kh>.
  *
@@ -163,7 +194,6 @@ esl_keyhash_Destroy(ESL_KEYHASH *kh)
 
 /* Function:  esl_keyhash_Dump()
  * Synopsis:  Dumps debugging information about a keyhash.
- * Incept:    SRE, Sun Jan 30 09:42:22 2005 [St. Louis]
  *
  * Purpose:   Mainly for debugging purposes. Dump 
  *            some information about the hash table <kh>
@@ -198,6 +228,7 @@ esl_keyhash_Dump(FILE *fp, const ESL_KEYHASH *kh)
   fprintf(fp, "Keys allocated for:     %d\n", kh->kalloc);
   fprintf(fp, "Key string space alloc: %d\n", kh->salloc);
   fprintf(fp, "Key string space used:  %d\n", kh->sn);
+  fprintf(fp, "Total obj size, bytes:  %d\n", (int) esl_keyhash_Sizeof(kh));
 }
 /*--------------- end, <ESL_KEYHASH> object ---------------------*/
 
@@ -208,15 +239,17 @@ esl_keyhash_Dump(FILE *fp, const ESL_KEYHASH *kh)
  *# 2. Storing and retrieving keys 
  *****************************************************************/ 
 
-/* Function: esl_key_Store()
+/* Function: esl_keyhash_Store()
  * Synopsis: Store a key and get a key index for it.
- * Incept:   SRE, Sun Jan 30 09:21:13 2005 [St. Louis]
  *
- * Purpose:  Store a string <key> in the key index hash table <kh>.
+ * Purpose:  Store a string <key> of length <n> in the key index hash table <kh>.
  *           Associate it with a unique key index, counting from
  *           0. It's this index that lets us map the hashed keys to
  *           integer-indexed C arrays, clumsily emulating Perl's
  *           hashes. Optionally returns the index through <opt_index>.
+ *           
+ *           <key>, <n> follow the standard idiom for strings and
+ *           unterminated buffers.
  *
  * Returns:  <eslOK> on success; stores <key> in <kh>; <opt_index> is 
  *           returned, set to the next higher index value.
@@ -226,16 +259,17 @@ esl_keyhash_Dump(FILE *fp, const ESL_KEYHASH *kh)
  * Throws:   <eslEMEM> on allocation failure, and sets <opt_index> to -1.
  */
 int
-esl_key_Store(ESL_KEYHASH *kh, const char *key, int *opt_index)
+esl_keyhash_Store(ESL_KEYHASH *kh, const char *key, esl_pos_t n, int *opt_index)
 {
-  uint32_t val = jenkins_hash(key, kh->hashsize);
-  int n        = strlen(key);
+  uint32_t val = jenkins_hash(key, n, kh->hashsize);
   int idx;
   int status;
+  
+  if (n == -1) n = strlen(key);
 
   /* Was this key already stored?  */
   for (idx = kh->hashtable[val]; idx != -1; idx = kh->nxt[idx])
-    if (strcmp(key, kh->smem + kh->key_offset[idx]) == 0) 
+    if (esl_memstrcmp(key, n, kh->smem + kh->key_offset[idx]))
       { 
 	if (opt_index != NULL) *opt_index = idx; 
 	return eslEDUP; 
@@ -244,25 +278,23 @@ esl_key_Store(ESL_KEYHASH *kh, const char *key, int *opt_index)
   /* Reallocate key ptr/index memory if needed */
   if (kh->nkeys == kh->kalloc) 
     { 
-      void *p;
-      ESL_RALLOC(kh->key_offset, p, sizeof(int)*kh->kalloc*2);
-      ESL_RALLOC(kh->nxt,        p, sizeof(int)*kh->kalloc*2);
+      ESL_REALLOC(kh->key_offset, sizeof(int)*kh->kalloc*2);
+      ESL_REALLOC(kh->nxt,        sizeof(int)*kh->kalloc*2);
       kh->kalloc *= 2;
     }
 
   /* Reallocate key string memory if needed */
   while (kh->sn + n + 1 > kh->salloc)
     {
-      void *p;
-      ESL_RALLOC(kh->smem, p, sizeof(char) * kh->salloc * 2);
+      ESL_REALLOC(kh->smem, sizeof(char) * kh->salloc * 2);
       kh->salloc *= 2;
     }
 
   /* Copy the key, assign its index */
   idx                 = kh->nkeys;
   kh->key_offset[idx] = kh->sn;
-  strcpy(kh->smem + kh->key_offset[idx], key);
   kh->sn             += n+1;
+  esl_memstrcpy(key, n, kh->smem + kh->key_offset[idx]);
   kh->nkeys++;
 
   /* Insert new element at head of the approp linked list in hashtable */
@@ -281,9 +313,8 @@ esl_key_Store(ESL_KEYHASH *kh, const char *key, int *opt_index)
   return status;
 }
 
-/* Function:  esl_key_Lookup()
+/* Function:  esl_keyhash_Lookup()
  * Synopsis:  Look up a key's array index.
- * Incept:    SRE, Sun Jan 30 09:38:53 2005 [St. Louis]
  *
  * Purpose:   Look up a <key> in the hash table <kh>.
  *            If <key> is found, return <eslOK>, and optionally set <*opt_index>
@@ -292,9 +323,9 @@ esl_key_Store(ESL_KEYHASH *kh, const char *key, int *opt_index)
  *            optionally set <*opt_index> to -1.
  */
 int
-esl_key_Lookup(const ESL_KEYHASH *kh, const char *key, int *opt_index)
+esl_keyhash_Lookup(const ESL_KEYHASH *kh, const char *key, esl_pos_t n, int *opt_index)
 {
-  uint32_t val  = jenkins_hash(key, kh->hashsize);
+  uint32_t val  = jenkins_hash(key, n, kh->hashsize);
   int      idx;
 
   for (idx = kh->hashtable[val]; idx != -1; idx = kh->nxt[idx])
@@ -319,7 +350,6 @@ esl_key_Lookup(const ESL_KEYHASH *kh, const char *key, int *opt_index)
  *****************************************************************/ 
 
 /* keyhash_create()
- * SRE, Sun Jan 30 09:45:47 2005 [St. Louis]
  * 
  * The real creation function, which takes arguments for memory sizes.
  * This is abstracted to a static function because it's used by both
@@ -367,7 +397,6 @@ keyhash_create(uint32_t hashsize, int init_key_alloc, int init_string_alloc)
 
 
 /* jenkins_hash()
- * SRE, Wed Apr 16 09:31:10 2008
  * 
  * The hash function.
  * This is Bob Jenkins' "one at a time" hash.
@@ -379,14 +408,28 @@ keyhash_create(uint32_t hashsize, int init_key_alloc, int init_string_alloc)
  * [2]  http://www.burtleburtle.net/bob/hash/doobs.html
  */
 static uint32_t
-jenkins_hash(const char *key, uint32_t hashsize)
+jenkins_hash(const char *key, esl_pos_t n, uint32_t hashsize)
 {
-  uint32_t val = 0;
-  for (; *key != '\0'; key++)
-    {
-      val += *key;
-      val += (val << 10);
-      val ^= (val >>  6);
+  esl_pos_t pos;
+  uint32_t  val = 0;
+
+  if (n == -1) 
+    { /* string version */
+      for (; *key != '\0'; key++)
+	{
+	  val += *key;
+	  val += (val << 10);
+	  val ^= (val >>  6);
+	}
+    } 
+  else 
+    { /* buffer version */
+      for (pos = 0; pos < n; pos++)
+      {
+	val += key[pos];
+	val += (val << 10);
+	val ^= (val >>  6);
+      }
     }
   val += (val <<  3);
   val ^= (val >> 11);
@@ -396,7 +439,6 @@ jenkins_hash(const char *key, uint32_t hashsize)
 }
 
 /* key_upsize()
- * SRE, Sun Jan 30 09:50:39 2005 [St. Louis]
  *
  * Grow the hash table to the next available size.
  *
@@ -432,7 +474,7 @@ key_upsize(ESL_KEYHASH *kh)
   /* Store all the keys again. */
   for (i = 0; i < kh->nkeys; i++) 
     {
-      val                = jenkins_hash(kh->smem + kh->key_offset[i], kh->hashsize);
+      val                = jenkins_hash(kh->smem + kh->key_offset[i], -1, kh->hashsize);
       kh->nxt[i]         = kh->hashtable[val];
       kh->hashtable[val] = i;
     }
@@ -493,7 +535,7 @@ main(int argc, char **argv)
     {
       s = buf;
       esl_strtok(&s, " \t\r\n", &tok);
-      esl_key_Store(kh, tok, &idx);
+      esl_keyhash_Store(kh, tok, -1, &idx);
       nstored++;
     }
   fclose(fp);
@@ -509,7 +551,7 @@ main(int argc, char **argv)
       s = buf;
       esl_strtok(&s, " \t\r\n", &tok);
 
-      if (esl_key_Lookup(kh, tok, &idx) == eslOK) nshared++;
+      if (esl_keyhash_Lookup(kh, tok, -1, &idx) == eslOK) nshared++;
       nsearched++;
     }
   fclose(fp);
@@ -717,7 +759,7 @@ main(int argc, char **argv)
   nk = 0;
   for (i = 0; i < NSTORE; i++)
     {
-      status = esl_key_Store(h, keys[i], &j);
+      status = esl_keyhash_Store(h, keys[i], -1, &j);
       if      (status == eslOK)   { assert(j==nk); nk++; }
       else if (status == eslEDUP) { assert(j<nk); }
       else esl_fatal("store failed.");
@@ -727,9 +769,9 @@ main(int argc, char **argv)
   nmissed = 0;
   for (i = NSTORE; i < NSTORE+NLOOKUP; i++)
     {
-      if (esl_key_Lookup(h, keys[i], &j) != eslOK) nmissed++;
+      if (esl_keyhash_Lookup(h, keys[i], -1, &j) != eslOK) nmissed++;
     }
-  esl_key_Lookup(h, keys[42], &j);
+  esl_keyhash_Lookup(h, keys[42], -1, &j);
   assert(j==k42);
 
   /* 
@@ -776,7 +818,7 @@ main(int argc, char **argv)
     {
       s = buf;
       esl_strtok(&s, " \t\r\n", &tok);
-      esl_key_Store(h, tok, &idx);
+      esl_keyhash_Store(h, tok, -1, &idx);
       nstored++;
     }
   fclose(fp);
@@ -789,7 +831,7 @@ main(int argc, char **argv)
     {
       s = buf;
       esl_strtok(&s, " \t\r\n", &tok);
-      if (esl_key_Lookup(h, tok, &idx) == eslOK) nshared++;
+      if (esl_keyhash_Lookup(h, tok, -1, &idx) == eslOK) nshared++;
       nsearched++;
     }
   fclose(fp);
@@ -805,10 +847,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_keyhash.c 729 2011-11-02 12:46:42Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_keyhash.c $
  *****************************************************************/

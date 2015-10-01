@@ -1,4 +1,4 @@
-.TH "hmmsearch" 1 "@HMMER_DATE@" "HMMER @HMMER_VERSION@" "HMMER Manual"
+.TH "hmmsearch" 1 "February 2015" "HMMER 3.1b2" "HMMER Manual"
 
 .SH NAME
 hmmsearch - search profile(s) against a sequence database
@@ -17,18 +17,28 @@ hmmsearch - search profile(s) against a sequence database
 .B hmmsearch 
 is used to search one or more profiles against a sequence database.
 For each profile in 
-.I <hmmfile>,
-use that query profile to search the target database of profiles in
-.I <seqdb>,
+.IR <hmmfile> ,
+use that query profile to search the target database of sequences in
+.IR <seqdb> ,
 and output ranked lists of the sequences with the most significant
 matches to the profile.
+To build profiles from multiple alignments, see
+.BR hmmbuild .
 
-.PP
-The 
-.I <hmmfile>
-may contain more than one profile. To build profiles from multiple
-alignments, see
-.B hmmbuild.
+.PP 
+Either the query
+.I <hmmfile> 
+or the target
+.I <seqdb> 
+may be '-' (a dash character), in which case
+the query profile or target database input will be read from a <stdin> pipe instead of from a
+file. Only one input source can come through <stdin>, not both.
+An exception is that if the
+.I <hmmfile> 
+contains more than one profile query, then
+.I <seqdb> 
+cannot come from <stdin>, because we can't rewind the
+streaming target database to search it with another profile. 
 
 .PP
 The output format is designed to be human-readable, but is often so
@@ -65,9 +75,9 @@ instead of the default stdout.
 .TP
 .BI -A " <f>"
 Save a multiple alignment of all significant hits (those satisfying
-.I inclusion thresholds)
+.IR "inclusion thresholds" )
 to the file 
-.I <f>.
+.IR <f> .
 
 .TP 
 .BI --tblout " <f>"
@@ -110,9 +120,9 @@ characters per line. The default is 120.
 
 Reporting thresholds control which hits are reported in output files
 (the main output,
-.I --tblout,
+.IR --tblout ,
 and 
-.I --domtblout).
+.IR --domtblout ).
 Sequence hits and domain hits are ranked by statistical significance
 (E-value) and output is generated in two sections called per-target
 and per-domain output. In per-target output, by default, all
@@ -127,7 +137,7 @@ E-value reporting thresholds, or to use bit score thresholds instead.
 .TP
 .BI -E " <x>"
 In the per-target output, report target sequences with an E-value of <=
-.I <x>. 
+.IR <x> . 
 The default is 10.0, meaning that on average, about 10 false positives
 will be reported per query, so you can see the top of the noise
 and decide for yourself if it's really noise.
@@ -136,14 +146,14 @@ and decide for yourself if it's really noise.
 .BI -T " <x>"
 Instead of thresholding per-profile output on E-value, instead
 report target sequences with a bit score of >=
-.I <x>.
+.IR <x> .
 
 .TP
 .BI --domE " <x>"
 In the per-domain output, for target sequences that have already satisfied
 the per-profile reporting threshold, report individual domains
 with a conditional E-value of <=
-.I <x>. 
+.IR <x> . 
 The default is 10.0. 
 A conditional E-value means the expected number of additional false
 positive domains in the smaller search space of those comparisons that
@@ -155,7 +165,7 @@ have at least one homologous domain already).
 .BI --domT " <x>"
 Instead of thresholding per-domain output on E-value, instead
 report domains with a bit score of >=
-.I <x>.
+.IR <x> .
 
 
 
@@ -240,7 +250,7 @@ the highest-scoring known false positive.
 
 .TP
 .B --cut_tc
-Use the NC (trusted cutoff) bit score thresholds in the model to set
+Use the TC (trusted cutoff) bit score thresholds in the model to set
 per-sequence (TC1) and per-domain (TC2) reporting and inclusion
 thresholds. TC thresholds are generally considered to be the score of
 the lowest-scoring known true positive that is above all known false
@@ -308,48 +318,48 @@ Turn off the null2 score corrections for biased composition.
 .TP
 .BI -Z " <x>"
 Assert that the total number of targets in your searches is
-.I <x>,
+.IR <x> ,
 for the purposes of per-sequence E-value calculations,
 rather than the actual number of targets seen. 
 
 .TP
 .BI --domZ " <x>"
 Assert that the total number of targets in your searches is
-.I <x>,
+.IR <x> ,
 for the purposes of per-domain conditional E-value calculations,
 rather than the number of targets that passed the reporting thresholds.
 
 .TP
 .BI --seed " <n>"
 Set the random number seed to 
-.I <n>.
+.IR <n> .
 Some steps in postprocessing require Monte Carlo simulation.  The
 default is to use a fixed seed (42), so that results are exactly
 reproducible. Any other positive integer will give different (but also
 reproducible) results. A choice of 0 uses a randomly chosen seed.
 
 .TP
-.BI --qformat " <s>"
-Assert that the query sequence file is in format 
-.I <s>. 
+.BI --tformat " <s>"
+Assert that the target sequence database file is in format 
+.IR <s> . 
 Accepted formats include 
-.I fasta, 
-.I embl, 
-.I genbank,
-.I ddbj, 
-.I uniprot,
-.I stockholm, 
-.I pfam, 
-.I a2m, 
+.IR fasta , 
+.IR embl , 
+.IR genbank ,
+.IR ddbj , 
+.IR uniprot ,
+.IR stockholm , 
+.IR pfam , 
+.IR a2m , 
 and 
-.I afa.
+.IR afa .
 The default is to autodetect the format of the file.
 
 
 .TP
 .BI --cpu " <n>"
 Set the number of parallel worker threads to 
-.I <n>.
+.IR <n> .
 By default, HMMER sets this to the number of CPU cores it detects in
 your machine - that is, it tries to maximize the use of your available
 processor cores. Setting 
@@ -357,7 +367,7 @@ processor cores. Setting
 higher than the number of available cores is of little if any value,
 but you may want to set it to something less. You can also control
 this number by setting an environment variable, 
-.I HMMER_NCPU.
+.IR HMMER_NCPU .
 
 This option is only available if HMMER was compiled with POSIX threads
 support. This is the default, but it may have been turned off at
@@ -370,13 +380,13 @@ For debugging the MPI master/worker version: pause after start, to
 enable the developer to attach debuggers to the running master and
 worker(s) processes. Send SIGCONT signal to release the pause.
 (Under gdb: 
-.I (gdb) signal SIGCONT)
+.IR "(gdb) signal SIGCONT" )
 (Only available if optional MPI support was enabled at compile-time.)
 
 .TP
 .BI --mpi
 Run in MPI master/worker mode, using
-.I mpirun.
+.IR mpirun .
 (Only available if optional MPI support was enabled at compile-time.)
 
 
@@ -395,21 +405,21 @@ for programs in the HMMER package.
 .PP
 For complete documentation, see the user guide that came with your
 HMMER distribution (Userguide.pdf); or see the HMMER web page
-(@HMMER_URL@).
+().
 
 
 
 .SH COPYRIGHT
 
 .nf
-@HMMER_COPYRIGHT@
-@HMMER_LICENSE@
+Copyright (C) 2015 Howard Hughes Medical Institute.
+Freely distributed under the GNU General Public License (GPLv3).
 .fi
 
 For additional information on copyright and licensing, see the file
 called COPYRIGHT in your HMMER source distribution, or see the HMMER
 web page 
-(@HMMER_URL@).
+().
 
 
 .SH AUTHOR

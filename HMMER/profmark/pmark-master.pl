@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#! /usr/bin/perl -w
 
 # The top level script that runs a pmark benchmark.
 #
@@ -61,7 +61,9 @@ system("mkdir $resultdir");
 
 # Suck in the master table
 open(BENCHMARK_TBL, $tbl) || die;
-$n = 0;
+$n    = 0;
+$pid  = 0;
+$nseq = 0;
 while (<BENCHMARK_TBL>) 
 {
     ($msaname[$n], $pid, $L, $nseq) = split;

@@ -10,9 +10,6 @@
  *   7. Test driver.
  *   8. Examples.
  *   9. Copyright notice and license.
- * 
- * SVN $Id: esl_tree.c 534 2010-03-01 18:13:46Z eddys $
- * SRE, Tue May  2 14:08:42 2006 [St. Louis]
  */
 #include "esl_config.h"
 
@@ -29,11 +26,10 @@
 #include "esl_random.h"
 
 /*****************************************************************
- * 1. The ESL_TREE object.
+ *# 1. The ESL_TREE object.
  *****************************************************************/
 
 /* Function:  esl_tree_Create()
- * Incept:    SRE, Tue May  2 14:10:17 2006 [St. Louis]
  *
  * Purpose:   Allocate an empty tree structure for <ntaxa> taxa
  *            and return a pointer to it. <ntaxa> must be $\geq 2$.
@@ -108,7 +104,6 @@ esl_tree_Create(int ntaxa)
 }
 
 /* Function:  esl_tree_CreateGrowable()
- * Incept:    SRE, Mon Nov 13 14:22:22 2006 [Janelia]
  *
  * Purpose:   Allocate a growable tree structure for an initial
  *            allocation of <nalloc> taxa, and return a pointer to it.
@@ -133,7 +128,6 @@ esl_tree_CreateGrowable(int nalloc)
 
 
 /* Function:  esl_tree_CreateFromString()
- * Incept:    SRE, Tue Nov 14 10:01:08 2006 [Janelia]
  *
  * Purpose:   A convenience for making small test cases in the test
  *            suites: given the contents of a Newick file as a 
@@ -152,7 +146,7 @@ esl_tree_CreateFromString(char *s)
   ESL_TREE *T           = NULL;
 
   if (esl_tmpfile(tmpfile, &fp)         != eslOK) goto ERROR;
-  fprintf(fp, "%s", s);
+  fputs(s, fp);
   rewind(fp);
   if (esl_tree_ReadNewick(fp, NULL, &T) != eslOK) goto ERROR;
   fclose(fp);
@@ -167,7 +161,6 @@ esl_tree_CreateFromString(char *s)
 
 
 /* Function:  esl_tree_Grow()
- * Incept:    SRE, Fri Oct 27 08:49:47 2006 [Janelia]
  *
  * Purpose:   Given a tree <T>, make sure it can hold one more taxon;
  *            reallocate internally if necessary by doubling the
@@ -245,7 +238,6 @@ esl_tree_Grow(ESL_TREE *T)
 
 
 /* Function:  esl_tree_SetTaxaParents()
- * Incept:    SRE, Fri Sep 22 13:39:49 2006 [Janelia]
  *
  * Purpose:   Constructs the <T->taxaparent[]> array in the tree
  *            structure <T>, by an O(N) traversal of the tree.
@@ -284,7 +276,6 @@ esl_tree_SetTaxaParents(ESL_TREE *T)
   
 
 /* Function:  esl_tree_SetCladesizes()
- * Incept:    SRE, Thu Nov  9 10:03:17 2006 [Janelia]
  *
  * Purpose:   Constructs the <T->cladesize[]> array in tree structure
  *            <T>. Upon successful return, <T->cladesize[i]> is the
@@ -321,7 +312,6 @@ esl_tree_SetCladesizes(ESL_TREE *T)
 
 
 /* Function:  esl_tree_SetTaxonlabels()
- * Incept:    SRE, Tue Nov 14 19:29:00 2006 [UA 921, IAD-SFO]
  *
  * Purpose:   Given an array of taxon names <names[0..N-1]> with the
  *            same order and number as the taxa in tree <T>, make a
@@ -376,7 +366,6 @@ esl_tree_SetTaxonlabels(ESL_TREE *T, char **names)
 
 /* Function:  esl_tree_RenumberNodes()
  * Synopsis:  Assure nodes are numbered in preorder.
- * Incept:    SRE, Fri Oct 27 09:33:26 2006 [Janelia]
  *
  * Purpose:   Given a tree <T> whose internal nodes might be numbered in
  *            any order, with the sole requirement that node 0 is the
@@ -400,7 +389,6 @@ esl_tree_RenumberNodes(ESL_TREE *T)
   int        status;
   int        needs_rearranging = FALSE;
 
-
   /* Pass 1. Preorder traverse of T by its children links;
    *         construct map[old] -> new.
    */
@@ -421,9 +409,8 @@ esl_tree_RenumberNodes(ESL_TREE *T)
    *         (traversal order doesn't matter here)
    */
   if (( T2 = esl_tree_Create(T->nalloc)) == NULL) { status = eslEMEM; goto ERROR; };
-  T2->N = T->N;
   if (T->nodelabel   != NULL) {
-    ESL_ALLOC(T2->nodelabel,   sizeof(char *) * (T2->nalloc-1));
+    ESL_ALLOC(T2->nodelabel,  sizeof(char *) * (T2->nalloc-1));
     for (v = 0; v < T2->nalloc-1; v++) T2->nodelabel[v] = NULL;
   }
   if (T->taxaparent != NULL)  {
@@ -442,15 +429,15 @@ esl_tree_RenumberNodes(ESL_TREE *T)
       T2->rd[map[v]]     = T->rd[v];
   
       if (T->taxaparent != NULL) {
-	if (T->left[v]  <= 0) T2->taxaparent[T->left[v]]  = map[v];
-	if (T->right[v] <= 0) T2->taxaparent[T->right[v]] = map[v];
+	if (T->left[v]  <= 0) T2->taxaparent[-(T->left[v])]  = map[v];
+	if (T->right[v] <= 0) T2->taxaparent[-(T->right[v])] = map[v];
       }
 
-      if (T->nodelabel != NULL)
-	T2->nodelabel[map[v]] = T2->nodelabel[v];
+      if (T->nodelabel != NULL) 
+	esl_strdup(T->nodelabel[v], -1, &(T2->nodelabel[map[v]]));
     }
 
-  /* Finally, swap the new guts of T2 with the old guts of T;
+ /* Finally, swap the new guts of T2 with the old guts of T;
    * destroy T2 and return. T is now renumbered.
    */
   ESL_SWAP(T->parent,     T2->parent,      int *);
@@ -475,7 +462,6 @@ esl_tree_RenumberNodes(ESL_TREE *T)
 }
 
 /* Function:  esl_tree_VerifyUltrametric()
- * Incept:    SRE, Tue Nov  7 15:25:40 2006 [Janelia]
  *
  * Purpose:   Verify that tree <T> is ultrametric. 
  *
@@ -529,7 +515,6 @@ esl_tree_VerifyUltrametric(ESL_TREE *T)
 
 
 /* Function:  esl_tree_Validate()
- * Incept:    SRE, Thu Nov  9 11:03:04 2006 [Janelia]
  *
  * Purpose:   Validates the integrity of the data structure in <T>.
  *            Returns <eslOK> if the internal data in <T> are
@@ -622,7 +607,6 @@ esl_tree_Validate(ESL_TREE *T, char *errbuf)
 
 
 /* Function:  esl_tree_Destroy()
- * Incept:    SRE, Tue May  2 14:18:31 2006 [St. Louis]
  *
  * Purpose:   Frees an <ESL_TREE> object.
  */
@@ -650,7 +634,7 @@ esl_tree_Destroy(ESL_TREE *T)
 
 
 /*****************************************************************
- * 2. Newick format i/o
+ *# 2. Newick format i/o
  *****************************************************************/
 
 /* newick_validate_unquoted():
@@ -662,6 +646,7 @@ static int
 newick_validate_unquoted(char *label)
 {
   char *sptr;
+
   for (sptr = label; *sptr != '\0'; sptr++)
     {
       if (! isprint(*sptr))                  return eslFAIL;
@@ -696,8 +681,8 @@ newick_write_unquoted(FILE *fp, char *label)
 
   for (sptr = label; *sptr != '\0'; sptr++)
     {
-      if (*sptr == ' ') fputc('_',   fp);
-      else              fputc(*sptr, fp);
+      if (*sptr == ' ') { if (fputc('_',   fp) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed"); }
+      else              { if (fputc(*sptr, fp) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed"); }
     }
   return eslOK;
 }
@@ -710,13 +695,13 @@ newick_write_quoted(FILE *fp, char *label)
 {
   char *sptr;
 
-  fputc('\'', fp);
+  if (fputc('\'', fp) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed");
   for (sptr = label; *sptr != '\0'; sptr++)
     {
-      if (*sptr == '\'') fprintf(fp, "''");
-      else               fputc(*sptr, fp);        
+      if (*sptr == '\'') { if (fprintf(fp, "''") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed"); }
+      else               { if (fputc(*sptr, fp)  < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed"); }
     }
-  fputc('\'', fp);
+  if (fputc('\'', fp) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed");
   return eslOK;
 }
 
@@ -730,21 +715,22 @@ newick_write_quoted(FILE *fp, char *label)
 static int
 newick_write_taxonlabel(FILE *fp, ESL_TREE *T, int v)
 {
+  int status;
+
   if (T->taxonlabel == NULL || T->taxonlabel[v] == NULL)
     {
-      if (T->show_numeric_taxonlabels)
-	fprintf(fp, "%d", v);
+      if (T->show_numeric_taxonlabels && fprintf(fp, "%d", v) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed");
       return eslOK;
     }
 
   if (! T->show_quoted_labels && newick_validate_unquoted(T->taxonlabel[v]) == eslOK)
-    newick_write_unquoted(fp, T->taxonlabel[v]);
+    status = newick_write_unquoted(fp, T->taxonlabel[v]);
   else if (newick_validate_quoted(T->taxonlabel[v]) == eslOK)
-    newick_write_quoted(fp, T->taxonlabel[v]);
+    status = newick_write_quoted(fp, T->taxonlabel[v]);
   else
     ESL_EXCEPTION(eslECORRUPT, "bad taxon label");
 
-  return eslOK;
+  return status;
 }
 
 /* newick_write_nodelabel():
@@ -758,18 +744,20 @@ newick_write_taxonlabel(FILE *fp, ESL_TREE *T, int v)
 static int
 newick_write_nodelabel(FILE *fp, ESL_TREE *T, int v)
 {
+  int status;
+
   if (T->nodelabel    == NULL)      return eslOK;
   if (T->nodelabel[v] == NULL)      return eslOK;
   if (T->show_node_labels != TRUE)  return eslOK;
   
   if (! T->show_quoted_labels && newick_validate_unquoted(T->nodelabel[v]) == eslOK)
-    newick_write_unquoted(fp, T->nodelabel[v]);
+    status = newick_write_unquoted(fp, T->nodelabel[v]);
   else if (newick_validate_quoted(T->nodelabel[v]) == eslOK)
-    newick_write_quoted(fp, T->nodelabel[v]);
+    status = newick_write_quoted(fp, T->nodelabel[v]);
   else
-    ESL_EXCEPTION(eslECORRUPT, "bad node label");
+    ESL_EXCEPTION(eslECORRUPT, "bad node label\n");
 
-  return eslOK;
+  return status;
 }
 
 /* newick_write_branchlength()
@@ -799,37 +787,44 @@ newick_write_branchlength(FILE *fp, ESL_TREE *T, int v)
       else    ESL_EXCEPTION(eslECORRUPT, "Can't find branch length");
     }
 
-  fprintf(fp, ":%f", branchlength);
+  if (fprintf(fp, ":%f", branchlength) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "newick tree write failed");
   return eslOK;
 }
 
 /* Function:  esl_tree_WriteNewick()
- * Incept:    SRE, Fri Oct  6 14:35:51 2006 [Janelia]
  *
  * Purpose:   Writes tree <T> to stream <fp> in Newick format.
  *  
- *            Certain options are set in <T> to control output style.
+ *            Certain options are set in <T> to control output style, 
+ *            as follows.
+ *
  *            If <T->show_unrooted> is <TRUE>, <T> is printed as an
  *            unrooted tree starting with a trifurcation, a la PHYLIP
- *            format (default=<FALSE>). If <T->show_node_labels> is
- *            <TRUE>, then labels are shown for internal nodes, if any
- *            are available (default=<TRUE>). If
- *            <T->show_branchlengths> is <TRUE>, then branch lengths
- *            are shown, as opposed to just printing a labeled
- *            topology (default=<TRUE>). If
- *            <T->show_root_branchlength> is also <TRUE>, then a 0.0
- *            branchlength is shown to the root node, a la Hein's
- *            TreeAlign Newick format (default=<FALSE>). If
- *            <T->show_quoted_labels> is <TRUE>, then all labels are
- *            shown in Newick's quoted format, as opposed to only
+ *            format (default=<FALSE>).
+ *
+ *            If <T->show_node_labels> is <TRUE>, then labels are
+ *            shown for internal nodes, if any are available
+ *            (default=<TRUE>).
+ *            
+ *            If <T->show_branchlengths> is <TRUE>, then branch
+ *            lengths are shown, as opposed to just printing a labeled
+ *            topology (default=<TRUE>).
+ *            
+ *            If <T->show_root_branchlength> is also <TRUE>, then a
+ *            0.0 branchlength is shown to the root node, a la Hein's
+ *            TreeAlign Newick format (default=<FALSE>).
+ *            
+ *            If <T->show_quoted_labels> is <TRUE>, then all labels
+ *            are shown in Newick's quoted format, as opposed to only
  *            using quoted labels where necessary (default=<FALSE>).
  *
  * Returns:   <eslOK> on success.
  *
  * Throws:    <eslEMEM> on allocation error.
+ *            <eslEWRITE> on any system write error.
  *            <eslEINCONCEIVABLE> on internal error.
  *
- * Xref:      STL11/74
+ * Xref:      SRE:STL11/74
  */
 int
 esl_tree_WriteNewick(FILE *fp, ESL_TREE *T)
@@ -853,7 +848,7 @@ esl_tree_WriteNewick(FILE *fp, ESL_TREE *T)
    * on output, if the tree followed the correct convention of having
    * a T->rd[0] = 0.0.
    */
-  fputc('(', fp);
+  if (fputc('(', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
   if (T->show_unrooted && T->right[0] > 0)
     {
       v = T->right[0];
@@ -877,7 +872,10 @@ esl_tree_WriteNewick(FILE *fp, ESL_TREE *T)
    */
   while ((status = esl_stack_CPop(cs, &c)) == eslOK)
     {
-      if (c == ',') { fputc(',', fp); continue; } /* comma doesn't have a v stacked with it */
+      if (c == ',') {  /* comma doesn't have a v stacked with it */
+	if (fputc(',', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
+	continue; 
+      }
 
       if ((status = esl_stack_IPop(vs, &v)) != eslOK) goto ERROR;
 
@@ -885,7 +883,7 @@ esl_tree_WriteNewick(FILE *fp, ESL_TREE *T)
       case 'x':			/* a subtree, which could be a node or a taxon: */
 	if (v > 0)		/* internal node 1..N-2*/
 	  {
-	    fputc('(', fp);
+	    if (fputc('(', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
 	    if ((status = esl_stack_CPush(cs, ')'))         != eslOK) goto ERROR;
 	    if ((status = esl_stack_IPush(vs, v))           != eslOK) goto ERROR;
 	    if ((status = esl_stack_CPush(cs, 'x'))         != eslOK) goto ERROR;
@@ -902,24 +900,25 @@ esl_tree_WriteNewick(FILE *fp, ESL_TREE *T)
 	break;
 
       case ')':			/* closing an internal node. v > 0 is a node code. */
-	fputc(')', fp);
+	if (fputc(')', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
 	if ((status = newick_write_nodelabel   (fp, T, v)) != eslOK) goto ERROR;
 	if ((status = newick_write_branchlength(fp, T, v)) != eslOK) goto ERROR;
 	break;
 
       default:
-	ESL_EXCEPTION(eslEINCONCEIVABLE, "bad state code");
+	ESL_XEXCEPTION(eslEINCONCEIVABLE, "bad state code");
 	break;
       }
     }
   
   /* Termination
    */
-  fputc(')', fp);
-  newick_write_nodelabel(fp, T, 0);
-  if (T->show_branchlengths && T->show_root_branchlength) fprintf(fp, ":0.0");
-  fputc(';', fp);
-  fputc('\n', fp);
+  if (fputc(')', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
+  if ((status = newick_write_nodelabel(fp, T, 0)) != eslOK) goto ERROR;
+  if (T->show_branchlengths && T->show_root_branchlength)
+    { if (fprintf(fp, ":0.0") < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed"); }
+  if (fputc(';', fp)  < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
+  if (fputc('\n', fp) < 0) ESL_XEXCEPTION_SYS(eslEWRITE, "newick tree write failed");
 
   esl_stack_Destroy(vs);
   esl_stack_Destroy(cs);
@@ -1138,7 +1137,6 @@ newick_parse_branchlength(FILE *fp, char *buf, int *pos, int *nc, double *ret_d)
 
 /* Function:  esl_tree_ReadNewick()
  * Synopsis:  Input a Newick format tree.
- * Incept:    SRE, Wed Oct 25 09:25:19 2006 [Janelia]
  *
  * Purpose:   Read a Newick format tree from an open input stream <fp>.
  *            Return the new tree in <ret_T>. 
@@ -1249,6 +1247,7 @@ esl_tree_ReadNewick(FILE *fp, char *errbuf, ESL_TREE **ret_T)
    */
   while ((status = esl_stack_CPop(cs, &c)) == eslOK)
     {
+ 
       if (newick_skip_whitespace(fp, buf, &pos, &nc) != eslOK) 
 	ESL_XFAIL(eslEFORMAT, errbuf, "file ended prematurely.");
 
@@ -1265,8 +1264,6 @@ esl_tree_ReadNewick(FILE *fp, char *errbuf, ESL_TREE **ret_T)
 	{
 	  if (buf[pos] != ';')
 	    ESL_XFAIL(eslEFORMAT, errbuf, "expected a semicolon, saw %c.", buf[pos]);
-	  if (newick_advance_buffer(fp, buf, &pos, &nc) == eslEOF)
-	    ESL_XFAIL(eslEFORMAT, errbuf, "file ended prematurely.");
 	  break;		/* end of the Newick file */
 	}
 
@@ -1364,6 +1361,7 @@ esl_tree_ReadNewick(FILE *fp, char *errbuf, ESL_TREE **ret_T)
 	{ 			
 	  if ((status = esl_stack_IPop(vs, &v)) != eslOK) goto ERROR;
 	  if (buf[pos] != ',') continue;
+	  if (esl_tree_Grow(T) != eslOK) { status = eslEMEM; goto ERROR; };	/* c.f. memory management note: check that we can add new node */
 
 	  /* v = the interior node that is multifurcated.
            * What we're going to do is to create a new node y; move the existing right child of v 
@@ -1396,6 +1394,7 @@ esl_tree_ReadNewick(FILE *fp, char *errbuf, ESL_TREE **ret_T)
     }
 
   esl_tree_RenumberNodes(T);
+
   esl_stack_Destroy(cs);
   esl_stack_Destroy(vs);
   *ret_T = T;
@@ -1419,7 +1418,6 @@ esl_tree_ReadNewick(FILE *fp, char *errbuf, ESL_TREE **ret_T)
  *****************************************************************/
 
 /* Function:  esl_tree_Compare()
- * Incept:    SRE, Fri Sep 22 14:05:09 2006 [Janelia]
  *
  * Purpose:   Given two trees <T1> and <T2> for the same
  *            set of <N> taxa, compare the topologies of the
@@ -1731,7 +1729,6 @@ cluster_engine(ESL_DMATRIX *D_original, int mode, ESL_TREE **ret_T)
 
 
 /* Function:  esl_tree_UPGMA()
- * Incept:    SRE, Wed May  3 15:14:17 2006 [St. Louis]
  *
  * Purpose:   Given distance matrix <D>, use the UPGMA algorithm
  *            to construct a tree <T>.
@@ -1748,7 +1745,6 @@ esl_tree_UPGMA(ESL_DMATRIX *D, ESL_TREE **ret_T)
 }
 
 /* Function:  esl_tree_WPGMA()
- * Incept:    SRE, Wed May  3 15:47:13 2006 [St. Louis]
  *
  * Purpose:   Given distance matrix <D>, use the WPGMA algorithm
  *            to construct a tree <T>.
@@ -1765,7 +1761,6 @@ esl_tree_WPGMA(ESL_DMATRIX *D, ESL_TREE **ret_T)
 }
 
 /* Function:  esl_tree_SingleLinkage()
- * Incept:    SRE, Wed May  3 15:49:06 2006 [St. Louis]
  *
  * Purpose:   Given distance matrix <D>, construct a single-linkage
  *            (minimum distances) clustering tree <T>.
@@ -1782,7 +1777,6 @@ esl_tree_SingleLinkage(ESL_DMATRIX *D, ESL_TREE **ret_T)
 }
 
 /* Function:  esl_tree_CompleteLinkage()
- * Incept:    SRE, Wed May  3 15:49:14 2006 [St. Louis]
  *
  * Purpose:   Given distance matrix <D>, construct a complete-linkage
  *            (maximum distances) clustering tree <T>.
@@ -1807,7 +1801,6 @@ esl_tree_CompleteLinkage(ESL_DMATRIX *D, ESL_TREE **ret_T)
 
 /* Function:  esl_tree_Simulate()
  * Synopsis:  Generate a random rooted ultrametric tree.
- * Incept:    SRE, Mon Oct  2 11:36:22 2006 [Janelia]
  *
  * Purpose:   Generate a random rooted ultrametric tree of <N> taxa,
  *            using the algorithm of Kuhner and Felsenstein (1994).
@@ -1933,7 +1926,6 @@ esl_tree_Simulate(ESL_RANDOMNESS *r, int N, ESL_TREE **ret_T)
 
 /* Function:  esl_tree_ToDistanceMatrix()
  * Synopsis:  Obtain a pairwise distance matrix from a tree.
- * Incept:    SRE, Fri Oct  6 13:50:37 2006 [Janelia]
  *
  * Purpose:   Given tree <T>, calculate a pairwise distance matrix
  *            and return it in <ret_D>.
@@ -2136,19 +2128,20 @@ main(int argc, char **argv)
  */
 #include "easel.h"
 #include "esl_msa.h"
+#include "esl_msafile.h"
 #include "esl_distance.h"
 #include "esl_tree.h"
 
 int main(int argc, char **argv)
 {
-  ESL_TREE    *tree;
-  ESL_MSAFILE *afp;
-  ESL_MSA     *msa;
-  ESL_DMATRIX *D;
+  ESL_TREE     *tree = NULL;
+  ESLX_MSAFILE *afp  = NULL;
+  ESL_MSA      *msa  = NULL;
+  ESL_DMATRIX  *D    = NULL;
 
-  esl_msafile_Open(argv[1], eslMSAFILE_UNKNOWN, NULL, &afp);
-  esl_msa_Read(afp, &msa);
-  esl_msafile_Close(afp);
+  eslx_msafile_Open(NULL, argv[1], NULL, eslMSAFILE_UNKNOWN, NULL, &afp);
+  eslx_msafile_Read(afp, &msa);
+  eslx_msafile_Close(afp);
 
   esl_dst_CDiffMx(msa->aseq, msa->nseq, &D);
   esl_tree_UPGMA(D, &tree);
@@ -2196,10 +2189,13 @@ int main(int argc, char **argv)
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_tree.c 818 2012-11-16 13:56:28Z rivase $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_tree.c $
  *****************************************************************/

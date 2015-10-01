@@ -4,15 +4,16 @@
  * Contents:
  *   1. The P7_OPROFILE object: allocation, initialization, destruction.
  *   2. Conversion from generic P7_PROFILE to optimized P7_OPROFILE
- *   3. Debugging and development utilities.
- *   4. Benchmark driver.
- *   5. Unit tests.
- *   6. Test driver.
- *   7. Example.
- *   8. Copyright and license information.
+ *   3. Conversion from optimized P7_OPROFILE to compact score arrays
+ *   4. Debugging and development utilities.
+ *   5. Benchmark driver.
+ *   6. Unit tests.
+ *   7. Test driver.
+ *   8. Example.
+ *   9. Copyright and license information.
  *
  * SRE, Wed Jul 30 11:00:04 2008 [Janelia]
- * SVN $Id: p7_oprofile.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: p7_oprofile.c 4699 2014-07-03 14:54:25Z wheelert $
  */
 #include "p7_config.h"
 
@@ -31,6 +32,10 @@
 
 #include "hmmer.h"
 #include "impl_vmx.h"
+
+static uint8_t unbiased_byteify(P7_OPROFILE *om, float sc);
+static uint8_t biased_byteify(P7_OPROFILE *om, float sc);
+static int16_t wordify(P7_OPROFILE *om, float sc);
 
 /*****************************************************************
  * 1. The P7_OPROFILE structure: a score profile.
@@ -88,6 +93,7 @@ p7_oprofile_Create(int allocM, const ESL_ALPHABET *abc)
   om->rfv[0] = (vector float *)         (((unsigned long int) om->rfv_mem + 15) & (~0xf));
   om->tfv    = (vector float *)         (((unsigned long int) om->tfv_mem + 15) & (~0xf));
 
+
   /* set the rest of the row pointers for match emissions */
   for (x = 1; x < abc->Kp; x++) {
     om->rbv[x] = om->rbv[0] + (x * nqb);
@@ -126,18 +132,21 @@ p7_oprofile_Create(int allocM, const ESL_ALPHABET *abc)
    * fwrite'ing uninitialized memory in the io functions.
    */
   ESL_ALLOC(om->rf,          sizeof(char) * (allocM+2));
+  ESL_ALLOC(om->mm,          sizeof(char) * (allocM+2));
   ESL_ALLOC(om->cs,          sizeof(char) * (allocM+2));
   ESL_ALLOC(om->consensus,   sizeof(char) * (allocM+2));
   memset(om->rf,       '\0', sizeof(char) * (allocM+2));
+  memset(om->mm,       '\0', sizeof(char) * (allocM+2));
   memset(om->cs,       '\0', sizeof(char) * (allocM+2));
   memset(om->consensus,'\0', sizeof(char) * (allocM+2));
 
-  om->abc       = abc;
-  om->L         = 0;
-  om->M         = 0;
-  om->allocM    = allocM;
-  om->mode      = p7_NO_MODE;
-  om->nj        = 0.0f;
+  om->abc        = abc;
+  om->L          = 0;
+  om->M          = 0;
+  om->max_length = -1;
+  om->allocM     = allocM;
+  om->mode       = p7_NO_MODE;
+  om->nj         = 0.0f;
   return om;
 
  ERROR:
@@ -181,11 +190,46 @@ p7_oprofile_Destroy(P7_OPROFILE *om)
       if (om->acc        != NULL) free(om->acc);
       if (om->desc       != NULL) free(om->desc);
       if (om->rf         != NULL) free(om->rf);
+      if (om->mm         != NULL) free(om->mm);
       if (om->cs         != NULL) free(om->cs);
       if (om->consensus  != NULL) free(om->consensus);
     }
 
   free(om);
+}
+
+/* Function:  p7_oprofile_Sizeof()
+ * Synopsis:  Return the allocated size of a <P7_OPROFILE>.
+ * Incept:    SRE, Wed Mar  2 10:52:47 2011 [Janelia]
+ *
+ * Purpose:   Returns the allocated size of a <P7_OPROFILE>,
+ *            in bytes.
+ */
+size_t
+p7_oprofile_Sizeof(P7_OPROFILE *om)
+{
+  size_t n = 0;
+  int    nqb = om->allocQ16; /* # of uchar vectors needed for query */
+  int    nqw = om->allocQ8;  /* # of sword vectors needed for query */
+  int    nqf = om->allocQ4;  /* # of float vectors needed for query */
+
+  n += sizeof(P7_OPROFILE);
+  n += sizeof(vector unsigned char) * nqb  * om->abc->Kp +15; /* om->rbv_mem */
+  n += sizeof(vector signed short)  * nqw  * om->abc->Kp +15; /* om->rwv_mem */
+  n += sizeof(vector signed short)  * nqw  * p7O_NTRANS  +15; /* om->twv_mem */
+  n += sizeof(vector float)         * nqf  * om->abc->Kp +15; /* om->rfv_mem */
+  n += sizeof(vector float)         * nqf  * p7O_NTRANS  +15; /* om->tfv_mem */
+
+  n += sizeof(vector unsigned char *) * om->abc->Kp; /* om->rbv */
+  n += sizeof(vector signed short *)  * om->abc->Kp; /* om->rwv */
+  n += sizeof(vector float *)         * om->abc->Kp; /* om->rfv */
+
+  n += sizeof(char) * (om->allocM+2); /* om->rf */
+  n += sizeof(char) * (om->allocM+2); /* om->mm */
+  n += sizeof(char) * (om->allocM+2); /* om->cs */
+  n += sizeof(char) * (om->allocM+2); /* om->consensus */
+
+  return n;
 }
 
 /* Function:  p7_oprofile_Copy()
@@ -298,10 +342,12 @@ p7_oprofile_Copy(P7_OPROFILE *om1)
    * fwrite'ing uninitialized memory in the io functions.
    */
   ESL_ALLOC(om2->rf,          size);
+  ESL_ALLOC(om2->mm,          size);
   ESL_ALLOC(om2->cs,          size);
   ESL_ALLOC(om2->consensus,   size);
 
   memcpy(om2->rf,        om1->rf,        size);
+  memcpy(om2->mm,        om1->mm,        size);
   memcpy(om2->cs,        om1->cs,        size);
   memcpy(om2->consensus, om1->consensus, size);
 
@@ -311,6 +357,7 @@ p7_oprofile_Copy(P7_OPROFILE *om1)
   om2->allocM    = om1->allocM;
   om2->mode      = om1->mode;
   om2->nj        = om1->nj;
+  om2->max_length = om1->max_length;
 
   om2->clone     = om1->clone;
 
@@ -349,6 +396,221 @@ p7_oprofile_Clone(const P7_OPROFILE *om1)
   p7_oprofile_Destroy(om2);
   return NULL;
 }
+
+
+/* Function:  p7_oprofile_UpdateFwdEmissionScores()
+ * Synopsis:  Update the Forward/Backward part of the optimized profile
+ *            match emissions to account for new background distribution.
+ *
+ * Purpose:   This implementation re-orders the loops used to access/modify
+ *            the rfv array relative to how it's accessed for example in
+ *            fb_conversion(), to minimize the required size of sc_arr.
+ *
+ * Args:      om              - optimized profile to be updated.
+ *            bg              - the new bg distribution
+ *            fwd_emissions   - precomputed Fwd (float) residue emission
+ *                              probabilities in serial order (gathered from
+ *                              the optimized striped <om> with
+ *                              p7_oprofile_GetFwdEmissionArray() ).
+ *            sc_arr            Preallocated array of at least Kp*4 floats
+ */
+int
+p7_oprofile_UpdateFwdEmissionScores(P7_OPROFILE *om, P7_BG *bg, float *fwd_emissions, float *sc_arr)
+{
+  int     M   = om->M;    /* length of the query                                          */
+  int     k, q, x, z;
+  int     nq  = p7O_NQF(M);     /* segment length; total # of striped vectors needed            */
+  int     K   = om->abc->K;
+  int     Kp  = om->abc->Kp;
+  union   { vector float v; float x[4]; } tmp;
+
+  for (k = 1, q = 0; q < nq; q++, k++) {
+
+    //First compute the core characters of the alphabet
+    for (x = 0; x < K; x++) {
+      for (z = 0; z < 4; z++) {
+         if (k+ z*nq <= M)  sc_arr[z*Kp + x] =  (om->mm && om->mm[(k+z*nq)]=='m') ? 0 : log(fwd_emissions[Kp * (k+z*nq) + x]/bg->f[x]);
+         else               sc_arr[z*Kp + x] =  -eslINFINITY;
+
+         tmp.x[z] = sc_arr[z*Kp + x];
+      }
+      om->rfv[x][q] =  esl_vmx_expf(tmp.v);
+    }
+
+    // Then compute corresponding scores for ambiguity codes.
+    for (z = 0; z < 4; z++)
+      esl_abc_FExpectScVec(om->abc, sc_arr+(z*Kp), bg->f);
+
+    //finish off the interleaved values
+    for (x = K; x < Kp; x++) {
+      for (z = 0; z < 4; z++)
+        tmp.x[z] = sc_arr[z*Kp + x];  // computed in FExpectScVec call above
+      om->rfv[x][q] = esl_vmx_expf(tmp.v);
+    }
+  }
+
+  return eslOK;
+
+}
+
+/* Function:  p7_oprofile_UpdateVitEmissionScores()
+ * Synopsis:  Update the Viterbi part of the optimized profile match
+ *            emissions to account for new background distribution.
+ *.
+ * Purpose:   This implementation re-orders the loops used to access/modify
+ *            the rmv array relative to how it's accessed for example in
+ *            vf_conversion(), to minimize the required size of sc_arr.
+ *
+ * Args:      om              - optimized profile to be updated.
+ *            bg              - the new bg distribution
+ *            fwd_emissions   - precomputed Fwd (float) residue emission
+ *                              probabilities in serial order (gathered from
+ *                              the optimized striped <om> with
+ *                              p7_oprofile_GetFwdEmissionArray() ).
+ *            sc_arr            Preallocated array of at least Kp*8 floats
+ */
+int
+p7_oprofile_UpdateVitEmissionScores(P7_OPROFILE *om, P7_BG *bg, float *fwd_emissions, float *sc_arr)
+{
+  int     M   = om->M;    /* length of the query                                          */
+  int     k, q, x, z;
+  int     nq  = p7O_NQW(M);     /* segment length; total # of striped vectors needed            */
+  int     K   = om->abc->K;
+  int     Kp  = om->abc->Kp;
+  int     idx;
+  union { vector signed short v; int16_t i[8]; } tmp; /* used to align and load simd minivectors            */
+
+  for (k = 1, q = 0; q < nq; q++, k++) {
+
+    //First compute the core characters of the alphabet
+    for (x = 0; x < K; x++) {
+      for (z = 0; z < 8; z++) {
+        idx = z*Kp + x;
+        if (k+ z*nq <= M)  {
+          sc_arr[idx] = (om->mm && om->mm[(k+z*nq)]=='m') ? 0 : log( (double)(fwd_emissions[Kp * (k+z*nq) + x])/bg->f[x]);
+          tmp.i[z]    = wordify(om, sc_arr[idx]);
+        }
+        else
+        {
+          sc_arr[idx] =  -eslINFINITY;
+          tmp.i[z]    =  -32768;
+        }
+
+      }
+      om->rwv[x][q] = tmp.v;
+
+    }
+
+    // Then compute corresponding scores for ambiguity codes.
+    for (z = 0; z < 8; z++)
+      esl_abc_FExpectScVec(om->abc, sc_arr+(z*Kp), bg->f);
+
+    //finish off the interleaved values
+    for (x = K; x < Kp; x++) {
+      for (z = 0; z < 8; z++) {
+        idx = z*Kp + x;
+        if (x==K || x>Kp-3 || sc_arr[idx] == -eslINFINITY)
+          tmp.i[z]  =  -32768;
+        else
+          tmp.i[z]  = wordify(om, sc_arr[idx]);
+      }
+      om->rwv[x][q] = tmp.v;
+    }
+  }
+
+  return eslOK;
+}
+
+
+
+/* Function:  p7_oprofile_UpdateMSVEmissionScores()
+ * Synopsis:  Update the MSV part of the optimized profile match
+ *            emissions to account for new background distribution.
+ *.
+ * Purpose:   This implementation re-orders the loops used to access/modify
+ *            the rbv array relative to how it's accessed for example in
+ *            mf_conversion(), to minimize the required size of sc_arr.
+ *
+ * Args:      om              - optimized profile to be updated.
+ *            bg              - the new bg distribution
+ *            fwd_emissions   - precomputed Fwd (float) residue emission
+ *                              probabilities in serial order (gathered from
+ *                              the optimized striped <om> with
+ *                              p7_oprofile_GetFwdEmissionArray() ).
+ *            sc_arr            Preallocated array of at least Kp*16 floats
+ */
+int
+p7_oprofile_UpdateMSVEmissionScores(P7_OPROFILE *om, P7_BG *bg, float *fwd_emissions, float *sc_arr)
+{
+  int     M   = om->M;    /* length of the query                                          */
+  int     k, q, x, z;
+  int     nq  = p7O_NQB(M);     /* segment length; total # of striped vectors needed            */
+  int     K   = om->abc->K;
+  int     Kp  = om->abc->Kp;
+  int     idx;
+  float   max = 0.0;    /* maximum residue score: used for unsigned emission score bias */
+  union { vector unsigned char v; uint8_t i[16]; } tmp; /* used to align and load simd minivectors */
+
+  /* First we determine the basis for the limited-precision MSVFilter scoring system.
+   * Default: 1/3 bit units, base offset 190:  range 0..255 => -190..65 => -63.3..21.7 bits
+   * See J2/66, J4/138 for analysis.
+   * This depends on having computed scores. I do this in a first pass, to get the max
+   * score ... then re-compute those scores so they can be converted to 8bit scores
+   */
+  for (k = 1, q = 0; q < nq; q++, k++) {
+    for (x = 0; x < K; x++) {
+      for (z = 0; z < 16; z++) {
+        idx = z*Kp + x;
+        if (k+ z*nq <= M && !(om->mm && om->mm[(k+z*nq)]=='m'))
+          max = ESL_MAX(max, log( (double)(fwd_emissions[Kp * (k+z*nq) + x])/bg->f[x]));
+      }
+    }
+  }
+  om->scale_b = 3.0 / eslCONST_LOG2;                    /* scores in units of third-bits */
+  om->base_b  = 190;
+  om->bias_b  = unbiased_byteify(om, -1.0 * max);
+
+  for (k = 1, q = 0; q < nq; q++, k++) {
+
+    //First compute the core characters of the alphabet
+    for (x = 0; x < K; x++) {
+      for (z = 0; z < 16; z++) {
+        idx = z*Kp + x;
+        if (k+ z*nq <= M)  {
+          sc_arr[idx] = (om->mm && om->mm[(k+z*nq)]=='m') ? 0 : log( (double)(fwd_emissions[Kp * (k+z*nq) + x])/bg->f[x]);
+          tmp.i[z]    = biased_byteify(om, sc_arr[idx]);
+        }
+        else
+        {
+          sc_arr[idx] =  -eslINFINITY;
+          tmp.i[z]    =  255;
+        }
+
+      }
+      om->rbv[x][q] = tmp.v;
+
+    }
+
+    // Then compute corresponding scores for ambiguity codes.
+    for (z = 0; z < 16; z++)
+      esl_abc_FExpectScVec(om->abc, sc_arr+(z*Kp), bg->f);
+
+    //finish off the interleaved values
+    for (x = K; x < Kp; x++) {
+      for (z = 0; z < 16; z++) {
+        idx = z*Kp + x;
+        if (x==K || x>Kp-3 || sc_arr[idx] == -eslINFINITY)
+          tmp.i[z]  =  255;
+        else
+          tmp.i[z]  = biased_byteify(om, sc_arr[idx]);
+      }
+      om->rbv[x][q] = tmp.v;
+    }
+  }
+
+  return eslOK;
+}
+
 
 /*----------------- end, P7_OPROFILE structure ------------------*/
 
@@ -691,6 +953,7 @@ p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om)
   if ((status = esl_strdup(gm->acc,  -1, &(om->acc)))  != eslOK) goto ERROR;
   if ((status = esl_strdup(gm->desc, -1, &(om->desc))) != eslOK) goto ERROR;
   strcpy(om->rf,        gm->rf);
+  strcpy(om->mm,        gm->mm);
   strcpy(om->cs,        gm->cs);
   strcpy(om->consensus, gm->consensus);
   for (z = 0; z < p7_NEVPARAM; z++) om->evparam[z] = gm->evparam[z];
@@ -700,6 +963,7 @@ p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om)
   om->mode = gm->mode;
   om->L    = gm->L;
   om->M    = gm->M;
+  om->max_length = gm->max_length;
   om->nj   = gm->nj;
 
   return eslOK;
@@ -856,8 +1120,192 @@ p7_oprofile_ReconfigUnihit(P7_OPROFILE *om, int L)
 
 
 
+/*******************************************************************
+*   3. Conversion from optimized P7_OPROFILE to compact score arrays
+ *******************************************************************/
+
+/* Function:  p7_oprofile_GetFwdTransitionArray()
+ * Synopsis:  Retrieve full 32-bit float transition probabilities from an
+ *            optimized profile into a flat array
+ *
+ * Purpose:   Extract an array of <type> (e.g. p7O_II) transition probabilities
+ *            from the underlying <om> profile. In SIMD implementations,
+ *            these are striped and interleaved, making them difficult to
+ *            directly access.
+ *
+ * Args:      <om>   - optimized profile, containing transition information
+ *            <type> - transition type (e.g. p7O_II)
+ *            <arr>  - preallocated array into which floats will be placed
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ */
+int
+p7_oprofile_GetFwdTransitionArray(const P7_OPROFILE *om, int type, float *arr )
+{
+  int     nq  = p7O_NQF(om->M);     /* # of striped vectors needed            */
+  int i, j;
+  union { vector float v; float x[4]; } tmp;
+
+  for (i=0; i<nq; i++) {
+    // because DD transitions are held at the end of the tfv array
+    tmp.v = om->tfv[ (type==p7O_DD ?  nq*7+i :  type+7*i) ];
+    for (j=0; j<4; j++)
+      if ( i+1+ j*nq < om->M+1) 
+        arr[i+1+ j*nq]      = tmp.x[j];
+  }
+
+  return eslOK;
+
+}
+
+
+/* Function:  p7_oprofile_GetMSVEmissionArray()
+ * Synopsis:  Retrieve MSV residue emission scores from an optimized
+ *            profile into an array
+ *
+ * Purpose:   Extract an implicitly 2D array of 8-bit int MSV residue
+ *            emission scores from an optimized profile <om>. <arr> must
+ *            be allocated by the calling function to be of size
+ *            ( om->abc->Kp * ( om->M  + 1 )), and indexing into the array
+ *            is done as  [om->abc->Kp * i +  c ] for character c at
+ *            position i.
+ *
+ *            In SIMD implementations, the residue scores are striped
+ *            and interleaved, making them somewhat difficult to
+ *            directly access. Faster access is desired, for example,
+ *            in SSV back-tracking of a high-scoring diagonal
+ *
+ * Args:      <om>   - optimized profile, containing transition information
+ *            <arr>  - preallocated array into which scores will be placed
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ */
+int
+p7_oprofile_GetSSVEmissionScoreArray(const P7_OPROFILE *om, uint8_t *arr )
+{
+  int x, q, z, k;
+  union { vector unsigned char v; uint8_t i[16]; } tmp; /* used to align and read simd minivectors           */
+  int      M   = om->M;    /* length of the query                                          */
+  int      K   = om->abc->Kp;
+  int      nq  = p7O_NQB(M);     /* segment length; total # of striped vectors needed            */
+  int cell_cnt = (om->M + 1) * K;
+
+
+  for (x = 0; x < K ; x++) {
+    for (q = 0, k = 1; q < nq; q++, k++) {
+      tmp.v = om->rbv[x][q];
+      for (z=0; z<16; z++)
+        if (  (K * (k+z*nq) + x) < cell_cnt)
+          arr[ K * (k+z*nq) + x ] = tmp.i[z];
+    }
+  }
+
+  return eslOK;
+}
+
+
+/* Function:  p7_oprofile_GetFwdEmissionScoreArray()
+ * Synopsis:  Retrieve Fwd (float) residue emission scores from an optimized
+ *            profile into an array
+ *
+ * Purpose:   Extract an implicitly 2D array of 32-bit float Fwd residue
+ *            emission scores from an optimized profile <om>. <arr> must
+ *            be allocated by the calling function to be of size
+ *            ( om->abc->Kp * ( om->M  + 1 )), and indexing into the array
+ *            is done as  [om->abc->Kp * i +  c ] for character c at
+ *            position i.
+ *
+ *            In SIMD implementations, the residue scores are striped
+ *            and interleaved, making them somewhat difficult to
+ *            directly access.
+ *
+ * Args:      <om>   - optimized profile, containing transition information
+ *            <arr>  - preallocated array into which scores will be placed
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ */
+int
+p7_oprofile_GetFwdEmissionScoreArray(const P7_OPROFILE *om, float *arr )
+{
+  int x, q, z, k;
+  union { vector float v; float f[4]; } tmp; /* used to align and read simd minivectors           */
+  int      M   = om->M;    /* length of the query                                          */
+  int      K   = om->abc->Kp;
+  int      nq  = p7O_NQF(M);     /* segment length; total # of striped vectors needed            */
+  int cell_cnt = (om->M + 1) * K;
+
+  for (x = 0; x < K; x++) {
+      for (q = 0, k = 1; q < nq; q++, k++) {
+        tmp.v = esl_vmx_logf(om->rfv[x][q]);
+        for (z = 0; z < 4; z++)
+          if (  (K * (k+z*nq) + x) < cell_cnt)
+            arr[ K * (k+z*nq) + x ] = tmp.f[z];
+      }
+  }
+
+  return eslOK;
+}
+
+/* Function:  p7_oprofile_GetFwdEmissionArray()
+ * Synopsis:  Retrieve Fwd (float) residue emission values from an optimized
+ *            profile into an array
+ *
+ * Purpose:   Extract an implicitly 2D array of 32-bit float Fwd residue
+ *            emission values from an optimized profile <om>, converting
+ *            back to emission values based on the background. <arr> must
+ *            be allocated by the calling function to be of size
+ *            ( om->abc->Kp * ( om->M  + 1 )), and indexing into the array
+ *            is done as  [om->abc->Kp * i +  c ] for character c at
+ *            position i.
+ *
+ *            In SIMD implementations, the residue scores are striped
+ *            and interleaved, making them somewhat difficult to
+ *            directly access.
+ *
+ * Args:      <om>   - optimized profile, containing transition information
+ *            <bg>   - background frequencies
+ *            <arr>  - preallocated array into which scores will be placed
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ */
+int
+p7_oprofile_GetFwdEmissionArray(const P7_OPROFILE *om, P7_BG *bg, float *arr )
+{
+  int x, q, z, k;
+  union { vector float v; float f[4]; } tmp; /* used to align and read simd minivectors           */
+  int      M   = om->M;    /* length of the query                                          */
+  int      Kp  = om->abc->Kp;
+  int      K   = om->abc->K;
+  int      nq  = p7O_NQF(M);     /* segment length; total # of striped vectors needed            */
+  int cell_cnt = (om->M + 1) * Kp;
+
+  for (x = 0; x < K; x++) {
+      for (q = 0, k = 1; q < nq; q++, k++) {
+        tmp.v = om->rfv[x][q];
+        for (z = 0; z < 4; z++)
+          if (  (Kp * (k+z*nq) + x) < cell_cnt)
+            arr[ Kp * (k+z*nq) + x ] = tmp.f[z] * bg->f[x];
+      }
+  }
+
+  //degeneracy emissions for each position
+  for (x = 0; x <= M; x++)
+    esl_abc_FExpectScVec(om->abc, arr+Kp*x, bg->f);
+
+  return eslOK;
+}
+/*------------ end, conversions from P7_OPROFILE ------------------*/
+
 /*****************************************************************
- * 3. Debugging and development utilities.
+ * 4. Debugging and development utilities.
  *****************************************************************/
 
 
@@ -1350,6 +1798,7 @@ p7_oprofile_Compare(const P7_OPROFILE *om1, const P7_OPROFILE *om2, float tol, c
    if (esl_strcmp(om1->acc,       om2->acc)       != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: acc");
    if (esl_strcmp(om1->desc,      om2->desc)      != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: desc");
    if (esl_strcmp(om1->rf,        om2->rf)        != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: ref");
+   if (esl_strcmp(om1->mm,        om2->mm)        != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: mm");
    if (esl_strcmp(om1->cs,        om2->cs)        != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: cs");
    if (esl_strcmp(om1->consensus, om2->consensus) != 0) ESL_FAIL(eslFAIL, errmsg, "comparison failed: consensus");
 
@@ -1468,12 +1917,13 @@ p7_profile_SameAsVF(const P7_OPROFILE *om, P7_PROFILE *gm)
 
   return eslOK;
 }
+
 /*------------ end, P7_OPROFILE debugging tools  ----------------*/
 
 
 
 /*****************************************************************
- * 4. Benchmark driver.
+ * 5. Benchmark driver.
  *****************************************************************/
 
 #ifdef p7OPROFILE_BENCHMARK
@@ -1507,7 +1957,7 @@ static char banner[] = "benchmark driver for the generic implementation";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_ALPHABET   *abc     = NULL;
@@ -1520,8 +1970,8 @@ main(int argc, char **argv)
   int             N       = esl_opt_GetInteger(go, "-N");
   int             i;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -1554,7 +2004,7 @@ main(int argc, char **argv)
 
 
 /*****************************************************************
- * 5. Unit tests
+ * 6. Unit tests
  *****************************************************************/
 #ifdef p7OPROFILE_TESTDRIVE
 
@@ -1566,7 +2016,7 @@ main(int argc, char **argv)
 
 
 /*****************************************************************
- * 6. Test driver
+ * 7. Test driver
  *****************************************************************/
 #ifdef p7OPROFILE_TESTDRIVE
 
@@ -1576,7 +2026,7 @@ main(int argc, char **argv)
 
 
 /*****************************************************************
- * 7. Example
+ * 8. Example
  *****************************************************************/
 #ifdef p7OPROFILE_EXAMPLE
 /* gcc -std=gnu99 -g -Wall -Dp7OPROFILE_EXAMPLE -I.. -I../../easel -L.. -L../../easel -o p7_oprofile_example p7_oprofile.c -lhmmer -leasel -lm
@@ -1599,19 +2049,18 @@ main(int argc, char **argv)
   P7_OPROFILE  *om1     = NULL;
   P7_OPROFILE  *om2     = NULL;
   int           status;
+  char          errbuf[eslERRBUFSIZE];
 
-  char          errmsg[512];
-
-  status = p7_hmmfile_Open(hmmfile, NULL, &hfp);
-  if      (status == eslENOTFOUND) esl_fatal("Failed to open HMM file %s for reading.\n",                   hmmfile);
-  else if (status == eslEFORMAT)   esl_fatal("File %s does not appear to be in a recognized HMM format.\n", hmmfile);
-  else if (status != eslOK)        esl_fatal("Unexpected error %d in opening HMM file %s.\n",       status, hmmfile);
+  status = p7_hmmfile_OpenE(hmmfile, NULL, &hfp, errbuf);
+  if      (status == eslENOTFOUND) p7_Fail("File existence/permissions problem in trying to open HMM file %s.\n%s\n", hmmfile, errbuf);
+  else if (status == eslEFORMAT)   p7_Fail("File format problem in trying to open HMM file %s.\n%s\n",                hmmfile, errbuf);
+  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n%s\n",               status, hmmfile, errbuf);  
 
   status = p7_hmmfile_Read(hfp, &abc, &hmm);
-  if      (status == eslEFORMAT)   esl_fatal("Bad file format in HMM file %s:\n%s\n",          hfp->fname, hfp->errbuf);
-  else if (status == eslEINCOMPAT) esl_fatal("HMM in %s is not in the expected %s alphabet\n", hfp->fname, esl_abc_DecodeType(abc->type));
-  else if (status == eslEOF)       esl_fatal("Empty HMM file %s? No HMM data found.\n",        hfp->fname);
-  else if (status != eslOK)        esl_fatal("Unexpected error in reading HMMs from %s\n",     hfp->fname);
+  if      (status == eslEFORMAT)   p7_Fail("Bad file format in HMM file %s:\n%s\n",          hfp->fname, hfp->errbuf);
+  else if (status == eslEINCOMPAT) p7_Fail("HMM in %s is not in the expected %s alphabet\n", hfp->fname, esl_abc_DecodeType(abc->type));
+  else if (status == eslEOF)       p7_Fail("Empty HMM file %s? No HMM data found.\n",        hfp->fname);
+  else if (status != eslOK)        p7_Fail("Unexpected error in reading HMMs from %s\n",     hfp->fname);
 
   bg  = p7_bg_Create(abc);
   gm  = p7_profile_Create(hmm->M, abc);
@@ -1622,8 +2071,8 @@ main(int argc, char **argv)
   p7_oprofile_Dump(stdout, om1);
 
   om2 = p7_oprofile_Copy(om1);
-  if (p7_oprofile_Compare(om1, om2, 0.001f, errmsg) != eslOK)
-    printf ("ERROR %s\n", errmsg);
+  if (p7_oprofile_Compare(om1, om2, 0.001f, errbuf) != eslOK)
+    printf ("ERROR %s\n", errbuf);
 
   p7_oprofile_Destroy(om1);
   p7_oprofile_Destroy(om2);
@@ -1641,8 +2090,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

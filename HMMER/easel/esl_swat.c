@@ -6,12 +6,11 @@
  * Contents:
  *   
  * 
- * SRE, Fri Apr 13 13:03:17 2007
- * SVN $Id: esl_swat.c 326 2009-02-28 15:49:07Z eddys $
  */
 #include "esl_config.h"
 
 #include "easel.h"
+#include "esl_composition.h"
 #include "esl_scorematrix.h"
 
 #define eslSWAT_PROHIBIT -999999999
@@ -167,11 +166,11 @@ main(int argc, char **argv)
   if (mxfile != NULL) {
     ESL_FILEPARSER  *efp = NULL;
     if ( esl_fileparser_Open(mxfile, NULL, &efp)  != eslOK) esl_fatal("failed to open score file %s", mxfile);
-    if ( esl_sco_Read(efp, abc, &S)               != eslOK) esl_fatal("failed to read matrix from %s", mxfile);
+    if ( esl_scorematrix_Read(efp, abc, &S)               != eslOK) esl_fatal("failed to read matrix from %s", mxfile);
     esl_fileparser_Close(efp);
   } else {			/* default = BLOSUM62 */
     S = esl_scorematrix_Create(abc);
-    esl_scorematrix_SetBLOSUM62(S);
+    esl_scorematrix_Set("BLOSUM62", S);
   }
   esl_composition_BL62(bg);
 
@@ -215,18 +214,18 @@ utest_Score(char *s1, char *s2, ESL_SCOREMATRIX *S, int gop, int gex, int expect
 
 
 
-/*****************************************************************
- *
- *****************************************************************/
 
 
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_swat.c 849 2013-01-31 15:10:24Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_swat.c $
  *****************************************************************/

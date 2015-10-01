@@ -5,12 +5,10 @@
  *    2. Examples.
  *    3. Copyright and license.
  * 
- * MSF, Thu Jun 18 11:51:39 2009
- * SVN $Id: esl_workqueue.c 573 2010-03-27 15:13:52Z eddys $
  */
 #include "esl_config.h"
 
-#ifdef HAVE_PTHREADS
+#ifdef HAVE_PTHREAD
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -551,15 +549,18 @@ main(void)
   return eslOK;
 }
 #endif /*eslWORKQUEUE_EXAMPLE*/
-
+#endif /* HAVE_PTHREAD */
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_workqueue.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_workqueue.c $
  *****************************************************************/
-#endif /* HAVE_PTHREADS */
+

@@ -15,7 +15,7 @@
  *   6. Copyright and license information
  * 
  * MSF Tue Nov 3, 2009 [Janelia]
- * SVN $Id: vitfilter.c 2881 2009-08-19 17:58:23Z farrarm $
+ * SVN $Id: vitfilter.c 4103 2012-06-24 02:09:43Z wheelert $
  */
 #include "p7_config.h"
 
@@ -67,6 +67,46 @@ p7_ViterbiFilter(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, f
 /*---------------- end, p7_ViterbiFilter() ----------------------*/
 
 
+
+/* Function:  p7_ViterbiFilter_longtarget()
+ * Synopsis:  Finds windows within potentially long sequence blocks with Viterbi
+ *            scores above threshold (vewy vewy fast, in limited precision)
+ *
+ * Purpose:   Calculates the Viterbi score for regions of sequence <dsq>,
+ *            and captures the positions at which such regions exceed the
+ *            score required to be significant in the eyes of the calling
+ *            function (usually p=0.001).
+ *
+ *            The resulting landmarks are converted to subsequence
+ *            windows by the calling function
+ *
+ * Args:      dsq     - digital target sequence, 1..L
+ *            L       - length of dsq in residues
+ *            om      - optimized profile
+ *            ox      - DP matrix
+ *            filtersc   - null or bias correction, required for translating a P-value threshold into a score threshold
+ *            P          - p-value below which a region is captured as being above threshold
+ *            windowlist - RETURN: array of hit windows (start and end of diagonal) for the above-threshold areas
+ *
+ * Returns:   <eslOK> on success;
+ *
+ * Throws:    <eslEINVAL> if <ox> allocation is too small
+ *
+ * Xref:      See p7_ViterbiFilter()
+ */
+int
+p7_ViterbiFilter_longtarget(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox,
+                            float filtersc, double P, P7_HMM_WINDOWLIST *windowlist)
+{
+  int status;
+  if ((status = p7_gmx_GrowTo(ox, om->M, L)) != eslOK) return status;
+  return p7_GViterbi_longtarget(dsq, L, om, ox, filtersc, P, windowlist);
+
+}
+/*---------------- end, p7_ViterbiFilter() ----------------------*/
+
+
+
 /*****************************************************************
  * 2. Benchmark driver.
  *****************************************************************/
@@ -109,7 +149,7 @@ static char banner[] = "benchmark driver for Viterbi filter";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -128,8 +168,8 @@ main(int argc, char **argv)
   float           sc1, sc2;
   double          base_time, bench_time, Mcs;
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -283,7 +323,7 @@ static char banner[] = "test driver for the non-optimized implementation";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -359,7 +399,7 @@ static char banner[] = "example of Viterbi filter algorithm";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -379,8 +419,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   /* Read in one sequence */
   sq     = esl_sq_CreateDigital(abc);
@@ -403,9 +443,9 @@ main(int argc, char **argv)
   gx = p7_gmx_Create(gm->M, sq->n);
 
   /* Useful to place and compile in for debugging: 
-     p7_oprofile_Dump(stdout, om);      dumps the optimized profile
-     p7_omx_SetDumpMode(ox, TRUE);      makes the fast DP algorithms dump their matrices
-     p7_gmx_Dump(stdout, gx);           dumps a generic DP matrix
+     p7_oprofile_Dump(stdout, om);        dumps the optimized profile
+     p7_omx_SetDumpMode(ox, TRUE);        makes the fast DP algorithms dump their matrices
+     p7_gmx_Dump(stdout, gx, p7_DEFAULT); dumps a generic DP matrix
   */
 
   while ((status = esl_sqio_Read(sqfp, sq)) == eslOK)
@@ -468,8 +508,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

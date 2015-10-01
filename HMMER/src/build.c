@@ -20,9 +20,6 @@
  *    4. Test driver.
  *    5. Example.
  *    6. Copyright and license.
- * 
- * SRE, Tue Jan 2 2007 [Casa de Gatos]
- * SVN $Id: build.c 3152 2010-02-07 22:55:22Z eddys $
  */
 
 #include "p7_config.h"
@@ -32,10 +29,11 @@
 #include "easel.h"
 #include "esl_alphabet.h"
 #include "esl_msa.h"
+#include "esl_msafile.h"
 
 #include "hmmer.h"
 
-
+static int do_modelmask( ESL_MSA *msa);
 static int matassign2hmm(ESL_MSA *msa, int *matassign, P7_HMM **ret_hmm, P7_TRACE ***opt_tr);
 static int annotate_model(P7_HMM *hmm, int *matassign, ESL_MSA *msa);
 
@@ -64,7 +62,8 @@ static int annotate_model(P7_HMM *hmm, int *matassign, ESL_MSA *msa);
  *           Models must have at least one node, so if the <msa> defined 
  *           no consensus columns, a <eslENORESULT> error is returned.
  *           
- * Args:     msa     - multiple sequence alignment          
+ * Args:     msa     - multiple sequence alignment
+ *           bld       - holds information on regions requiring masking, optionally NULL -> no masking
  *           ret_hmm - RETURN: counts-form HMM
  *           opt_tr  - optRETURN: array of tracebacks for aseq's
  *           
@@ -81,7 +80,7 @@ static int annotate_model(P7_HMM *hmm, int *matassign, ESL_MSA *msa);
  *           isn't in digital mode.
  */            
 int
-p7_Handmodelmaker(ESL_MSA *msa, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
+p7_Handmodelmaker(ESL_MSA *msa, P7_BUILDER *bld, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
 {
   int        status;
   int       *matassign = NULL;    /* MAT state assignments if 1; 1..alen */
@@ -140,6 +139,7 @@ p7_Handmodelmaker(ESL_MSA *msa, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
  *           
  * Args:     msa       - multiple sequence alignment
  *           symfrac   - threshold for residue occupancy; >= assigns MATCH
+ *           bld       - holds information on regions requiring masking, optionally NULL -> no masking
  *           ret_hmm   - RETURN: counts-form HMM
  *           opt_tr    - optRETURN: array of tracebacks for aseq's
  *           
@@ -154,13 +154,13 @@ p7_Handmodelmaker(ESL_MSA *msa, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
  *           <msa> isn't in digital mode.
  */
 int
-p7_Fastmodelmaker(ESL_MSA *msa, float symfrac, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
+p7_Fastmodelmaker(ESL_MSA *msa, float symfrac, P7_BUILDER *bld, P7_HMM **ret_hmm, P7_TRACE ***opt_tr)
 {
   int      status;	     /* return status flag                  */
   int     *matassign = NULL; /* MAT state assignments if 1; 1..alen */
   int      idx;              /* counter over sequences              */
   int      apos;             /* counter for aligned columns         */
-  float    r;		     /* weighted residue count              */
+  float    r;		         /* weighted residue count              */
   float    totwgt;	     /* weighted residue+gap count          */
 
   if (! (msa->flags & eslMSA_DIGITAL)) ESL_XEXCEPTION(eslEINVAL, "need digital MSA");
@@ -175,20 +175,24 @@ p7_Fastmodelmaker(ESL_MSA *msa, float symfrac, P7_HMM **ret_hmm, P7_TRACE ***opt
     {  
       r = totwgt = 0.;
       for (idx = 0; idx < msa->nseq; idx++) 
-	{
-	  if       (esl_abc_XIsResidue(msa->abc, msa->ax[idx][apos])) { r += msa->wgt[idx]; totwgt += msa->wgt[idx]; }
-	  else if  (esl_abc_XIsGap(msa->abc,     msa->ax[idx][apos])) {                     totwgt += msa->wgt[idx]; }
-	  else if  (esl_abc_XIsMissing(msa->abc, msa->ax[idx][apos])) continue;
-	}
+      {
+        if       (esl_abc_XIsResidue(msa->abc, msa->ax[idx][apos])) { r += msa->wgt[idx]; totwgt += msa->wgt[idx]; }
+        else if  (esl_abc_XIsGap(msa->abc,     msa->ax[idx][apos])) {                     totwgt += msa->wgt[idx]; }
+        else if  (esl_abc_XIsMissing(msa->abc, msa->ax[idx][apos])) continue;
+      }
       if (r > 0. && r / totwgt >= symfrac) matassign[apos] = TRUE;
       else                                 matassign[apos] = FALSE;
     }
+
 
   /* Once we have matassign calculated, modelmakers behave
    * the same; matassign2hmm() does this stuff (traceback construction,
    * trace counting) and sets up ret_hmm and opt_tr.
    */
-  if ((status = matassign2hmm(msa, matassign, ret_hmm, opt_tr)) != eslOK) goto ERROR;
+  if ((status = matassign2hmm(msa, matassign, ret_hmm, opt_tr)) != eslOK) {
+    fprintf (stderr, "hmm construction error during trace counting\n");
+    goto ERROR;
+  }
 
   free(matassign);
   return eslOK;
@@ -206,6 +210,39 @@ p7_Fastmodelmaker(ESL_MSA *msa, float symfrac, P7_HMM **ret_hmm, P7_TRACE ***opt
 /*****************************************************************
  * 2. Private functions used in constructing models.
  *****************************************************************/ 
+
+
+/* Function: do_modelmask()
+ *
+ * Purpose:  If the given <msa> has a MM CS line, mask (turn to
+ *           degenerate) residues in the msa positions associated
+ *           with the marked position in the MM (marked with 'm')
+ *
+ * Return:   <eslOK> on success.
+ *           <eslENORESULT> if error.
+ */
+static int
+do_modelmask( ESL_MSA *msa)
+{
+  int i,j;
+
+  if (msa->mm == NULL)  return eslOK;  //nothing to do
+
+  for (i = 1; i <= msa->alen; i++) {
+    for (j = 0; j < msa->nseq; j++) {
+      if (msa->mm[i-1] == 'm') {
+#ifdef eslAUGMENT_ALPHABET
+        if (msa->ax[j][i] != msa->abc->K && msa->ax[j][i] != msa->abc->Kp-1) // if not gap
+          msa->ax[j][i] = msa->abc->Kp-3; //that's the degenerate "any character" (N for DNA, X for protein)
+#else
+        if (msa->aseq[j][i] != '-' && msa->aseq[j][i] != '.') // if not gap
+          msa->aseq[j][i] = 'N';
+#endif
+      }
+    }
+  }
+  return eslOK;
+}
 
 /* Function: matassign2hmm()
  * 
@@ -235,6 +272,9 @@ matassign2hmm(ESL_MSA *msa, int *matassign, P7_HMM **ret_hmm, P7_TRACE ***opt_tr
   int      apos;                /* counter for aligned columns         */
   char errbuf[eslERRBUFSIZE];
 
+  /* apply the model mask in the 'GC MM' row */
+  do_modelmask(msa);
+
   /* How many match states in the HMM? */
   for (M = 0, apos = 1; apos <= msa->alen; apos++) 
     if (matassign[apos]) M++;
@@ -257,6 +297,7 @@ matassign2hmm(ESL_MSA *msa, int *matassign, P7_HMM **ret_hmm, P7_TRACE ***opt_tr
     if (tr[idx] == NULL) continue; /* skip rare examples of empty sequences */
     if ((status = p7_trace_Count(hmm, msa->ax[idx], msa->wgt[idx], tr[idx])) != eslOK) goto ERROR;
   }
+
   hmm->nseq     = msa->nseq;
   hmm->eff_nseq = msa->nseq;
 
@@ -318,6 +359,16 @@ annotate_model(P7_HMM *hmm, int *matassign, ESL_MSA *msa)
     hmm->flags |= p7H_RF;
   }
 
+  /* Model mask annotation  */
+  if (msa->mm != NULL) {
+    ESL_ALLOC(hmm->mm, sizeof(char) * (hmm->M+2));
+    hmm->mm[0] = ' ';
+    for (apos = k = 1; apos <= msa->alen; apos++)
+      if (matassign[apos]) hmm->mm[k++] = ( msa->mm[apos-1] == '.' ? '-' : msa->mm[apos-1]) ;
+    hmm->mm[k] = '\0';
+    hmm->flags |= p7H_MMASK;
+  }
+
   /* Consensus structure annotation */
   if (msa->ss_cons != NULL) {
     ESL_ALLOC(hmm->cs, sizeof(char) * (hmm->M+2));
@@ -369,7 +420,7 @@ utest_basic(void)
   char          msafile[16]  = "p7tmpXXXXXX"; /* tmpfile name template */
   FILE         *ofp          = NULL;
   ESL_ALPHABET *abc          = esl_alphabet_Create(eslAMINO);
-  ESL_MSAFILE  *afp          = NULL;
+  ESLX_MSAFILE *afp          = NULL;
   ESL_MSA      *msa          = NULL;
   P7_HMM       *hmm          = NULL;
   float         symfrac      = 0.5;
@@ -384,13 +435,13 @@ utest_basic(void)
   fprintf(ofp, "//\n");
   fclose(ofp);
 
-  if (esl_msafile_OpenDigital(abc, msafile, eslMSAFILE_UNKNOWN, NULL, &afp) != eslOK) esl_fatal(failmsg);
-  if (esl_msa_Read(afp, &msa)                                               != eslOK) esl_fatal(failmsg);
-  if (p7_Fastmodelmaker(msa, symfrac, &hmm, NULL)                           != eslOK) esl_fatal(failmsg);
+  if (eslx_msafile_Open(&abc, msafile, NULL, eslMSAFILE_UNKNOWN, NULL, &afp) != eslOK) esl_fatal(failmsg);
+  if (eslx_msafile_Read(afp, &msa)                                           != eslOK) esl_fatal(failmsg);
+  if (p7_Fastmodelmaker(msa, symfrac, NULL, &hmm, NULL)                      != eslOK) esl_fatal(failmsg);
   
   p7_hmm_Destroy(hmm);
   esl_msa_Destroy(msa);
-  esl_msafile_Close(afp);
+  eslx_msafile_Close(afp);
   esl_alphabet_Destroy(abc);
   remove(msafile);
   return;
@@ -411,7 +462,7 @@ utest_fragments(void)
   char          msafile[16]  = "p7tmpXXXXXX"; /* tmpfile name template */
   FILE         *ofp          = NULL;
   ESL_ALPHABET *abc          = esl_alphabet_Create(eslAMINO);
-  ESL_MSAFILE  *afp          = NULL;
+  ESLX_MSAFILE *afp          = NULL;
   ESL_MSA      *msa          = NULL;
   ESL_MSA      *dmsa         = NULL;
   ESL_MSA      *postmsa      = NULL;
@@ -448,12 +499,12 @@ utest_fragments(void)
   fclose(ofp);
 
   /* Read the original as text for comparison to postmsa. Make a digital copy for construction */
-  if (esl_msafile_Open(msafile, eslMSAFILE_UNKNOWN, NULL, &afp)             != eslOK) esl_fatal(failmsg);
-  if (esl_msa_Read(afp, &msa)                                               != eslOK) esl_fatal(failmsg);
+  if (eslx_msafile_Open(NULL, msafile, NULL, eslMSAFILE_UNKNOWN, NULL, &afp)!= eslOK) esl_fatal(failmsg);
+  if (eslx_msafile_Read(afp, &msa)                                          != eslOK) esl_fatal(failmsg);
   if ((dmsa = esl_msa_Clone(msa))                                           == NULL)  esl_fatal(failmsg);
   if (esl_msa_Digitize(abc, dmsa, NULL)                                     != eslOK) esl_fatal(failmsg);
 
-  if (p7_Handmodelmaker(dmsa, &hmm, &trarr)                                 != eslOK) esl_fatal(failmsg);
+  if (p7_Handmodelmaker(dmsa, NULL, &hmm, &trarr)                                 != eslOK) esl_fatal(failmsg);
   for (i = 0; i < dmsa->nseq; i++)
     if (p7_trace_Validate(trarr[i], abc, dmsa->ax[i], NULL)                 != eslOK) esl_fatal(failmsg);
 
@@ -471,7 +522,7 @@ utest_fragments(void)
   esl_msa_Destroy(msa);
   esl_msa_Destroy(dmsa);
   esl_msa_Destroy(postmsa);
-  esl_msafile_Close(afp);
+  eslx_msafile_Close(afp);
   esl_alphabet_Destroy(abc);
   remove(msafile);
   return;
@@ -488,7 +539,7 @@ utest_fragments(void)
  *****************************************************************/
 
 #ifdef p7BUILD_TESTDRIVE
-/* gcc -g -Wall -Dp7BUILD_TESTDRIVE -I. -I../easel -L. -L../easel -o build_test build.c -lhmmer -leasel -lm
+/* gcc -g -Wall -Dp7BUILD_TESTDRIVE -I. -I../easel -L. -L../easel -o build_utest build.c -lhmmer -leasel -lm
  */
 #include "easel.h"
 
@@ -534,12 +585,12 @@ static char banner[] = "example for the build module";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS  *go        = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS  *go        = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char         *msafile   = esl_opt_GetArg(go, 1);
   int           fmt       = eslMSAFILE_UNKNOWN;
   int           alphatype = eslUNKNOWN;
   ESL_ALPHABET *abc       = NULL;
-  ESL_MSAFILE  *afp       = NULL;
+  ESLX_MSAFILE *afp       = NULL;
   ESL_MSA      *msa       = NULL;
   P7_HMM       *hmm       = NULL;
   P7_PRIOR     *prior     = NULL;
@@ -551,25 +602,13 @@ main(int argc, char **argv)
   int           status;
   
   /* Standard idioms for opening and reading a digital MSA. (See esl_msa.c example). */
-  status = esl_msafile_Open(msafile, fmt, NULL, &afp);
-  if      (status == eslENOTFOUND) esl_fatal("Alignment file %s isn't readable", msafile);
-  else if (status == eslEFORMAT)   esl_fatal("Couldn't determine format of %s",  msafile);
-  else if (status != eslOK)        esl_fatal("Alignment file open failed (error code %d)", status);
-
   if      (esl_opt_GetBoolean(go, "--rna"))   alphatype = eslRNA;
   else if (esl_opt_GetBoolean(go, "--dna"))   alphatype = eslDNA;
   else if (esl_opt_GetBoolean(go, "--amino")) alphatype = eslAMINO;
-  else {
-    status = esl_msafile_GuessAlphabet(afp, &alphatype);
-    if      (status == eslEAMBIGUOUS) esl_fatal("Couldn't guess alphabet from first alignment in %s", msafile);
-    else if (status == eslEFORMAT)    esl_fatal("Alignment file parse error, line %d of file %s:\n%s\nBad line is: %s\n",
-						afp->linenumber, afp->fname, afp->errbuf, afp->buf);
-    else if (status == eslENODATA)    esl_fatal("Alignment file %s contains no data?", msafile);
-    else if (status != eslOK)         esl_fatal("Failed to guess alphabet (error code %d)\n", status);
-  }
-    
-  abc = esl_alphabet_Create(alphatype);
-  esl_msafile_SetDigital(afp, abc);
+
+  if ((status = eslx_msafile_Open(&abc, msafile, NULL, fmt, NULL, &afp)) != eslOK)
+    eslx_msafile_OpenFailure(afp, status);
+
   bg  = p7_bg_Create(abc);
 
   switch (abc->type) {
@@ -580,10 +619,12 @@ main(int argc, char **argv)
   }
   if (prior == NULL) esl_fatal("Failed to initialize prior");
 
-  while ((status = esl_msa_Read(afp, &msa)) == eslOK)
+  while ((status = eslx_msafile_Read(afp, &msa)) != eslEOF)
     {
+      if (status != eslOK) eslx_msafile_ReadFailure(afp, status);
+
       /* The modelmakers collect counts in an HMM structure */
-      status = p7_Handmodelmaker(msa, &hmm, &trarr);
+      status = p7_Handmodelmaker(msa, NULL, &hmm, &trarr);
       if      (status == eslENORESULT) esl_fatal("no consensus columns in alignment %s\n",  msa->name);
       else if (status != eslOK)        esl_fatal("failed to build HMM from alignment %s\n", msa->name);
 
@@ -612,7 +653,7 @@ main(int argc, char **argv)
       status = p7_tracealign_MSA(msa, trarr, hmm->M, p7_DEFAULT, &postmsa);
       if (status != eslOK) esl_fatal("failed to create new MSA from traces\n");
 
-      esl_msa_Write(stdout, postmsa, eslMSAFILE_PFAM);
+      eslx_msafile_Write(stdout, postmsa, eslMSAFILE_PFAM);
 
       p7_profile_Destroy(gm);
       p7_hmm_Destroy(hmm);
@@ -620,10 +661,8 @@ main(int argc, char **argv)
       esl_msa_Destroy(postmsa);
       esl_msa_Destroy(msa);
     }
-  if      (status == eslEFORMAT) esl_fatal("alignment file %s: %s\n", afp->fname, afp->errbuf);
-  else if (status != eslEOF)     esl_fatal("alignment file %s: read failed, error %d\n", afp->fname, status);
 
-  esl_msafile_Close(afp);
+  eslx_msafile_Close(afp);
   p7_bg_Destroy(bg);
   esl_alphabet_Destroy(abc);
   esl_getopts_Destroy(go);
@@ -637,12 +676,15 @@ main(int argc, char **argv)
 
 /************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/build.c $
+ * SVN $Id: build.c 3496 2011-02-28 22:18:49Z eddys $
  ************************************************************/
 
 

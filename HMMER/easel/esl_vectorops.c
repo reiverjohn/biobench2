@@ -11,8 +11,6 @@
  *    4. Examples.
  *    5. Copyright and license information.
  * 
- * SRE, Tue Oct  1 15:23:25 2002 [St. Louis]
- * SVN $Id: esl_vectorops.c 509 2010-02-07 22:56:55Z eddys $
  */                      
 #include "esl_config.h"
 
@@ -248,6 +246,11 @@ esl_vec_ICopy(const int *src, const int n, int *dest)
  *            for floating point comparisons, and strict equality
  *            for integer comparisons. Return <eslOK>
  *            if the vectors are equal, and <eslFAIL> if not.
+ *            
+ *            If <n=0>, the test always succeeds. In this case, either
+ *            <vec1> and <vec2> (or both) may be <NULL>.  This
+ *            accommodates an occasional convention of leaving empty
+ *            vectors <NULL>.
  *
  *            <esl_vec_FCompare()> and <esl_vec_ICompare()> do the same,
  *            for float and integer vectors.
@@ -319,6 +322,63 @@ esl_vec_ISwap(int *vec1, int *vec2, int n)
 }
 
 
+/* Function:  esl_vec_DReverse()
+ * Synopsis:  Reverse a vector (possibly in place).
+ *
+ * Purpose:   Put the <n> values from vector <vec> in reversed order in
+ *            <rev>. Caller provides storage in <rev> for at least <n>
+ *            values.
+ *            
+ *            <vec> and <rev> can be the same, in which case <vec> is
+ *            reversed in place.
+ *            
+ *            <esl_vec_FReverse()> and <esl_vec_IReverse()>
+ *            do the same, for float and integer values.
+ */
+void
+esl_vec_DReverse(double *vec, double *rev, int n)
+{
+  int    i;
+  double x;
+
+  for (i = 0; i < n/2; i++)
+    {
+      x          = vec[n-i-1];
+      rev[n-i-1] = vec[i];
+      rev[i]     = x;
+    }
+  if (n%2) rev[i] = vec[i];
+}
+void
+esl_vec_FReverse(float *vec, float *rev, int n)
+{
+  int    i;
+  float  x;
+
+  for (i = 0; i < n/2; i++)
+    {
+      x          = vec[n-i-1];
+      rev[n-i-1] = vec[i];
+      rev[i]     = x;
+    }
+  if (n%2) rev[i] = vec[i];
+}
+void
+esl_vec_IReverse(int *vec, int *rev, int n)
+{
+  int i;
+  int x;
+
+  for (i = 0; i < n/2; i++)
+    {
+      x          = vec[n-i-1];
+      rev[n-i-1] = vec[i];
+      rev[i]     = x;
+    }
+  if (n%2) rev[i] = vec[i];
+}
+
+
 
 
 /* Function:  esl_vec_DDot()
@@ -367,7 +427,7 @@ esl_vec_IDot(int *vec1, int *vec2, int n)
  *            for float and integer vectors.
  */
 double
-esl_vec_DMax(double *vec, int n)
+esl_vec_DMax(const double *vec, int n)
 {
   int i;
   double best;
@@ -378,7 +438,7 @@ esl_vec_DMax(double *vec, int n)
   return best;
 }
 float
-esl_vec_FMax(float *vec, int n)
+esl_vec_FMax(const float *vec, int n)
 {
   int   i;
   float best;
@@ -389,7 +449,7 @@ esl_vec_FMax(float *vec, int n)
   return best;
 }
 int
-esl_vec_IMax(int *vec, int n)
+esl_vec_IMax(const int *vec, int n)
 {
   int   i;
   int   best;
@@ -411,7 +471,7 @@ esl_vec_IMax(int *vec, int n)
  *            for float and integer vectors.
  */
 double
-esl_vec_DMin(double *vec, int n)
+esl_vec_DMin(const double *vec, int n)
 {
   int i;
   double best;
@@ -422,7 +482,7 @@ esl_vec_DMin(double *vec, int n)
   return best;
 }
 float
-esl_vec_FMin(float *vec, int n)
+esl_vec_FMin(const float *vec, int n)
 {
   int   i;
   float best;
@@ -433,7 +493,7 @@ esl_vec_FMin(float *vec, int n)
   return best;
 }
 int
-esl_vec_IMin(int *vec, int n)
+esl_vec_IMin(const int *vec, int n)
 {
   int   i;
   int   best;
@@ -452,6 +512,9 @@ esl_vec_IMin(int *vec, int n)
  *            in <vec>. In case of ties, the element with the smallest index
  *            is returned. 
  *            
+ *            <n> can be 0 and <vec> can be <NULL>, in which case the
+ *            function returns 0.
+ *            
  *            <esl_vec_FArgMax()> and <esl_vec_IArgMax()> do the same,
  *            for float and integer vectors.
  *            
@@ -460,7 +523,7 @@ esl_vec_IMin(int *vec, int n)
  *            behavior: optimal accuracy tracebacks in HMMER for example.           
  */
 int
-esl_vec_DArgMax(double *vec, int n)
+esl_vec_DArgMax(const double *vec, int n)
 {
   int i;
   int best = 0;
@@ -470,7 +533,7 @@ esl_vec_DArgMax(double *vec, int n)
   return best;
 }
 int
-esl_vec_FArgMax(float *vec, int n)
+esl_vec_FArgMax(const float *vec, int n)
 {
   int i;
   int best = 0;
@@ -480,7 +543,7 @@ esl_vec_FArgMax(float *vec, int n)
   return best;
 }
 int
-esl_vec_IArgMax(int *vec, int n)
+esl_vec_IArgMax(const int *vec, int n)
 {
   int i;
   int best = 0;
@@ -501,7 +564,7 @@ esl_vec_IArgMax(int *vec, int n)
  *            for float and integer vectors.
  */
 int
-esl_vec_DArgMin(double *vec, int n)
+esl_vec_DArgMin(const double *vec, int n)
 {
   int i;
   int best = 0;
@@ -510,7 +573,7 @@ esl_vec_DArgMin(double *vec, int n)
   return best;
 }
 int
-esl_vec_FArgMin(float *vec, int n)
+esl_vec_FArgMin(const float *vec, int n)
 {
   int   i;
   int   best = 0;
@@ -520,7 +583,7 @@ esl_vec_FArgMin(float *vec, int n)
   return best;
 }
 int
-esl_vec_IArgMin(int *vec, int n)
+esl_vec_IArgMin(const int *vec, int n)
 {
   int   i;
   int   best = 0;
@@ -1008,6 +1071,54 @@ esl_vec_FLogNorm(float *vec, int n)
   esl_vec_FNorm(vec, n);
 }
 
+
+/* Function:  esl_vec_DCDF()
+ * Synopsis:  Calculate cumulative distribution for a discrete prob vector
+ * Incept:    SRE, Wed Jan 12 09:09:42 2011 [Janelia]
+ *
+ * Purpose:   Given a probability vector <p> of length <n>, 
+ *            calculates its cumulate distribution function
+ *            and puts in in caller-allocated space <cdf>.
+ *            Caller must have allocated <cdf> for at least
+ *            <n> elements.
+ *            
+ *            By definition, <cdf[0] == p[0]>, and <cdf[n-1]> ought to
+ *            be 1.0; however, numerical roundoff error must be tolerated
+ *            in the sum. If caller isn't sure about <p>'s provenance,
+ *            it may want to check that <cdf[n-1]> is tolerably close 
+ *            to 1.0 (see <esl_DCompare()>).
+ *
+ *            It is ok for <cdf> to be the same space as <p>
+ *            (<esl_vec_DCDF(p, n, p)> is fine); that is, <p> can be
+ *            overwritten by <cdf>.
+ *
+ * Args:      p    - input probability vector p[0..n-1]
+ *            n    - number of elements in p
+ *            cdf  - RETURN: cumulative distribution for p, in caller-allocated space
+ *
+ * Returns:   (void).
+ */
+void
+esl_vec_DCDF(double *p, int n, double *cdf)
+{
+  int i;
+ 
+  cdf[0] = p[0];
+  for (i = 1; i < n; i++) 
+    cdf[i] = p[i] + cdf[i-1];
+}
+void
+esl_vec_FCDF(float *p, int n, float *cdf)
+{
+  int i;
+ 
+  cdf[0] = p[0];
+  for (i = 1; i < n; i++) 
+    cdf[i] = p[i] + cdf[i-1];
+}
+
+
+
 /* Function:  esl_vec_DValidate()
  * Synopsis:  Verifies that vector is p-vector.
  * Incept:    ER, Tue Dec  5 09:38:54 EST 2006 [janelia]
@@ -1134,6 +1245,58 @@ esl_vec_FLogValidate(float *vec, int n, float tol, char *errbuf)
   return eslOK;
 }
 
+#ifdef eslAUGMENT_RANDOM
+#include "esl_random.h"
+
+/* Function:  esl_vec_DShuffle()
+ * Synopsis:  Shuffle a vector, in place.
+ *
+ * Purpose:   Shuffle a vector <v> of <n> items, using the
+ *            random number generator <r>.
+ */
+int
+esl_vec_DShuffle(ESL_RANDOMNESS *r, double *v, int n)
+{
+  double swap;
+  int    pos;
+  for ( ; n > 1; n--)
+    {
+      pos = esl_rnd_Roll(r, n);
+      swap = v[pos]; 
+      v[pos] = v[n-1];
+      v[n-1] = swap;
+    }
+  return eslOK;
+}
+int
+esl_vec_FShuffle(ESL_RANDOMNESS *r, float *v, int n)
+{
+  float swap;
+  int   pos;
+  for ( ; n > 1; n--)
+    {
+      pos = esl_rnd_Roll(r, n);
+      swap = v[pos]; 
+      v[pos] = v[n-1];
+      v[n-1] = swap;
+    }
+  return eslOK;
+}
+int
+esl_vec_IShuffle(ESL_RANDOMNESS *r, int *v, int n)
+{
+  int swap;
+  int pos;
+  for ( ; n > 1; n--)
+    {
+      pos = esl_rnd_Roll(r, n);
+      swap = v[pos]; 
+      v[pos] = v[n-1];
+      v[n-1] = swap;
+    }
+  return eslOK;
+}
+#endif /*eslAUGMENT_RANDOM*/
 
 
 /*****************************************************************
@@ -1252,10 +1415,13 @@ int main(void)
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_vectorops.c 861 2013-04-12 14:43:15Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_vectorops.c $
  *****************************************************************/

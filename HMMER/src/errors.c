@@ -9,7 +9,7 @@
  * documentation.
  * 
  * SRE, Fri Jan 12 08:46:02 2007
- * SVN $Id: errors.c 2374 2008-03-31 12:08:51Z eddys $
+ * SVN $Id: errors.c 3474 2011-01-17 13:25:32Z eddys $
  */
 
 #include "p7_config.h"

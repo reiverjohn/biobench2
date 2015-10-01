@@ -1,10 +1,7 @@
-/* 
- * Digital representation of biosequence symbols in Easel.
- * SVN $Id: esl_alphabet.h 337 2009-05-12 02:13:02Z eddys $
- * SRE, Tue Nov 23 19:44:01 2004 [St. Louis]
+/* Digital representation of biosequence symbols in Easel.
  */
-#ifndef ESL_ALPHABET_INCLUDED
-#define ESL_ALPHABET_INCLUDED
+#ifndef eslALPHABET_INCLUDED
+#define eslALPHABET_INCLUDED
 
 #include <ctype.h>		/* isascii() */
 #include "easel.h"
@@ -22,14 +19,14 @@
 /* Structure: ESL_ALPHABET
  */
 typedef struct {
-  int      type;	     /* eslDNA, eslRNA, eslAMINO, or eslNONSTANDARD     */
-  int      K;		     /* uniq alphabet size: 4 or 20                     */
-  int      Kp;		     /* total size: alphabet + degen + gap + missing    */
-  char    *sym;              /* "ACGT-RYMKSWHBVDN~", for instance    [0..Kp-1]  */
-  ESL_DSQ  inmap[128];       /* inmap['A'] = 0, etc: dsq[] index for a symbol   */
-  char   **degen;            /* 1/0, which syms inc which res [0..Kp-1][0..K-1] */
-  int     *ndegen;	     /* # of degenerate residues per code  [0..Kp-1]    */
-  ESL_DSQ *complement;       /* map a digital symbol to its complement [0..Kp-1]*/
+  int      type;	     /* eslDNA, eslRNA, eslAMINO, eslNONSTANDARD, etc.                 */
+  int      K;		     /* uniq alphabet size: 4 or 20                                    */
+  int      Kp;		     /* total size: alphabet + degen + gap + missing                   */
+  char    *sym;              /* "ACGT-RYMKSWHBVDN~", for instance    [0..Kp-1]                 */
+  ESL_DSQ  inmap[128];       /* inmap['A'] = 0, etc: dsq[] index for a symbol                  */
+  char   **degen;            /* 1/0, which syms inc which res [0..Kp-1][0..K-1]                */
+  int     *ndegen;	     /* # of degenerate residues per code  [0..Kp-1]                   */
+  ESL_DSQ *complement;       /* maps sym to complements, [0..Kp-1]; NULL if <type> not DNA/RNA */
 } ESL_ALPHABET;
 
 
@@ -43,6 +40,7 @@ extern int           esl_alphabet_SetEquiv(ESL_ALPHABET *a, char sym, char c);
 extern int           esl_alphabet_SetCaseInsensitive(ESL_ALPHABET *a);
 extern int           esl_alphabet_SetDegeneracy(ESL_ALPHABET *a, char c, char *ds);
 extern int           esl_alphabet_SetIgnored(ESL_ALPHABET *a, const char *ignoredchars);
+extern size_t        esl_alphabet_Sizeof(ESL_ALPHABET *a);
 extern void          esl_alphabet_Destroy(ESL_ALPHABET *a);
 
 /* 2. Digitized sequences.
@@ -53,12 +51,13 @@ extern int     esl_abc_Textize  (const ESL_ALPHABET *a, const ESL_DSQ *dsq,  int
 extern int     esl_abc_TextizeN (const ESL_ALPHABET *a, const ESL_DSQ *dptr, int64_t L, char   *buf);
 extern int     esl_abc_dsqcpy(const ESL_DSQ *dsq, int64_t L, ESL_DSQ *dcopy);
 extern int     esl_abc_dsqdup(const ESL_DSQ *dsq, int64_t L, ESL_DSQ **ret_dup);
-extern int     esl_abc_dsqcat(const ESL_ALPHABET *a, ESL_DSQ **dsq, int64_t *L, const char *s, int64_t n);
+extern int     esl_abc_dsqcat        (const ESL_DSQ *inmap, ESL_DSQ **dsq, int64_t *L, const char *s, esl_pos_t n);
+extern int     esl_abc_dsqcat_noalloc(const ESL_DSQ *inmap, ESL_DSQ  *dsq, int64_t *L, const char *s, esl_pos_t n);
 extern int64_t esl_abc_dsqlen(const ESL_DSQ *dsq);
 extern int64_t esl_abc_dsqrlen(const ESL_ALPHABET *a, const ESL_DSQ *dsq);
 extern int     esl_abc_CDealign(const ESL_ALPHABET *abc, char    *s, const ESL_DSQ *ref_ax, int64_t *opt_rlen);
 extern int     esl_abc_XDealign(const ESL_ALPHABET *abc, ESL_DSQ *x, const ESL_DSQ *ref_ax, int64_t *opt_rlen);
-
+extern int     esl_abc_ConvertDegen2X(const ESL_ALPHABET *abc, ESL_DSQ *dsq);
 
 /* 3. Other routines in the API.
  */
@@ -119,13 +118,11 @@ extern int    esl_abc_ValidateSeq(const ESL_ALPHABET *a, const char *seq, int64_
 #define esl_abc_CGetNonresidue(a)    ((a)->sym[(int)(a)->Kp-2])
 #define esl_abc_CGetMissing(a)       ((a)->sym[(int)(a)->Kp-1])
 
-
-#endif /*!ESL_ALPHABET_INCLUDED*/
-
+#endif /*eslALPHABET_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
