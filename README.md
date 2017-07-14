@@ -17,7 +17,7 @@ developed by Albayraktaroglu et al, 2005 "BioBench: A benchmark suite of bioinfo
 Scripts developed and packages assembled by John Johnston
 Michigan State University
 
-Last Modified: 2011
+Last Modified: 2015
 
 ***************************************
 
