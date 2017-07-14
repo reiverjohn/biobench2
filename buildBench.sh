@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+##
+##
+##
+#
 echo
 echo "*** Beginning Bio-Benchmarking Build ***"
 echo
