@@ -27,14 +27,12 @@
  * etc) are then verified against the generic implementations. 
  * 
  * SRE, Tue Jul 17 08:17:36 2007 [Janelia]
- * SVN $Id: itest_brute.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: itest_brute.c 3960 2012-03-22 21:42:50Z wheelert $
  * xref J1/106-109: original implementation
  * xref J5/118:     revival; brought up to date with H3's assumptions of zero insert scores.
  */
 
 /*  gcc -std=c99 -g -Wall -I. -I../easel -L. -L../easel -o itest_brute itest_brute.c  -lhmmer -leasel -lm
- * or
- *  gcc -std=c99 -g -Wall -I. -I../easel -L. -L../easel -o itest_brute itest_brute.c  -lhmmer -leasel -lm
  */
 #include "p7_config.h"
 
@@ -96,7 +94,7 @@ int
 main(int argc, char **argv)
 {
   struct p7_bruteparam_s prm;
-  ESL_GETOPTS    *go       = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go       = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_ALPHABET   *abc      = esl_alphabet_Create(eslDNA);
   ESL_RANDOMNESS *r        = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   P7_BG          *bg       = p7_bg_Create(abc);
@@ -114,6 +112,8 @@ main(int argc, char **argv)
   int             L;
   int             i,j;
   float           vprecision, fprecision; /* expected bound on absolute accuracy for viterbi, forward */
+
+  p7_FLogsumInit();
 
   for (do_local = 0; do_local <= 1; do_local++) /* run tests in both glocal and local mode   */
     for (j = 0; j <= N; j++)	                /* #0 = fixed params; #1..N = sampled params */
@@ -146,13 +146,13 @@ main(int argc, char **argv)
 	    if (p7_GViterbi(dsq, L, gm, gx, &(vsc[L]))  != eslOK) esl_fatal("viterbi failed");
 
 	    if (esl_opt_GetBoolean(go, "--vv")) 
-	      p7_gmx_Dump(stdout, gx);
+	      p7_gmx_Dump(stdout, gx, p7_DEFAULT);
 	    p7_gmx_Reuse(gx);
 
 	    p7_gmx_GrowTo(gx, 3, L);
 	    if (p7_GForward(dsq, L, gm, gx, &(fsc[L]))  != eslOK) esl_fatal("forward failed");
 	    if (esl_opt_GetBoolean(go, "--vv")) 
-	      p7_gmx_Dump(stdout, gx);
+	      p7_gmx_Dump(stdout, gx, p7_DEFAULT);
 	    p7_gmx_Reuse(gx);
 
 	    vprecision = 1e-4;    /* default impl uses fp, should be accurate within machine precision      */
@@ -343,6 +343,7 @@ create_brute_hmm(ESL_ALPHABET *abc, struct p7_bruteparam_s *prm)
   hmm->nseq     = 0;
   hmm->eff_nseq = 0;
   p7_hmm_SetCtime(hmm);
+  p7_hmm_SetConsensus(hmm, NULL);
   hmm->checksum = 0;
 
   return hmm;

@@ -2,9 +2,6 @@
  * 
  * Can be used even without derivative information; falls back to
  * a numeric gradient if analytic gradient is unavailable.
- * 
- * SRE, Wed Jun 22 11:37:29 2005
- * SVN $Id: esl_minimizer.c 438 2009-11-12 22:29:50Z wheelert $
  */
 #include "esl_config.h"
 
@@ -653,10 +650,13 @@ main(int argc, char **argv)
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_minimizer.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_minimizer.c $
  *****************************************************************/

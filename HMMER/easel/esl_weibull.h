@@ -1,11 +1,11 @@
-/* esl_weibull.h
- * Weibull distributions.
+/* Weibull distributions.
  * 
  * SRE, Tue Aug  9 10:48:35 2005 [St. Louis]
- * SVN $Id: esl_weibull.h 83 2005-12-13 20:54:07Z eddy $
+ * SVN $Id: esl_weibull.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_weibull.h $
  */
-#ifndef ESL_WEI_INCLUDED
-#define ESL_WEI_INCLUDED
+#ifndef eslWEIBULL_INCLUDED
+#define eslWEIBULL_INCLUDED
 
 #ifdef eslAUGMENT_RANDOM
 #include <esl_random.h>
@@ -47,11 +47,11 @@ extern int esl_wei_FitCompleteBinned(ESL_HISTOGRAM *h, double *ret_mu,
 #endif /*eslAUGMENT_MINIMIZER*/
 
 
-#endif /*ESL_WEI_INCLUDED*/
+#endif /*eslWEIBULL_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

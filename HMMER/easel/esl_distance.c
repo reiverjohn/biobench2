@@ -12,8 +12,6 @@
  *    9. Example.
  *   10. Copyright notice and license.
  *    
- * SVN $Id: esl_distance.c 561 2010-03-16 18:27:06Z eddys $
- * SRE, Mon Apr 17 20:05:43 2006 [St. Louis]
  */
 #include "esl_config.h"
 
@@ -725,7 +723,7 @@ esl_dst_CAverageId(char **as, int N, int max_comparisons, double *ret_id)
 {
   int    status;
   double id;
-  double sum;
+  double sum = 0.;
   int    i,j,n;
   
   if (N <= 1) { *ret_id = 1.; return eslOK; }
@@ -740,7 +738,7 @@ esl_dst_CAverageId(char **as, int N, int max_comparisons, double *ret_id)
 	    if ((status = esl_dst_CPairId(as[i], as[j], &id, NULL, NULL)) != eslOK) return status;
 	    sum += id;
 	  }
-      id /= (double) (N * (N-1) / 2);
+      sum /= (double) (N * (N-1) / 2);
     }
 
   /* If nseq is large, calculate average over a stochastic sample. */
@@ -753,11 +751,11 @@ esl_dst_CAverageId(char **as, int N, int max_comparisons, double *ret_id)
 	  if ((status = esl_dst_CPairId(as[i], as[j], &id, NULL, NULL)) != eslOK) return status;
 	  sum += id;
 	}
-      id /= (double) max_comparisons;
+      sum /= (double) max_comparisons;
       esl_randomness_Destroy(r);
     }
 
-  *ret_id = id;
+  *ret_id = sum;
   return eslOK;
 }
 #endif /* eslAUGMENT_RANDOM */
@@ -1337,15 +1335,17 @@ main(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-  ESL_MSAFILE *afp; 
-  ESL_MSA     *msa;
-  ESL_DMATRIX *P;
-  int          status;
-  int          i,j;
-  double       min, avg, max;
+  ESLX_MSAFILE *afp; 
+  ESL_MSA      *msa;
+  ESL_DMATRIX  *P;
+  int           i,j;
+  double        min, avg, max;
+  int           status;
 
-  esl_msafile_Open(argv[1], eslMSAFILE_UNKNOWN, NULL, &afp);
-  esl_msa_Read(afp, &msa);
+  if ((status = eslx_msafile_Open(NULL, argv[1], NULL, eslMSAFILE_UNKNOWN, NULL, &afp)) != eslOK)
+    eslx_msafile_OpenFailure(afp, status);
+  if ((status = eslx_msafile_Read(afp, &msa)) != eslOK)
+    eslx_msafile_ReadFailure(afp, status);
 
   esl_dst_CPairIdMx(msa->aseq, msa->nseq, &P);
 
@@ -1367,21 +1367,24 @@ int main(int argc, char **argv)
 
   esl_dmatrix_Destroy(P);
   esl_msa_Destroy(msa);
-  esl_msafile_Close(afp);
+  eslx_msafile_Close(afp);
   return 0;
 }
 /*::cexcerpt::distance_example::end::*/
 #endif /*eslDISTANCE_EXAMPLE*/
 
 
- /*****************************************************************
-  * Easel - a library of C functions for biological sequence analysis
-  * Version h3.0; March 2010
-  * Copyright (C) 2010 Howard Hughes Medical Institute.
-  * Other copyrights also apply. See the COPYRIGHT file for a full list.
-  * 
-  * Easel is distributed under the Janelia Farm Software License, a BSD
-  * license. See the LICENSE file for more details.
-  *****************************************************************/
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_distance.c 887 2013-09-24 09:41:22Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_distance.c $
+ *****************************************************************/
 
 

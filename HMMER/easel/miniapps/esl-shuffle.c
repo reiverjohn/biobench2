@@ -1,7 +1,7 @@
 /* Shuffling or generating random sequences.
  * 
  * SRE, Wed Jan 16 15:30:05 2008 [UA5230 to New York]
- * SVN $Id: esl-shuffle.c 509 2010-02-07 22:56:55Z eddys $
+ * SVN $Id: esl-shuffle.c 900 2014-01-17 18:55:41Z wheelert $
  * from squid's shuffle (1995)
  */
 #include "esl_config.h"
@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "easel.h"
+#include "esl_composition.h"
 #include "esl_getopts.h"
 #include "esl_msa.h"
 #include "esl_msashuffle.h"
@@ -105,32 +106,27 @@ cmdline_help(char *argv0, ESL_GETOPTS *go)
 
 
 /* msa_shuffling()
- * SRE, Tue Jan 22 08:39:51 2008 [Market Street Cafe, Leesburg]
  * 
  * Shuffling multiple sequence alignments
  */
 static int
 msa_shuffling(ESL_GETOPTS *go, ESL_RANDOMNESS *r, FILE *ofp, int outfmt)
 {
-  char        *msafile = esl_opt_GetArg(go, 1);
-  int          infmt   = eslMSAFILE_UNKNOWN;
-  ESL_MSAFILE *afp     = NULL;
-  ESL_MSA     *msa     = NULL;
-  ESL_MSA     *shuf    = NULL;
-  int          N       = esl_opt_GetInteger(go, "-N");
-  int          i;
-  int          status, mstatus;
+  char         *msafile = esl_opt_GetArg(go, 1);
+  int           infmt   = eslMSAFILE_UNKNOWN;
+  ESLX_MSAFILE *afp     = NULL;
+  ESL_MSA      *msa     = NULL;
+  ESL_MSA      *shuf    = NULL;
+  int           N       = esl_opt_GetInteger(go, "-N");
+  int           i;
+  int           status;
 
-  status = esl_msafile_Open(msafile, infmt, NULL, &afp);
-  if (status == eslENOTFOUND)    esl_fatal("Alignment file %s isn't readable\n", msafile);
-  else if (status == eslEFORMAT) esl_fatal("Couldn't determine format of %s\n",  msafile);
-  else if (status != eslOK)      esl_fatal("Alignment file open failed (error %d)\n", status);
+  if ( (status = eslx_msafile_Open(NULL, msafile, NULL, infmt, NULL, &afp)) != eslOK)
+    eslx_msafile_OpenFailure(afp, status);
   
-  while ((mstatus = esl_msa_Read(afp, &msa)) != eslEOF)
+  while ((status = eslx_msafile_Read(afp, &msa)) != eslEOF)
     {
-      if      (status == eslEFORMAT) esl_fatal("Alignment file parse error:\n%s\n", afp->errbuf);
-      else if (status == eslEINVAL)  esl_fatal("Alignment file parse error:\n%s\n", afp->errbuf);
-      else if (status != eslOK)      esl_fatal("Alignment file read failed with error code %d\n", status);
+      if (status != eslOK) eslx_msafile_ReadFailure(afp, status);
 
       shuf = esl_msa_Clone(msa);
 
@@ -158,19 +154,19 @@ msa_shuffling(ESL_GETOPTS *go, ESL_RANDOMNESS *r, FILE *ofp, int outfmt)
 	    }
 	  }
 
-	  esl_msa_Write(ofp, shuf, outfmt);
+	  eslx_msafile_Write(ofp, shuf, afp->format);
 	}
 
       esl_msa_Destroy(shuf);
       esl_msa_Destroy(msa);
     }
 
+  eslx_msafile_Close(afp);
   return eslOK;
 }
 
 
 /* seq_generation()
- * SRE, Tue Jan 22 08:38:58 2008 [Market Street Cafe, Leesburg]
  *
  * Generating sequences.
  */
@@ -305,8 +301,9 @@ seq_shuffling(ESL_GETOPTS *go, ESL_RANDOMNESS *r, FILE *ofp, int outfmt)
 	  }
 
 	  /* Set the name of the shuffled sequence */
-	  if (N > 1) esl_sq_FormatName(shuff, "%s-shuffled-%d", sq->name, i);
-	  else       esl_sq_FormatName(shuff, "%s-shuffled", sq->name);
+	  if (esl_opt_GetBoolean(go, "-r")) esl_sq_FormatName(shuff, "%s-reversed",    sq->name, i);
+	  else if (N > 1)                   esl_sq_FormatName(shuff, "%s-shuffled-%d", sq->name, i);
+	  else                              esl_sq_FormatName(shuff, "%s-shuffled",    sq->name);
 
 	  /* Output the resulting sequence */
 	  esl_sqio_Write(ofp, shuff, outfmt, FALSE);
@@ -395,8 +392,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

@@ -1,11 +1,7 @@
 /* A simple token-based file parsing system.
- * 
- * SRE, Tue Jul 13 14:40:35 2004 [St. Louis]
- * SVN $Id: esl_fileparser.h 309 2008-12-17 13:49:36Z eddys $
  */
-
-#ifndef ESL_FILEPARSER_INCLUDED
-#define ESL_FILEPARSER_INCLUDED
+#ifndef eslFILEPARSER_INCLUDED
+#define eslFILEPARSER_INCLUDED
 
 #include <stdio.h>
 #include "easel.h"
@@ -24,10 +20,16 @@ typedef struct {
   char *filename;		/* name of opened file; or NULL (if just a stream) */
   int   linenumber;		/* what line is loaded into buf; 1..nlines         */
   char  errbuf[eslERRBUFSIZE];  /* for holding error diagnostics                   */
+
+  int   is_buffer;              /* the file has been buffered into memory          */
+  char *mem_buffer;             /* pointer to the buffered file                    */
+  int   mem_size;               /* size of the buffered file                       */
+  int   mem_pos;                /* current position in the buffer                  */
 } ESL_FILEPARSER;
 
 extern int  esl_fileparser_Open(const char *filename, const char *envvar, ESL_FILEPARSER **ret_efp);
 extern ESL_FILEPARSER *esl_fileparser_Create(FILE *fp);
+extern ESL_FILEPARSER *esl_fileparser_CreateMapped(void *buffer, int size);
 extern int  esl_fileparser_SetCommentChar  (ESL_FILEPARSER *efp, char c);
 extern int  esl_fileparser_GetToken        (ESL_FILEPARSER *efp, char **opt_tok, int *opt_toklen);
 extern int  esl_fileparser_NextLine        (ESL_FILEPARSER *efp);
@@ -37,4 +39,13 @@ extern int  esl_fileparser_GetRemainingLine(ESL_FILEPARSER *efp, char **ret_s);
 extern void esl_fileparser_Destroy         (ESL_FILEPARSER *efp);
 extern void esl_fileparser_Close           (ESL_FILEPARSER *efp);
 
-#endif /*ESL_FILEPARSER_INCLUDED */
+#endif /*eslFILEPARSER_INCLUDED */
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *****************************************************************/

@@ -1,17 +1,12 @@
-#ifdef ESL_WITH_LAPACK
-/* interface_lapack.c
- * Interface with the LAPACK (Fortran77) numerical library.
- * 
- * SRE, Tue Jul 13 14:58:46 2004
- * SVN $Id: interface_lapack.c 129 2006-10-31 19:51:47Z eddys $
+/* Interface with the LAPACK (Fortran77) numerical library.
  */
-
-#include <esl_config.h>
+#ifdef HAVE_LIBLAPACK
+#include "esl_config.h"
 
 #include <stdlib.h>
-#include <easel/easel.h>
-#include <easel/dmatrix.h>
-#include <easel/interface_lapack.h>
+#include "easel/easel.h"
+#include "easel/dmatrix.h"
+#include "easel/interface_lapack.h"
 
 /* A:       nxn real matrix
  * ret_Er:  RETURN: vector of eigenvalues, real part, allocated 0..n-1
@@ -85,4 +80,18 @@ esl_lapack_dgeev(ESL_DMATRIX *A, double **ret_Er, double **ret_Ei, ESL_DMATRIX *
 }
 
 
-#endif /*ESL_WITH_LAPACK*/
+#endif /*HAVE_LIBLAPACK*/
+
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: interface_lapack.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/interface_lapack.c $
+ *****************************************************************/
+

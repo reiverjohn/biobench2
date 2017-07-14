@@ -1,10 +1,11 @@
 /* Routines for manipulating evolutionary rate matrices.
  * 
  * SRE, Tue Jul 13 16:09:05 2004 [St. Louis]
- * SVN $Id: esl_ratematrix.h 162 2007-04-10 23:50:12Z eddys $
+ * SVN $Id: esl_ratematrix.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_ratematrix.h $
  */
-#ifndef ESL_RATEMATRIX_INCLUDED
-#define ESL_RATEMATRIX_INCLUDED
+#ifndef eslRATEMATRIX_INCLUDED
+#define eslRATEMATRIX_INCLUDED
 
 /* 1. Setting standard rate matrix models. */
 extern int esl_rmx_SetWAG(ESL_DMATRIX *Q, double *pi); 
@@ -24,4 +25,13 @@ extern double esl_rmx_RelativeEntropy(ESL_DMATRIX *P, double *pi);
 extern double esl_rmx_ExpectedScore  (ESL_DMATRIX *P, double *pi);
 
 
-#endif /*ESL_RATEMATRIX_INCLUDED*/
+#endif /*eslRATEMATRIX_INCLUDED*/
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *****************************************************************/

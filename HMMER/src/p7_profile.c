@@ -8,9 +8,6 @@
  *
  * See also: 
  *   modelconfig.c : routines that configure a profile given an HMM
- *    
- * SRE, Thu Jan 11 15:16:47 2007 [Janelia] [Sufjan Stevens, Illinois]
- * SVN $Id: p7_profile.c 3152 2010-02-07 22:55:22Z eddys $
  */
 
 #include "p7_config.h"
@@ -32,7 +29,6 @@
 
 /* Function:  p7_profile_Create()
  * Synopsis:  Allocates a profile.
- * Incept:    SRE, Thu Jan 11 15:53:28 2007 [Janelia]
  *
  * Purpose:   Allocates for a profile of up to <M> nodes, for digital
  *            alphabet <abc>.
@@ -64,6 +60,7 @@ p7_profile_Create(int allocM, const ESL_ALPHABET *abc)
   gm->tsc       = NULL;
   gm->rsc       = NULL;
   gm->rf        = NULL;
+  gm->mm        = NULL;
   gm->cs        = NULL;
   gm->consensus = NULL;
 
@@ -71,6 +68,7 @@ p7_profile_Create(int allocM, const ESL_ALPHABET *abc)
   ESL_ALLOC(gm->tsc,       sizeof(float)   * allocM * p7P_NTRANS); 
   ESL_ALLOC(gm->rsc,       sizeof(float *) * abc->Kp);
   ESL_ALLOC(gm->rf,        sizeof(char)    * (allocM+2)); /* yes, +2: each is (0)1..M, +trailing \0  */
+  ESL_ALLOC(gm->mm,        sizeof(char)    * (allocM+2));
   ESL_ALLOC(gm->cs,        sizeof(char)    * (allocM+2));
   ESL_ALLOC(gm->consensus, sizeof(char)    * (allocM+2));
   gm->rsc[0] = NULL;
@@ -103,6 +101,7 @@ p7_profile_Create(int allocM, const ESL_ALPHABET *abc)
   gm->L                = 0;
   gm->allocM           = allocM;
   gm->M                = 0;
+  gm->max_length       = -1;
   gm->nj               = 0.0f;
 
   gm->roff             = -1;
@@ -115,6 +114,7 @@ p7_profile_Create(int allocM, const ESL_ALPHABET *abc)
   gm->acc              = NULL;
   gm->desc             = NULL;
   gm->rf[0]            = 0;     /* RF line is optional annotation; this flags that it's not set yet */
+  gm->mm[0]            = 0;     /* likewise for MM annotation line */
   gm->cs[0]            = 0;     /* likewise for CS annotation line */
   gm->consensus[0]     = 0;
   
@@ -133,7 +133,6 @@ p7_profile_Create(int allocM, const ESL_ALPHABET *abc)
 
 /* Function:  p7_profile_Copy()
  * Synopsis:  Copy a profile.
- * Incept:    SRE, Sun Feb 17 10:27:37 2008 [Janelia]
  *
  * Purpose:   Copies profile <src> to profile <dst>, where <dst>
  *            has already been allocated to be of sufficient size.
@@ -159,6 +158,7 @@ p7_profile_Copy(const P7_PROFILE *src, P7_PROFILE *dst)
   dst->L           = src->L;
   dst->allocM      = src->allocM;
   dst->M           = src->M;
+  dst->max_length  = src->max_length;
   dst->nj          = src->nj;
 
   dst->roff        = src->roff;
@@ -174,6 +174,7 @@ p7_profile_Copy(const P7_PROFILE *src, P7_PROFILE *dst)
   if ((status = esl_strdup(src->desc,      -1, &(dst->desc)))      != eslOK) return status;
 
   strcpy(dst->rf,        src->rf);         /* RF is optional: if it's not set, *rf=0, and strcpy still works fine */
+  strcpy(dst->mm,        src->mm);         /* MM is also optional annotation */
   strcpy(dst->cs,        src->cs);         /* CS is also optional annotation */
   strcpy(dst->consensus, src->consensus);  /* consensus though is always present on a valid profile */
 
@@ -186,7 +187,6 @@ p7_profile_Copy(const P7_PROFILE *src, P7_PROFILE *dst)
 
 /* Function:  p7_profile_Clone()
  * Synopsis:  Duplicates a profile.
- * Incept:    SRE, Mon Jun 25 08:29:23 2007 [Janelia]
  *
  * Purpose:   Duplicate profile <gm>; return a pointer
  *            to the newly allocated copy.
@@ -210,7 +210,6 @@ p7_profile_Clone(const P7_PROFILE *gm)
 
 /* Function:  p7_profile_SetNullEmissions()
  * Synopsis:  Set all emission scores to zero (experimental).
- * Incept:    SRE, Mon Jun 25 08:12:06 2007 [Janelia]
  *
  * Purpose:   Set all emission scores in profile <gm> to zero.
  *            This makes the profile a null model, with all the same
@@ -235,7 +234,6 @@ p7_profile_SetNullEmissions(P7_PROFILE *gm)
 
 /* Function:  p7_profile_Reuse()
  * Synopsis:  Prepare profile to be re-used for a new HMM.
- * Incept:    SRE, Wed Jan  2 17:32:36 2008 [Janelia]
  *
  * Purpose:   Prepare profile <gm>'s memory to be re-used
  *            for a new HMM.
@@ -250,6 +248,7 @@ p7_profile_Reuse(P7_PROFILE *gm)
 
   /* set annotations to empty strings */
   gm->rf[0]        = 0;
+  gm->mm[0]        = 0;
   gm->cs[0]        = 0;
   gm->consensus[0] = 0;
       
@@ -269,9 +268,33 @@ p7_profile_Reuse(P7_PROFILE *gm)
 }
 
 
+/* Function:  p7_profile_Sizeof()
+ * Synopsis:  Return the allocated size of a P7_PROFILE.
+ *
+ * Purpose:   Return the allocated size of a <P7_PROFILE>, in bytes.
+ */
+size_t
+p7_profile_Sizeof(P7_PROFILE *gm)
+{
+  size_t n = 0;
+
+  /* these mirror malloc()'s in p7_profile_Create(); maintain one:one correspondence for maintainability */
+  n += sizeof(P7_PROFILE);
+  n += sizeof(float)   * gm->allocM * p7P_NTRANS;             /* gm->tsc       */
+  n += sizeof(float *) * gm->abc->Kp;	                      /* gm->rsc       */
+  n += sizeof(char)    * (gm->allocM+2);	              /* gm->rf        */
+  n += sizeof(char)    * (gm->allocM+2);                /* gm->mm        */
+  n += sizeof(char)    * (gm->allocM+2);	              /* gm->cs        */
+  n += sizeof(char)    * (gm->allocM+2);	              /* gm->consensus */
+
+  n += sizeof(float) * gm->abc->Kp * (gm->allocM+1) * p7P_NR; /* gm->rsc[0]    */
+
+  return n;
+}
+
+
 /* Function:  p7_profile_Destroy()
  * Synopsis:  Frees a profile.
- * Incept:    SRE, Thu Jan 11 15:54:17 2007 [Janelia]
  *
  * Purpose:   Frees a profile <gm>.
  *
@@ -290,6 +313,7 @@ p7_profile_Destroy(P7_PROFILE *gm)
     if (gm->acc       != NULL) free(gm->acc);
     if (gm->desc      != NULL) free(gm->desc);
     if (gm->rf        != NULL) free(gm->rf);
+    if (gm->mm        != NULL) free(gm->mm);
     if (gm->cs        != NULL) free(gm->cs);
     if (gm->consensus != NULL) free(gm->consensus);
     free(gm);
@@ -304,7 +328,6 @@ p7_profile_Destroy(P7_PROFILE *gm)
 
 /* Function:  p7_profile_IsLocal()
  * Synopsis:  Return TRUE if profile is in a local alignment mode.
- * Incept:    SRE, Thu Jul 12 11:57:49 2007 [Janelia]
  *
  * Purpose:   Return <TRUE> if profile is in a local alignment mode.
  */
@@ -317,7 +340,6 @@ p7_profile_IsLocal(const P7_PROFILE *gm)
 
 /* Function:  p7_profile_IsMultihit()
  * Synopsis:  Return TRUE if profile is in a multihit alignment mode.
- * Incept:    SRE, Thu Jul 12 11:58:58 2007 [Janelia]
  *
  * Purpose:   Return <TRUE> if profile is in a multihit alignment mode.
  */
@@ -332,7 +354,6 @@ p7_profile_IsMultihit(const P7_PROFILE *gm)
 
 
 /* Function:  p7_profile_GetT()
- * Incept:    SRE, Wed Apr 12 14:20:18 2006 [St. Louis]
  *
  * Purpose:   Convenience function that looks up a transition score in
  *            profile <gm> for a transition from state type <st1> in
@@ -469,7 +490,6 @@ p7_profile_GetT(const P7_PROFILE *gm, char st1, int k1, char st2, int k2, float 
  *****************************************************************/
 
 /* Function:  p7_profile_Validate()
- * Incept:    SRE, Tue Jan 23 13:58:04 2007 [Janelia]
  *
  * Purpose:   Validates the internals of the generic profile structure
  *            <gm>.
@@ -520,7 +540,6 @@ p7_profile_Validate(const P7_PROFILE *gm, char *errbuf, float tol)
 
 /* Function:  p7_profile_Compare()
  * Synopsis:  Compare two profiles for equality.
- * Incept:    SRE, Thu Jun 21 17:57:56 2007 [Janelia]
  *
  * Purpose:   Compare two profiles <gm1> and <gm2> to each other.
  *            Return <eslOK> if they're identical, and <eslFAIL> if
@@ -546,6 +565,7 @@ p7_profile_Compare(P7_PROFILE *gm1, P7_PROFILE *gm2, float tol)
 
   return eslOK;
 }
+
 
 
 /*****************************************************************
@@ -611,7 +631,7 @@ static char banner[] = "test driver for p7_profile.c";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS *go = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS *go = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
 
   utest_Compare();
 
@@ -622,10 +642,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/p7_profile.c $
+ * SVN $Id: p7_profile.c 3960 2012-03-22 21:42:50Z wheelert $
  *****************************************************************/

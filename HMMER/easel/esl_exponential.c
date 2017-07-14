@@ -12,9 +12,7 @@
  *   9. Example
  *  10. Copyright and license information
  *
- * SRE, Wed Aug 10 08:15:57 2005 [St. Louis]
  * xref STL9/138  
- * SVN $Id: esl_exponential.c 326 2009-02-28 15:49:07Z eddys $
  */
 #include "esl_config.h"
 
@@ -47,7 +45,6 @@
  */
 
 /* Function:  esl_exp_pdf()
- * Incept:    SRE, Wed Aug 10 08:30:46 2005 [St. Louis]
  *
  * Purpose:   Calculates the probability density function for the
  *            exponential, $P(X=x)$, given value <x>, offset <mu>,
@@ -61,7 +58,6 @@ esl_exp_pdf(double x, double mu, double lambda)
 }
 
 /* Function:  esl_exp_logpdf()
- * Incept:    SRE, Wed Aug 10 08:35:06 2005 [St. Louis]
  *
  * Purpose:   Calculates the log probability density function for the
  *            exponential, $P(X=x)$, given value <x>, offset <mu>,
@@ -81,7 +77,6 @@ esl_exp_logpdf(double x, double mu, double lambda)
 }
 
 /* Function:  esl_exp_cdf()
- * Incept:    SRE, Wed Aug 10 08:36:04 2005 [St. Louis]
  *
  * Purpose:   Calculates the cumulative distribution function for the
  *            exponential, $P(X \leq x)$, given value <x>, offset <mu>,
@@ -100,7 +95,6 @@ esl_exp_cdf(double x, double mu, double lambda)
 }
 
 /* Function:  esl_exp_logcdf()
- * Incept:    SRE, Wed Aug 10 10:03:28 2005 [St. Louis]
  *
  * Purpose:   Calculates the log of the cumulative distribution function
  *            for the exponential, $log P(X \leq x)$, given value <x>,
@@ -124,7 +118,6 @@ esl_exp_logcdf(double x, double mu, double lambda)
 }
 
 /* Function:  esl_exp_surv()
- * Incept:    SRE, Wed Aug 10 10:14:49 2005 [St. Louis]
  *
  * Purpose:   Calculates the survivor function, $P(X>x)$ (that is, 1-CDF,
  *            the right tail probability mass) for an exponential distribution,
@@ -138,7 +131,6 @@ esl_exp_surv(double x, double mu, double lambda)
 }
 
 /* Function:  esl_exp_logsurv()
- * Incept:    SRE, Wed Aug 10 10:14:49 2005 [St. Louis]
  *
  * Purpose:   Calculates the log survivor function, $\log P(X>x)$ (that is,
  *            log(1-CDF), the log of the right tail probability mass) for an 
@@ -154,7 +146,6 @@ esl_exp_logsurv(double x, double mu, double lambda)
 
 
 /* Function:  esl_exp_invcdf()
- * Incept:    SRE, Sun Aug 21 12:22:24 2005 [St. Louis]
  *
  * Purpose:   Calculates the inverse of the CDF; given a <cdf> value
  *            $0 <= p < 1$, returns the value $x$ at which the CDF
@@ -165,6 +156,24 @@ esl_exp_invcdf(double p, double mu, double lambda)
 {
   return mu - 1/lambda * log(1. - p);
 }
+
+
+
+/* Function:  esl_exp_invsurv()
+ *
+ * Purpose:   Calculates the inverse of the survivor function, the score
+ *            at which the right tail's mass is $0 <= p < 1$, for an
+ *            exponential function with parameters <mu> and <lambda>.
+ */
+double
+esl_exp_invsurv(double p, double mu, double lambda)
+{
+
+  return mu - 1./lambda * log(p);
+}
+/*------------------ end of densities and distributions --------------------*/
+
+
 /*------------------ end of densities and distributions --------------------*/
 
 
@@ -175,7 +184,6 @@ esl_exp_invcdf(double p, double mu, double lambda)
  *****************************************************************/ 
 
 /* Function:  esl_exp_generic_pdf()
- * Incept:    SRE, Thu Aug 25 07:58:34 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of PDF.
  */
@@ -187,7 +195,6 @@ esl_exp_generic_pdf(double x, void *params)
 }
 
 /* Function:  esl_exp_generic_cdf()
- * Incept:    SRE, Sun Aug 21 12:25:25 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of CDF.
  */
@@ -199,7 +206,6 @@ esl_exp_generic_cdf(double x, void *params)
 }
 
 /* Function:  esl_exp_generic_surv()
- * Incept:    SRE, Thu Aug 25 07:59:05 2005[St. Louis]
  *
  * Purpose:   Generic-API version of survival function.
  */
@@ -211,7 +217,6 @@ esl_exp_generic_surv(double x, void *params)
 }
 
 /* Function:  esl_exp_generic_invcdf()
- * Incept:    SRE, Sun Aug 21 12:25:59 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of inverse CDF.
  */
@@ -230,14 +235,15 @@ esl_exp_generic_invcdf(double p, void *params)
  ****************************************************************************/ 
 
 /* Function:  esl_exp_Plot()
- * Incept:    SRE, Sun Aug 21 13:16:26 2005 [St. Louis]
  *
  * Purpose:   Plot some exponential function <func> (for instance,
  *            <esl_exp_pdf()>) for parameters <mu> and <lambda>, for
  *            a range of values x from <xmin> to <xmax> in steps of <xstep>;
  *            output to an open stream <fp> in xmgrace XY input format.
  *
- * Returns:   <eslOK>.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEWRITE> on any system write error, such as a filled disk.
  */
 int
 esl_exp_Plot(FILE *fp, double mu, double lambda, 
@@ -246,8 +252,8 @@ esl_exp_Plot(FILE *fp, double mu, double lambda,
 {
   double x;
   for (x = xmin; x <= xmax; x += xstep)
-    fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda));
-  fprintf(fp, "&\n");
+    if (fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda)) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "exponential plot write failed");
+  if (fprintf(fp, "&\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "exponential plot write failed");
   return eslOK;
 }
 /*-------------------- end plot dumping routines ---------------------------*/
@@ -260,7 +266,6 @@ esl_exp_Plot(FILE *fp, double mu, double lambda,
 #ifdef eslAUGMENT_RANDOM
 
 /* Function:  esl_exp_Sample()
- * Incept:    SRE, Wed Aug 10 10:46:51 2005 [St. Louis]
  *
  * Purpose:   Sample an exponential random variate
  *            by the transformation method, given offset <mu>
@@ -288,18 +293,19 @@ esl_exp_Sample(ESL_RANDOMNESS *r, double mu, double lambda)
  ****************************************************************************/ 
 
 /* Function:  esl_exp_FitComplete()
- * Incept:    SRE, Wed Aug 10 10:53:47 2005 [St. Louis]
  *
  * Purpose:   Given an array of <n> samples <x[0]..x[n-1]>, fit
  *            them to an exponential distribution.
  *            Return maximum likelihood parameters <ret_mu> and <ret_lambda>.
  *
  * Args:      x          - complete exponentially-distributed data [0..n-1]
- *            n          - number of samples in <x>
+ *            n          - number of samples in <x>  (n>0)
  *            ret_mu     - lower bound of the distribution (all x_i >= mu)
  *            ret_lambda - RETURN: maximum likelihood estimate of lambda
  *
  * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINVAL> if n=0 (no data).
  *
  * Xref:      STL9/138.
  */
@@ -309,8 +315,9 @@ esl_exp_FitComplete(double *x, int n, double *ret_mu, double *ret_lambda)
   double mu, mean;
   int    i;
 
-  /* ML mu is the lowest score. mu=x is ok in the exponential.
-   */
+  if (!n) ESL_EXCEPTION(eslEINVAL, "empty data vector provided for exponential fit");
+
+  /* ML mu is the lowest score. mu=x is ok in the exponential. */
   mu = x[0];
   for (i = 1; i < n; i++) if (x[i] < mu) mu = x[i];
 
@@ -324,7 +331,6 @@ esl_exp_FitComplete(double *x, int n, double *ret_mu, double *ret_lambda)
 }
 
 /* Function:  esl_exp_FitCompleteScale()
- * Incept:    SRE, Wed Apr 25 11:18:22 2007 [Janelia]
  *
  * Purpose:   Given an array of <n> samples <x[0]..x[n-1]>, fit
  *            them to an exponential distribution of known location
@@ -359,7 +365,6 @@ esl_exp_FitCompleteScale(double *x, int n, double mu, double *ret_lambda)
 
 #ifdef eslAUGMENT_HISTOGRAM
 /* Function:  esl_exp_FitCompleteBinned()
- * Incept:    SRE, Sun Aug 21 13:07:22 2005 [St. Louis]
  *
  * Purpose:   Fit a complete exponential distribution to the observed
  *            binned data in a histogram <g>, where each
@@ -684,10 +689,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_exponential.c 770 2012-06-06 19:33:59Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_exponential.c $
  *****************************************************************/

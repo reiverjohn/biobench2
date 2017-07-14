@@ -1,7 +1,4 @@
 /* Remove columns from a multiple sequence alignment.
- * 
- * EPN, Wed Dec 23 11:15:32 2009
- * SVN $Id: esl-alistat.c 393 2009-09-27 12:04:55Z eddys $
  */
 #include "esl_config.h"
 
@@ -13,6 +10,8 @@
 #include "esl_fileparser.h"
 #include "esl_getopts.h"
 #include "esl_msa.h"
+#include "esl_msafile.h"
+#include "esl_msafile2.h"
 #include "esl_regexp.h"
 #include "esl_stopwatch.h"
 #include "esl_vectorops.h"
@@ -27,11 +26,11 @@ static char usage5[] = "[options] --rf-is-mask <msafile> (use #=GC RF in aln as 
 static int read_mask_file(char *filename, char *errbuf, int **ret_useme, int *ret_mlen);
 static int map_rfpos_to_apos(ESL_MSA *msa, ESL_ALPHABET *abc, char *errbuf, int **i_am_rf, int **ret_rf2a_map, int *ret_rflen);
 static int expand_rf_useme_to_alen(int *useme_rf, int *rf2a_map, int rflen, int alen, char *errbuf, int *useme_a);
-static int count_gaps_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, int **ret_gap_ct);
-static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, int ***ret_pp_ct);
-static int mask_based_on_gapfreq(int *gap_ct, int64_t alen, int nseq, float gapthresh, int *i_am_eligible, char *errbuf, int **ret_useme);
+static int count_gaps_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, double **ret_gap_ct);
+static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, double ***ret_pp_ct);
+static int mask_based_on_gapfreq(double *gap_ct, int64_t alen, int nseq, float gapthresh, int *i_am_eligible, char *errbuf, int **ret_useme);
 static int get_pp_idx(ESL_ALPHABET *abc, char ppchar);
-static int mask_based_on_postprobs(int **pp_ct, int64_t alen, int nseq, float pthresh, float pfract, int do_pavg, float pavg_min, int do_ppcons, float ppcons_min, char *pp_cons, ESL_ALPHABET *abc, int *i_am_eligible, int allgapok, char *errbuf, int **ret_useme);
+static int mask_based_on_postprobs(double **pp_ct, int64_t alen, int nseq, float pthresh, float pfract, int do_pavg, float pavg_min, int do_ppcons, float ppcons_min, char *pp_cons, ESL_ALPHABET *abc, int *i_am_eligible, int allgapok, char *errbuf, int **ret_useme);
 static int output_mask(char *filename, int *useme, int *i_am_eligible, int64_t alen, char *errbuf);
 static int determine_nkept_rf(int *useme, int *i_am_rf, int64_t len);
 static int parse_coord_string(const char *cstring, uint32_t *ret_start, uint32_t *ret_end);
@@ -85,7 +84,8 @@ main(int argc, char **argv)
   char         *alifile = NULL;	               /* alignment file name             */
   int           infmt   = eslMSAFILE_UNKNOWN;  /* format code for alifile         */
   int           outfmt  = eslMSAFILE_UNKNOWN;  /* format code for output ali      */
-  ESL_MSAFILE  *afp     = NULL;	               /* open alignment file             */
+  ESLX_MSAFILE *afp     = NULL;	               /* open alignment file  normal version           */
+  ESL_MSAFILE2 *afp2    = NULL;		       /* open alignment file: legacy small-mem version */
   FILE         *ofp;		               /* output file (default is stdout) */
   ESL_MSA      *msa     = NULL;	               /* one multiple sequence alignment */
   int           status;		               /* easel return code               */
@@ -111,7 +111,7 @@ main(int argc, char **argv)
   char         *maskfile = NULL;	       /* mask file name                  */
   int           do_maskfile;                   /* TRUE if neither -p nor -g are enabled, and we have 2 command-line args */
   int           file_mlen = 0;                 /* if do_maskfile, length of mask from maskfile, msa->alen or rflen */
-  int         **pp_ct  = NULL;                 /* [0..msa->alen-1][0..11] number of each PP value at each aln position */
+  double      **pp_ct  = NULL;                 /* [0..msa->alen-1][0..11] number of each PP value at each aln position */
   int          *useme_mfile = NULL;            /* useme deduced from mask from maskfile, 
 						* [0..i..file_mlen-1] TRUE to keep apos or rfpos i, FALSE not to */
 
@@ -122,7 +122,7 @@ main(int argc, char **argv)
   /* variables related to gap frequency mode (-g) */
   int           do_gapthresh;                  /* TRUE if -g enabled */
   double      **abc_ct = NULL;                 /* [0..msa->alen-1][0..abc->K] number of each resiude at each position (abc->K is gap) */
-  int          *gap_ct = NULL;                 /* [0..msa->alen-1] number of gaps at each position */
+  double       *gap_ct = NULL;                 /* [0..msa->alen-1] number of gaps at each position */
   int          *useme_g = NULL;                /* [0..i..msa->alen-1] TRUE to keep apos i based on gapfreq, FALSE not to */
 
   /* variables related to postprob mode (-p) */
@@ -259,12 +259,12 @@ main(int argc, char **argv)
   
   /* determine input/output formats */
   if (esl_opt_IsOn(go, "--informat")) {
-    infmt = esl_msa_EncodeFormat(esl_opt_GetString(go, "--informat"));
+    infmt = eslx_msafile_EncodeFormat(esl_opt_GetString(go, "--informat"));
     if (infmt == eslMSAFILE_UNKNOWN) esl_fatal("%s is not a valid input sequence file format for --informat", esl_opt_GetString(go, "--informat")); 
     if (do_small && infmt != eslMSAFILE_PFAM) esl_fatal("small memory mode requires Pfam formatted alignments"); 
   }
   if (esl_opt_IsOn(go, "--outformat")) {
-    outfmt = esl_msa_EncodeFormat(esl_opt_GetString(go, "--outformat"));
+    outfmt = eslx_msafile_EncodeFormat(esl_opt_GetString(go, "--outformat"));
     if (outfmt == eslMSAFILE_UNKNOWN) esl_fatal("%s is not a valid input sequence file format for --outformat", esl_opt_GetString(go, "--outformat")); 
     if (do_small && outfmt != eslMSAFILE_PFAM) esl_fatal("we can only output Pfam formatted alignments in small memory mode"); 
   }
@@ -288,51 +288,57 @@ main(int argc, char **argv)
   /****************************************
    * Open the MSA file; determine alphabet 
    ****************************************/
-  status = esl_msafile_Open(alifile, infmt, NULL, &afp);
-  if      (status == eslENOTFOUND) esl_fatal("Alignment file %s doesn't exist or is not readable\n", alifile);
-  else if (status == eslEFORMAT)   esl_fatal("Couldn't determine format of alignment %s\n", alifile);
-  else if (status != eslOK)        esl_fatal("Alignment file open failed with error %d\n");
 
+  /* abc handling is weird. We only use alphabet to define gap characters in this miniapp
+   * unless do_small is TRUE. msa's are actually read in text mode. Thus if do_small is FALSE,
+   * eslRNA suffices for anything. If do_small is TRUE, we need the alphabet so we 
+   * require --amino,--dna, or --rna below.
+   */
   if      (esl_opt_GetBoolean(go, "--amino"))   abc = esl_alphabet_Create(eslAMINO);
   else if (esl_opt_GetBoolean(go, "--dna"))     abc = esl_alphabet_Create(eslDNA);
   else if (esl_opt_GetBoolean(go, "--rna"))     abc = esl_alphabet_Create(eslRNA);
-  else if (do_small) { /* we need the alphabet specified */
-    esl_fatal("With --small, the alphabet must be specified with --amino, --rna, or --dna.");
-  }
-  else {
-    int type;
-    status = esl_msafile_GuessAlphabet(afp, &type);
-    if (status == eslEAMBIGUOUS)    esl_fatal("Failed to guess the bio alphabet used in %s.\nUse --dna, --rna, or --amino option to specify it.", alifile);
-    else if (status == eslEFORMAT)  esl_fatal("Alignment file parse failed: %s\n", afp->errbuf);
-    else if (status == eslENODATA)  esl_fatal("Alignment file %s is empty\n", alifile);
-    else if (status != eslOK)       esl_fatal("Failed to read alignment file %s\n", alifile);
-    abc = esl_alphabet_Create(type);
-  }
-  
+  else if (do_small)                            esl_fatal("With --small, the alphabet must be specified with --amino, --rna, or --dna.");
+  else                                          abc = esl_alphabet_Create(eslRNA); /* alphabet is only used to define gap characters, so (in this miniapp) we're okay specifying RNA for any alignment (even non-RNA ones) */
+
+  if (do_small)
+    {
+      status = esl_msafile2_Open(alifile, NULL, &afp2);
+      if      (status == eslENOTFOUND) esl_fatal("Alignment file %s doesn't exist or is not readable\n", alifile);
+      else if (status != eslOK)        esl_fatal("Alignment file open failed with error %d\n", status);
+    }
+  else
+    {
+      status = eslx_msafile_Open(NULL, alifile, NULL, infmt, NULL, &afp);
+      if (status != eslOK) eslx_msafile_OpenFailure(afp, status);
+    }
+
   /* If nec, read mask from the mask file */
-  if(do_maskfile) if((status = read_mask_file(maskfile, errbuf, &useme_mfile, &file_mlen)) != eslOK) esl_fatal(errbuf);
+  if (do_maskfile) if((status = read_mask_file(maskfile, errbuf, &useme_mfile, &file_mlen)) != eslOK) esl_fatal(errbuf);
   
   /************************************************************************************
    * Read the first MSA in the file (we only mask first aln) and verify we can mask it.
    ************************************************************************************/
-  status = (do_small) ? 
-    esl_msa_ReadNonSeqInfoPfam(afp, abc, -1, NULL, NULL, &msa, &nseq, &orig_alen, NULL, NULL, NULL, NULL, NULL, 
-			       (do_gapthresh) ? &abc_ct : NULL,
-			       (do_postprob)  ? &pp_ct  : NULL, 
-			       NULL, NULL, NULL) :               /* we don't want bp_ct, srfpos_ct nor erfpos_ct */
-    esl_msa_Read              (afp, &msa); /* if ! do_small, we read full aln into memory */
-  if      (status == eslEFORMAT) esl_fatal("Alignment file parse error:\n%s\n", afp->errbuf);
-  else if (status == eslEINVAL)  esl_fatal("Alignment file parse error:\n%s\n", afp->errbuf);
-  else if (status != eslOK)      esl_fatal("Alignment file read failed with error code %d\n%s", status, afp);
 
-  /* a few memory-mode-specific checks/assignments */
-  if(do_small) { 
-    msa->alen = orig_alen; /* for convenience, but be careful, the msa doesn't actually have any aseq or ax */
-  }
-  else { 
-    orig_alen = msa->alen;
-    if(do_postprob && msa->pp == NULL && (! esl_opt_IsOn(go, "--ppcons"))) esl_fatal("-p was enabled, but the MSA has no posterior probability (#=GR PP) annotation.");
-  }
+  if (do_small) 
+    {
+      status = esl_msafile2_ReadInfoPfam(afp2, NULL, abc, -1, NULL, NULL, &msa, &nseq, &orig_alen, NULL, NULL, NULL, NULL, NULL, 
+					 (do_gapthresh) ? &abc_ct : NULL,
+					 (do_postprob)  ? &pp_ct  : NULL, 
+					 NULL, NULL, NULL);               /* we don't want bp_ct, srfpos_ct nor erfpos_ct */
+      if      (status == eslEFORMAT) esl_fatal("Alignment file parse error:\n%s\n", afp2->errbuf);
+      else if (status == eslEINVAL)  esl_fatal("Alignment file parse error:\n%s\n", afp2->errbuf);
+      else if (status != eslOK)      esl_fatal("Alignment file read failed with error code %d\n%s", status, afp);      
+
+      msa->alen = orig_alen; /* for convenience, but be careful, the msa doesn't actually have any aseq or ax */
+    }
+  else
+    {
+      status = eslx_msafile_Read(afp, &msa); /* if ! do_small, we read full aln into memory */
+      if (status != eslOK) eslx_msafile_ReadFailure(afp, status);
+
+      orig_alen = msa->alen;
+      if(do_postprob && msa->pp == NULL && (! esl_opt_IsOn(go, "--ppcons"))) esl_fatal("-p was enabled, but the MSA has no posterior probability (#=GR PP) annotation.");
+    }
 
   /* Allocate and initialize i_am_eligible array, which defines which
    * positions we'll consider keeping. If msa->rf == NULL or --keepins
@@ -451,9 +457,8 @@ main(int argc, char **argv)
       if((status = count_gaps_in_msa(msa, abc, i_am_eligible, errbuf, &gap_ct)) != eslOK) esl_fatal(errbuf);
     }
     else { 
-      ESL_ALLOC(gap_ct, sizeof(int) * msa->alen);
-      for(apos = 0; apos < msa->alen; apos++) gap_ct[apos] = (int) abc_ct[apos][abc->K]; /* no decimal portion to gap count should exist */
-      /* for(apos = 0; apos < msa->alen; apos++) printf("apos: %4d  pp[10]: %4d  pp[11]: %4d  pp[7]: %4d\n", apos, pp_ct[apos][10], pp_ct[apos][11], pp_ct[apos][7]); */
+      ESL_ALLOC(gap_ct, sizeof(double) * msa->alen);
+      for(apos = 0; apos < msa->alen; apos++) gap_ct[apos] = abc_ct[apos][abc->K]; 
     }
     if((status = mask_based_on_gapfreq(gap_ct, msa->alen, (do_small) ? nseq : msa->nseq, esl_opt_GetReal(go, "--gapthresh"), i_am_eligible, errbuf, &useme_g)) != eslOK) esl_fatal(errbuf);
     if(be_verbose) { 
@@ -517,44 +522,47 @@ main(int argc, char **argv)
    * Unless --small enabled, mask the alignment *
    ************************************************/
   if(! do_small) { 
-    if((status = esl_msa_ColumnSubset(msa, errbuf, useme_final)) != eslOK) esl_fatal(errbuf);
+    if (abc && (abc->type == eslRNA || abc->type == eslDNA) &&
+	(status = esl_msa_RemoveBrokenBasepairs(msa, errbuf, useme_final)) != eslOK) esl_fatal(errbuf);
+    if ((status = esl_msa_ColumnSubset         (msa, errbuf, useme_final)) != eslOK) esl_fatal(errbuf);
   } /* else we'll do it as we regurgitate it upon rereading below */
 
   /************************
    * Output the alignment *
    ************************/
-  if(! do_small) { /* we have the full msa stored, just write it */
-    status = esl_msa_Write(ofp, msa, outfmt);
-    if      (status == eslEMEM) esl_fatal("Memory error when outputting alignment\n");
-    else if (status != eslOK)   esl_fatal("Writing alignment file failed with error %d\n", status);
-  }
+  if (! do_small) 
+    {
+      eslx_msafile_Write(ofp, msa, outfmt);
+    }
   else { 
     /* do_small==TRUE, we don't have the full msa stored, 
      * we must regurgitate it, removing unwanted columns as we do. 
      * First, close then reopen alifile so we can reread (first) alignment (no esl_msafile_Position() exists yet) 
      */
-    esl_msafile_Close(afp);
-    status = esl_msafile_Open(alifile, infmt, NULL, &afp); /* this should work b/c it did on the first pass */
+    esl_msafile2_Close(afp2);
+    status = esl_msafile2_OpenDigital(abc, alifile, NULL, &afp2); /* this should work b/c it did on the first pass */
     if      (status == eslENOTFOUND) esl_fatal("Second pass: alignment file %s doesn't exist or is not readable\n", alifile);
     else if (status == eslEFORMAT)   esl_fatal("Second pass: couldn't determine format of alignment %s\n", alifile);
     else if (status != eslOK)        esl_fatal("Second pass: alignment file open failed with error %d\n");
-    status = esl_msa_RegurgitatePfam(afp, ofp, 
-				     -1, -1, -1, -1, /* max width of seq names, gf,gc,gr tags unknown, we'll use margin length from file */
-				     TRUE,           /* regurgitate stockholm header ? */
-				     TRUE,           /* regurgitate // trailer ? */
-				     TRUE,           /* regurgitate blank lines */
-				     TRUE,           /* regurgitate comments */
-				     TRUE,           /* regurgitate GF ? */
-				     TRUE,           /* regurgitate GS ? */
-				     TRUE,           /* regurgitate GC ? */
-				     TRUE,           /* regurgitate GR ? */
-				     TRUE,           /* regurgitate aseq ? */
-				     NULL,           /* regurgitate all seqs, not a subset */ 
-				     NULL,           /* regurgitate all seqs, not a subset */ 
-				     useme_final,    /* which columns to keep */
-				     NULL,           /* we're not adding any columns */
-				     msa->alen,      /* expected length, not strictly necessary */
-				     '.');           /* gapchar, irrelevant in this context */
+    status = esl_msafile2_RegurgitatePfam(afp2, ofp, 
+					  -1, -1, -1, -1, /* max width of seq names, gf,gc,gr tags unknown, we'll use margin length from file */
+					  TRUE,           /* regurgitate stockholm header ? */
+					  TRUE,           /* regurgitate // trailer ? */
+					  TRUE,           /* regurgitate blank lines */
+					  TRUE,           /* regurgitate comments */
+					  TRUE,           /* regurgitate GF ? */
+					  TRUE,           /* regurgitate GS ? */
+					  TRUE,           /* regurgitate GC ? */
+					  TRUE,           /* regurgitate GR ? */
+					  TRUE,           /* regurgitate aseq ? */
+					  NULL,           /* regurgitate all seqs, not a subset */ 
+					  NULL,           /* regurgitate all seqs, not a subset */ 
+					  useme_final,    /* which columns to keep */
+					  NULL,           /* we're not adding any columns */
+					  msa->alen,      /* expected length, not strictly necessary */
+					  '.',            /* gapchar, irrelevant in this context */
+					  NULL,           /* don't return num seqs read */
+					  NULL);          /* don't return num seqs regurgitated */
     if(status == eslEOF) esl_fatal("Second pass, unable to reread alignment");
     if(status != eslOK)  esl_fatal("Second pass, error rereading alignment");
   }
@@ -595,20 +603,21 @@ main(int argc, char **argv)
   }
 
   /* Clean up, normal return */
-  if(rf2a_map      != NULL) free(rf2a_map);
-  if(useme_mfile   != NULL) free(useme_mfile);
-  if(useme_g       != NULL) free(useme_g);
-  if(useme_pp      != NULL) free(useme_pp);
-  if(useme_final   != NULL) free(useme_final);
-  if(i_am_rf       != NULL) free(i_am_rf);
-  if(i_am_eligible != NULL) free(i_am_eligible);
-  if(pp_ct         != NULL) esl_Free2D((void **) pp_ct,  orig_alen);
-  if(abc_ct        != NULL) esl_Free2D((void **) abc_ct, orig_alen);
-  if(gap_ct        != NULL) free(gap_ct);
-  if(msa           != NULL) esl_msa_Destroy(msa);
-  if(abc           != NULL) esl_alphabet_Destroy(abc);
-  if(w             != NULL) esl_stopwatch_Destroy(w);
-  esl_msafile_Close(afp);
+  if (rf2a_map)      free(rf2a_map);
+  if (useme_mfile)   free(useme_mfile);
+  if (useme_g)       free(useme_g);
+  if (useme_pp)      free(useme_pp);
+  if (useme_final)   free(useme_final);
+  if (i_am_rf)       free(i_am_rf);
+  if (i_am_eligible) free(i_am_eligible);
+  if (pp_ct)         esl_Free2D((void **) pp_ct,  orig_alen);
+  if (abc_ct)        esl_Free2D((void **) abc_ct, orig_alen);
+  if (gap_ct)        free(gap_ct);
+  if (msa)           esl_msa_Destroy(msa);
+  if (abc)           esl_alphabet_Destroy(abc);
+  if (w)             esl_stopwatch_Destroy(w);
+  if (afp)           eslx_msafile_Close(afp);
+  if (afp2)          esl_msafile2_Close(afp2);
   esl_getopts_Destroy(go);
   return 0;
 
@@ -769,22 +778,22 @@ static int expand_rf_useme_to_alen(int *useme_rf, int *rf2a_map, int rflen, int 
  * Returns eslOK upon success, and points <ret_useme> at useme, caller
  * must free it.
  */
-static int count_gaps_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, int **ret_gap_ct)
+static int count_gaps_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, double **ret_gap_ct)
 {
   int status;
-  int *gap_ct = NULL;
+  double *gap_ct = NULL;
   int apos, i;
 
   /* contract check, msa should be in text mode */
   if(msa->flags & eslMSA_DIGITAL) ESL_FAIL(eslEINVAL, errbuf, "count_gaps_in_msa() contract violation, MSA is digitized");
 
-  ESL_ALLOC(gap_ct, sizeof(int) * msa->alen);
-  esl_vec_ISet(gap_ct, msa->alen, 0);
+  ESL_ALLOC(gap_ct, sizeof(double) * msa->alen);
+  esl_vec_DSet(gap_ct, msa->alen, 0.);
 
   for(apos = 0; apos < (int) msa->alen; apos++) { 
     if(countme[apos]) { 
       for(i = 0; i < msa->nseq; i++) { 
-	if(esl_abc_CIsGap(abc, msa->aseq[i][apos])) gap_ct[apos]++;
+	if(esl_abc_CIsGap(abc, msa->aseq[i][apos])) gap_ct[apos] += 1.0;
       }
     }
   }
@@ -813,7 +822,7 @@ static int count_gaps_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char
  * Returns eslOK upon success, and points <ret_useme> at useme,
  * caller must free it.
  */
-static int mask_based_on_gapfreq(int *gap_ct, int64_t alen, int nseq, float gapthresh, int *i_am_eligible, char *errbuf, int **ret_useme)
+static int mask_based_on_gapfreq(double *gap_ct, int64_t alen, int nseq, float gapthresh, int *i_am_eligible, char *errbuf, int **ret_useme)
 {
   int status;
   int *useme = NULL;
@@ -828,7 +837,7 @@ static int mask_based_on_gapfreq(int *gap_ct, int64_t alen, int nseq, float gapt
 
   for(apos = 0; apos < alen; apos++) {
     if(i_am_eligible[apos]) { 
-      gapfreq = (float) gap_ct[apos] / (float) nseq;
+      gapfreq = gap_ct[apos] / (float) nseq;
       useme[apos] = gapthresh < gapfreq ? FALSE : TRUE; /* should I be worried about imprecision? 0.5 compared to 0.5? */
       /* printf("apos: %d gapfreq: %.3f\n", apos, gapfreq); */
     }
@@ -866,7 +875,7 @@ static int mask_based_on_gapfreq(int *gap_ct, int64_t alen, int nseq, float gapt
  *
  * This mapping of PP chars to return values should probably be 
  * stored in some internal map structure somewhere, instead of 
- * only existing in this function as used by esl_msa_ReadNonSeqInfo().
+ * only existing in this function as used by esl_msafile2_ReadInfoPfam().
  */
 static int get_pp_idx(ESL_ALPHABET *abc, char ppchar)
 {
@@ -905,10 +914,10 @@ static int get_pp_idx(ESL_ALPHABET *abc, char ppchar)
  * Returns eslOK upon success, and points <ret_useme> at useme, caller
  * must free it.
  */
-static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, int ***ret_pp_ct)
+static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme, char *errbuf, double ***ret_pp_ct)
 {
   int status;
-  int **pp_ct = NULL;
+  double **pp_ct = NULL;
   int apos, i;
   int nppvals = 12; /* '0-9', '*' and gap */
   int ppidx;
@@ -917,10 +926,10 @@ static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme,
   if(msa->flags & eslMSA_DIGITAL) ESL_FAIL(eslEINVAL, errbuf, "count_postprobs_in_msa() contract violation, MSA is digitized");
   if(msa->pp == NULL) ESL_FAIL(eslEINVAL, errbuf, "count_postprobs_in_msa() contract violation, msa->pp is NULL");
   
-  ESL_ALLOC(pp_ct, sizeof(int *) * msa->alen);
+  ESL_ALLOC(pp_ct, sizeof(double *) * msa->alen);
   for(apos = 0; apos < msa->alen; apos++) { 
-    ESL_ALLOC(pp_ct[apos], sizeof(int) * nppvals);
-    esl_vec_ISet(pp_ct[apos], nppvals, 0);
+    ESL_ALLOC(pp_ct[apos], sizeof(double) * nppvals);
+    esl_vec_DSet(pp_ct[apos], nppvals, 0.);
   }
     
   for(apos = 0; apos < (int) msa->alen; apos++) { 
@@ -934,7 +943,7 @@ static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme,
 	  /* make sure the corresponding residue is also a gap */
 	  if(! esl_abc_CIsGap(abc, msa->aseq[i][apos])) ESL_FAIL(eslEINVAL, errbuf, "post prob annotation for seq: %d aln column: %d is a gap (%c), but seq res is not: (%c)", i, apos, msa->pp[i][apos], msa->aseq[i][apos]);
 	} 
-	pp_ct[apos][ppidx]++; 
+	pp_ct[apos][ppidx] += 1.; 
       }
     }
   }
@@ -986,21 +995,21 @@ static int count_postprobs_in_msa(ESL_MSA *msa, ESL_ALPHABET *abc, int *countme,
  * Returns eslOK upon success, and points <ret_useme> at useme,
  * caller must free it.
  */
-static int mask_based_on_postprobs(int **pp_ct, int64_t alen, int nseq, float pthresh, float pfract, int do_pavg, float pavg_min, int do_ppcons, float ppcons_min, char *pp_cons, ESL_ALPHABET *abc, int *i_am_eligible, int allgapok, char *errbuf, int **ret_useme)
+static int mask_based_on_postprobs(double **pp_ct, int64_t alen, int nseq, float pthresh, float pfract, int do_pavg, float pavg_min, int do_ppcons, float ppcons_min, char *pp_cons, ESL_ALPHABET *abc, int *i_am_eligible, int allgapok, char *errbuf, int **ret_useme)
 {
   int status;
   int *useme = NULL;
   int apos;
   float ppfreq;
-  int nnongap;
+  double nnongap;
   int nppvals = 12; /* '0-9', '*' and gap */
   int ppidx_thresh;
   int ppidx = 0; 
-  int ppcount = 0;
-  float ppsum = 0.;
-  float pavg;
-  float ppminA[11];
-  float ppavgA[11];
+  double ppcount = 0.;
+  double ppsum = 0.;
+  double pavg;
+  double ppminA[11];
+  double ppavgA[11];
 
   ppminA[0]  = 0.00;
   ppminA[1]  = 0.05;
@@ -1045,11 +1054,11 @@ static int mask_based_on_postprobs(int **pp_ct, int64_t alen, int nseq, float pt
   }
 
   for(apos = 0; apos < alen; apos++) {
-    ppcount = 0;
+    ppcount = 0.;
     ppsum = 0.;
     if(i_am_eligible[apos]) { /* consider this position */
-      nnongap = esl_vec_ISum(pp_ct[apos], nppvals) - pp_ct[apos][11]; 
-      if(nnongap == 0) { 
+      nnongap = esl_vec_DSum(pp_ct[apos], nppvals) - pp_ct[apos][11]; 
+      if(esl_FCompare(nnongap, 0., eslSMALLX1) == eslOK) { /* effectively 0.0 */
 	useme[apos] = allgapok ? TRUE : FALSE; 
       }
       else { 
@@ -1058,7 +1067,7 @@ static int mask_based_on_postprobs(int **pp_ct, int64_t alen, int nseq, float pt
 	    ppsum += pp_ct[apos][ppidx] * ppavgA[ppidx]; /* Note: PP value is considered average of range, not minimum ('9' == 0.90 (0.95-0.85/2) */
 	    /* printf("apos: %d pp_idx: %d ct: %d sum: %.3f\n", apos, ppidx, pp_ct[apos][ppidx], ppsum);*/
 	  }
-	  pavg = (float) ppsum / (float) nnongap;
+	  pavg = ppsum / nnongap;
 	  useme[apos] = pavg < pavg_min? FALSE : TRUE; /* should I be worried about imprecision? 0.5 compared to 0.5? */
 	  /* printf("pavg: %.3f nnongap: %d useme[apos:%d]: %d pavg_min: %.3f\n", pavg, nnongap, apos, useme[apos], pavg_min);*/
 	}
@@ -1075,7 +1084,7 @@ static int mask_based_on_postprobs(int **pp_ct, int64_t alen, int nseq, float pt
 	  for(ppidx = 10; ppidx >= ppidx_thresh; ppidx--) { 
 	    ppcount += pp_ct[apos][ppidx];
 	  }
-	  ppfreq = (float) ppcount / (float) nnongap;
+	  ppfreq = ppcount / nnongap;
 	  useme[apos] = (ppfreq < pfract) ? FALSE : TRUE; /* should I be worried about imprecision? 0.5 compared to 0.5? */
 	  /* printf("apos: %4d nnongap: %6d  ppfreq: %.3f pfract %.3f useme: %d ppidx_thresh: %d\n", apos, nnongap, ppfreq, pfract, useme[apos], ppidx_thresh); */
 	}
@@ -1198,3 +1207,16 @@ parse_coord_string(const char *cstring, uint32_t *ret_start, uint32_t *ret_end)
   esl_regexp_Destroy(re);
   return eslOK;
 }
+
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/miniapps/esl-alimask.c $
+ * SVN $Id: esl-alistat.c 393 2009-09-27 12:04:55Z eddys $
+ *****************************************************************/

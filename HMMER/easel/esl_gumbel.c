@@ -12,9 +12,6 @@
  *   9. Example
  *  10. Copyright and license information
  * 
- * SRE, Thu Jun 23 11:48:39 2005
- * SVN $Id: esl_gumbel.c 326 2009-02-28 15:49:07Z eddys $
- * 
  * Note: SRE, Mon Aug  6 13:42:09 2007
  * ML fitting routines will be prone to over/underfitting 
  * problems for scores outside a "normal" range, because
@@ -44,7 +41,6 @@
 
 /* Function:  esl_gumbel_pdf()
  * Synopsis:  Returns the probability density at $x$, $P(S=x)$.
- * Incept:    SRE, Sun Jun 26 14:08:19 2005 [St. Louis]
  *
  * Purpose:   Calculates the probability density function for the Gumbel,
  *            $P(X=x)$, given quantile <x> and Gumbel location and
@@ -65,7 +61,6 @@ esl_gumbel_pdf(double x, double mu, double lambda)
 
 /* Function:  esl_gumbel_logpdf()
  * Synopsis:  Returns the log of the pdf at $x$, $\log P(S=x)$.
- * Incept:    SRE, Sun Jun 26 14:08:19 2005 [St. Louis]
  *
  * Purpose:   Calculates the log probability density function for the Gumbel,
  *            $\log P(X=x)$.
@@ -85,7 +80,6 @@ esl_gumbel_logpdf(double x, double mu, double lambda)
 
 /* Function:  esl_gumbel_cdf()
  * Synopsis:  Returns the cumulative distribution at $x$, $P(S \leq x)$.
- * Incept:    SRE, Sun Jun 26 10:18:51 2005 [St. Louis]
  *
  * Purpose:   Calculates the cumulative distribution function
  *            for the Gumbel, $P(X \leq x)$.
@@ -104,7 +98,6 @@ esl_gumbel_cdf(double x, double mu, double lambda)
 
 /* Function:  esl_gumbel_logcdf()
  * Synopsis:  Returns the log of the cdf at $x$, $\log P(S \leq x)$.
- * Incept:    SRE, Sun Jun 26 10:18:51 2005 [St. Louis]
  *
  * Purpose:   Calculates the log of the cumulative distribution function
  *            for the Gumbel, $\log P(X \leq x)$.
@@ -123,7 +116,6 @@ esl_gumbel_logcdf(double x, double mu, double lambda)
 
 /* Function:  esl_gumbel_surv()
  * Synopsis:  Returns right tail mass above $x$, $P(S > x)$.
- * Incept:    SRE, Sun Jun 26 09:54:31 2005 [St. Louis]
  *
  * Purpose:   Calculates the survivor function, $P(X>x)$ for a Gumbel 
  *            (that is, 1-cdf), the right tail's probability mass.
@@ -146,7 +138,6 @@ esl_gumbel_surv(double x, double mu, double lambda)
 
 /* Function:  esl_gumbel_logsurv()
  * Synopsis:  Returns log survival at $x$, $\log P(S > x)$.
- * Incept:    SRE, Sun Jun 26 13:45:52 2005 [St. Louis]
  *
  * Purpose:   Calculates $\log P(X>x)$ for a Gumbel (that is, $\log$(1-cdf)):
  *            the log of the right tail's probability mass.
@@ -172,7 +163,6 @@ esl_gumbel_logsurv(double x, double mu, double lambda)
 }
 
 /* Function:  esl_gumbel_invcdf()
- * Incept:    SRE, Sun Aug 21 12:14:06 2005 [St. Louis]
  *
  * Purpose:   Calculates the inverse CDF for a Gumbel distribution
  *            with parameters <mu> and <lambda>. That is, returns
@@ -181,7 +171,40 @@ esl_gumbel_logsurv(double x, double mu, double lambda)
 double
 esl_gumbel_invcdf(double p, double mu, double lambda)
 {
-  return mu - log(-1. * log(p)) / lambda;
+    return mu - ( log(-1. * log(p)) / lambda);
+}
+
+/* Function:  esl_gumbel_invsurv()
+ *
+ * Purpose:   Calculates the score at which the right tail's mass
+ *            is p, for a Gumbel distribution
+ *            with parameters <mu> and <lambda>. That is, returns
+ *            the quantile <x> at which 1-CDF is <p>.
+ */
+double
+esl_gumbel_invsurv(double p, double mu, double lambda)
+{
+	/* The real calculation is mu - ( log(-1. * log(1-p)) / lambda).
+	*  But there's a problem with small p:
+	*     for p<1e-15, 1-p will be viewed as 1, so
+	*     log ( -log(1-p) ) == log (0) -> inf
+	*  Instead, use two approximations;
+	*    (1) log( 1-p) ~= -p   for small p (e.g. p<0.001)
+	*      so log(-1. * log(1-p)) ~= log(p)
+	*    (2) log (p) ~= (p^p - 1) / p
+	*
+	*    See notes Mar 1, 2010.
+	*/
+	double log_part;
+	if (p < eslSMALLX1) {
+		log_part = (pow(p,p) - 1 ) / p;
+	} else {
+		log_part = log(-1. * log(1-p));
+	}
+
+	//test 2
+
+    return mu - ( log_part / lambda);
 }
 /*------------------ end of densities and distributions --------------------*/
 
@@ -191,7 +214,6 @@ esl_gumbel_invcdf(double p, double mu, double lambda)
  *****************************************************************/ 
 
 /* Function:  esl_gumbel_generic_pdf()
- * Incept:    SRE, Thu Aug 25 07:56:04 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of PDF function.
  */
@@ -203,7 +225,6 @@ esl_gumbel_generic_pdf(double p, void *params)
 }
 
 /* Function:  esl_gumbel_generic_cdf()
- * Incept:    SRE, Sun Aug 21 12:10:49 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of CDF function.
  */
@@ -215,7 +236,6 @@ esl_gumbel_generic_cdf(double x, void *params)
 }
 
 /* Function:  esl_gumbel_generic_surv()
- * Incept:    SRE, Thu Aug 25 07:56:04 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of survival function.
  */
@@ -227,7 +247,6 @@ esl_gumbel_generic_surv(double p, void *params)
 }
 
 /* Function:  esl_gumbel_generic_invcdf()
- * Incept:    SRE, Sun Aug 21 12:12:27 2005 [St. Louis]
  *
  * Purpose:   Generic-API version of inverse CDF.
  */
@@ -249,14 +268,15 @@ esl_gumbel_generic_invcdf(double p, void *params)
 
 /* Function:  esl_gumbel_Plot()
  * Synopsis:  Plot a Gumbel function in XMGRACE XY format.
- * Incept:    SRE, Sun Aug 21 13:21:37 2005 [St. Louis]
  *
  * Purpose:   Plot a Gumbel function <func> (for instance,
  *            <esl_gumbel_pdf()>) for parameters <mu> and <lambda>, for
  *            a range of quantiles x from <xmin> to <xmax> in steps of <xstep>;
  *            output to an open stream <fp> in xmgrace XY input format.
  *
- * Returns:   <eslOK>.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEWRITE> on any system write error, such as filled disk.
  */
 int
 esl_gumbel_Plot(FILE *fp, double mu, double lambda, 
@@ -265,8 +285,8 @@ esl_gumbel_Plot(FILE *fp, double mu, double lambda,
 {
   double x;
   for (x = xmin; x <= xmax; x += xstep)
-    fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda));
-  fprintf(fp, "&\n");
+    if (fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda)) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "gumbel plot write failed");
+  if (fprintf(fp, "&\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "gumbel plot write failed");
   return eslOK;
 }
 /*-------------------- end plot dumping routines ---------------------------*/
@@ -280,7 +300,6 @@ esl_gumbel_Plot(FILE *fp, double mu, double lambda,
 #ifdef eslAUGMENT_RANDOM
 /* Function:  esl_gumbel_Sample()
  * Synopsis:  Return a Gumbel-distributed random sample $x$.
- * Incept:    SRE, Thu Jun 23 11:38:39 2005 [St. Louis]
  *
  * Purpose:   Sample a Gumbel-distributed random variate
  *            by the transformation method.
@@ -448,7 +467,6 @@ esl_gumbel_FitComplete(double *x, int n, double *ret_mu, double *ret_lambda)
 
 /* Function:  esl_gumbel_FitCompleteLoc()
  * Synopsis:  Estimates $\mu$ from complete data, given $\lambda$.
- * Incept:    SRE, Thu Nov 24 09:09:17 2005 [St. Louis]
  *
  * Purpose:   Given an array of Gumbel-distributed samples 
  *            <x[0]..x[n-1]> (complete data), and a known
@@ -679,7 +697,6 @@ esl_gumbel_FitCensored(double *x, int n, int z, double phi,
 
 /* Function:  esl_gumbel_FitCensoredLoc()
  * Synopsis:  Estimates $\mu$ from censored data, given $\lambda$.
- * Incept:    SRE, Mon Feb  6 11:33:10 2006 [St. Louis]
  *
  * Purpose:   Given a left-censored array of Gumbel distributed samples
  *            <x[0>..x[n-1]>, the number of censored samples <z>, and the censoring
@@ -835,7 +852,6 @@ tevd_grad(double *p, int nparam, void *dptr, double *dp)
   
 /* Function:  esl_gumbel_FitTruncated()
  * Synopsis:  Estimates $\mu$, $\lambda$ from truncated data.
- * Incept:    SRE, Wed Jun 29 14:14:17 2005 [St. Louis]
  *
  * Purpose:   Given a left-truncated array of Gumbel-distributed
  *            samples <x[0]..x[n-1]> and the truncation threshold
@@ -1194,10 +1210,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_gumbel.c 727 2011-10-24 17:17:32Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_gumbel.c $
  *****************************************************************/

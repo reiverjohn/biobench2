@@ -19,9 +19,6 @@
  * To do:
  *   - eventually probably want additional matrix types
  *   - unit tests poor 
- *
- * SRE, Tue Jul 13 14:42:14 2004 [St. Louis]
- * SVN $Id: esl_dmatrix.c 342 2009-06-03 12:32:42Z eddys $
  */
 #include "esl_config.h"
 
@@ -235,10 +232,10 @@ esl_dmatrix_Clone(const ESL_DMATRIX *A)
 /* Function:  esl_dmatrix_Compare()
  *
  * Purpose:   Compares matrix <A> to matrix <B> element by element,
- *            using <esl_DCompare()> on each cognate element pair, 
- *            with equality defined by a fractional tolerance <tol>.
- *            If all elements are equal, return <eslOK>; if any
- *            elements differ, return <eslFAIL>. 
+ *            using <esl_DCompare()> on each cognate element pair,
+ *            with relative equality defined by a fractional tolerance
+ *            <tol>.  If all elements are equal, return <eslOK>; if
+ *            any elements differ, return <eslFAIL>.
  *            
  *            <A> and <B> may be of different types; for example,
  *            a packed upper triangular matrix A is compared to
@@ -265,12 +262,57 @@ esl_dmatrix_Compare(const ESL_DMATRIX *A, const ESL_DMATRIX *B, double tol)
 	for (j = 0; j < A->m; j++)
 	  {
 	    if (A->type == eslUPPER && i > j) x1 = 0.;
-	    else                                         x1 = A->mx[i][j];
+	    else                              x1 = A->mx[i][j];
 
 	    if (B->type == eslUPPER && i > j) x2 = 0.;
-	    else                                         x2 = B->mx[i][j];
+	    else                              x2 = B->mx[i][j];
 
 	    if (esl_DCompare(x1, x2, tol) == eslFAIL) return eslFAIL;
+	  }
+    }
+  return eslOK;
+}
+
+
+/* Function:  esl_dmatrix_CompareAbs()
+ *
+ * Purpose:   Compares matrix <A> to matrix <B> element by element,
+ *            using <esl_DCompareAbs()> on each cognate element pair,
+ *            with absolute equality defined by a absolute difference tolerance
+ *            <tol>.  If all elements are equal, return <eslOK>; if
+ *            any elements differ, return <eslFAIL>.
+ *            
+ *            <A> and <B> may be of different types; for example,
+ *            a packed upper triangular matrix A is compared to
+ *            a general matrix B by assuming <A->mx[i][j] = 0.> for
+ *            all $i>j$.
+ */
+int
+esl_dmatrix_CompareAbs(const ESL_DMATRIX *A, const ESL_DMATRIX *B, double tol)
+{
+  int i,j,c;
+  double x1,x2;
+
+  if (A->n != B->n) return eslFAIL;
+  if (A->m != B->m) return eslFAIL;
+
+  if (A->type == B->type) 
+    {  /* simple case. */
+      for (c = 0; c < A->ncells; c++) /* can deal w/ packed or unpacked storage */
+	if (esl_DCompareAbs(A->mx[0][c], B->mx[0][c], tol) == eslFAIL) return eslFAIL;
+    }
+  else 
+    { /* comparing matrices of different types */
+      for (i = 0; i < A->n; i++)
+	for (j = 0; j < A->m; j++)
+	  {
+	    if (A->type == eslUPPER && i > j) x1 = 0.;
+	    else                              x1 = A->mx[i][j];
+
+	    if (B->type == eslUPPER && i > j) x2 = 0.;
+	    else                              x2 = B->mx[i][j];
+
+	    if (esl_DCompareAbs(x1, x2, tol) == eslFAIL) return eslFAIL;
 	  }
     }
   return eslOK;
@@ -677,7 +719,6 @@ int
 esl_dmx_Exp(const ESL_DMATRIX *Q, double t, ESL_DMATRIX *P)
 {
 /*::cexcerpt::function_comment_example::end::*/
-  int status;
   ESL_DMATRIX *Qz   = NULL;	/* Q/2^z rescaled matrix*/
   ESL_DMATRIX *Qpow = NULL;	/* keeps running product Q^k */
   ESL_DMATRIX *C    = NULL;	/* tmp storage for matrix multiply result */
@@ -686,6 +727,7 @@ esl_dmx_Exp(const ESL_DMATRIX *Q, double t, ESL_DMATRIX *P)
   int    z;
   double zfac;
   int    k;
+  int    status;
     
   /* Contract checks  */
   if (Q->type != eslGENERAL) ESL_EXCEPTION(eslEINVAL, "Q isn't general");
@@ -695,9 +737,9 @@ esl_dmx_Exp(const ESL_DMATRIX *Q, double t, ESL_DMATRIX *P)
   if (P->n    != Q->n)       ESL_EXCEPTION(eslEINVAL, "P isn't same size as Q");
 
   /* Allocation of working space */
-  if ((Qz   = esl_dmatrix_Create(Q->n, Q->n)) == NULL) goto ERROR;
-  if ((Qpow = esl_dmatrix_Create(Q->n, Q->n)) == NULL) goto ERROR;
-  if ((C    = esl_dmatrix_Create(Q->n, Q->n)) == NULL) goto ERROR;
+  if ((Qz   = esl_dmatrix_Create(Q->n, Q->n)) == NULL) { status = eslEMEM; goto ERROR; }
+  if ((Qpow = esl_dmatrix_Create(Q->n, Q->n)) == NULL) { status = eslEMEM; goto ERROR; }
+  if ((C    = esl_dmatrix_Create(Q->n, Q->n)) == NULL) { status = eslEMEM; goto ERROR; }
   
   /* Figure out how much to scale the matrix down by.  This is not
    * magical; we're just knocking its magnitude down in an ad hoc way.
@@ -1353,7 +1395,7 @@ int main(void)
 
   /* Create a square matrix with random values from  -range..range */
   if ((r = esl_randomness_Create(seed)) == NULL) esl_fatal("failed to create random source");
-  if ((A = esl_dmatrix_Create(n, n))        == NULL) esl_fatal("failed to create matrix");
+  if ((A = esl_dmatrix_Create(n, n))    == NULL) esl_fatal("failed to create matrix");
   for (i = 0; i < n; i++)
     for (j = 0; j < n; j++)
       A->mx[i][j] = esl_random(r) * range * 2.0 - range;
@@ -1406,10 +1448,13 @@ int main(void)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_dmatrix.c 755 2012-03-21 11:30:23Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_dmatrix.c $
  *****************************************************************/

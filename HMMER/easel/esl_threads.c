@@ -5,13 +5,10 @@
  *    2. Determining thread number to use.
  *    3. Examples.
  *    4. Copyright and license.
- * 
- * MSF, Thu Jun 18 11:51:39 2009
- * SVN $Id: esl_threads.c 409 2009-10-19 23:47:18Z eddys $
  */
 #include "esl_config.h"
 
-#ifdef HAVE_PTHREADS
+#ifdef HAVE_PTHREAD
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +17,9 @@
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#ifdef HAVE_SYS_PARAM_H		/* On OpenBSD, sys/sysctl.h requires sys/param.h */
+#include <sys/param.h>
 #endif
 #ifdef HAVE_SYS_SYSCTL_H
 #include <sys/sysctl.h>
@@ -423,17 +423,18 @@ main(void)
   return eslOK;
 }
 #endif /*eslTHREADS_EXAMPLE2*/
-
-
-
+#endif /*HAVE_PTHREAD*/
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_threads.c 829 2012-12-05 14:18:45Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_threads.c $
  *****************************************************************/
-#endif /* HAVE_PTHREADS */
+

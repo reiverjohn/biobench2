@@ -10,9 +10,6 @@
  *   7. Test driver.
  *   8. Examples.
  *   9. Copyright and license information.
- * 
- * SRE, Mon Mar 31 17:18:59 2008 [Janelia]
- * SVN $Id: esl_sq.c 509 2010-02-07 22:56:55Z eddys $
  */
 #include "esl_config.h"
 
@@ -29,6 +26,9 @@
 #include "esl_msa.h"		/* msa aug adds ability to extract sq from an MSA  */
 #endif
 #include "esl_sq.h"
+
+#include "esl_vectorops.h"
+
 
 /* Shared parts of text/digital creation functions (defined in "internal functions" section) */
 static ESL_SQ *sq_create(int do_digital);
@@ -118,6 +118,12 @@ esl_sq_CreateFrom(const char *name, const char *seq, const char *desc, const cha
   sq->C      = 0;
   sq->W      = n;
   sq->L      = n;
+
+  /* optional for extra residue markups */
+  sq->nxr    = 0;
+  sq->xr_tag = NULL;
+  sq->xr     = NULL;
+
   return sq;
 
  ERROR:
@@ -153,6 +159,7 @@ esl_sq_Grow(ESL_SQ *sq, int64_t *opt_nsafe)
   void   *tmp;
   int64_t new;
   int64_t nsafe;
+  int     x;       /* index for optional extra residue markups */
   int     status;
 
   if (sq->seq != NULL)  nsafe = sq->salloc     - sq->n;     /* text */
@@ -166,6 +173,10 @@ esl_sq_Grow(ESL_SQ *sq, int64_t *opt_nsafe)
       if (sq->seq != NULL) ESL_RALLOC(sq->seq, tmp, new * sizeof(char));	/* text    */
       else                 ESL_RALLOC(sq->dsq, tmp, new * sizeof(ESL_DSQ));	/* digital */
       if (sq->ss != NULL)  ESL_RALLOC(sq->ss,  tmp, new * sizeof(char));
+
+      for (x = 0; x < sq->nxr; x++) 
+	if (sq->xr[x] != NULL)  ESL_RALLOC(sq->xr[x],  tmp, new * sizeof(char));
+      
       sq->salloc = new;
     }
   if (opt_nsafe != NULL) *opt_nsafe = nsafe;
@@ -200,23 +211,28 @@ esl_sq_Grow(ESL_SQ *sq, int64_t *opt_nsafe)
 int
 esl_sq_GrowTo(ESL_SQ *sq, int64_t n)
 {
-  void *tmp;
+  int   x;        /* index for optional extra residue markups */
   int   status;
 
   if (sq->seq != NULL)		/* text mode */
     {
       if (n+1 > sq->salloc) {
-	ESL_RALLOC(sq->seq, tmp, (n+1) * sizeof(char));
-	if (sq->ss != NULL) ESL_RALLOC(sq->ss, tmp, (n+1) * sizeof(char));
-	sq->salloc = n+1;
+        ESL_REALLOC(sq->seq, (n+1) * sizeof(char));
+        if (sq->ss != NULL) ESL_REALLOC(sq->ss, (n+1) * sizeof(char));
+        for (x = 0; x < sq->nxr; x++) /* optional extra residue markups */
+          if (sq->xr[x] != NULL)  ESL_REALLOC(sq->xr[x],  (n+1) * sizeof(char));
+        sq->salloc = n+1;
       }
     }
   else				/* digital mode */
     {
       if (n+2 > sq->salloc) {
-	ESL_RALLOC(sq->dsq, tmp, (n+2) * sizeof(ESL_DSQ));
-	if (sq->ss != NULL) ESL_RALLOC(sq->ss, tmp, (n+2) * sizeof(char));
-	sq->salloc = n+2;
+        ESL_REALLOC(sq->dsq, (n+2) * sizeof(ESL_DSQ));
+        if (sq->ss != NULL) ESL_REALLOC(sq->ss, (n+2) * sizeof(char));
+        for (x = 0; x < sq->nxr; x++) /* optional extra residue markups */
+          if (sq->xr[x] != NULL)  ESL_REALLOC(sq->xr[x],  (n+2) * sizeof(char));
+
+        sq->salloc = n+2;
       }
     }
   return eslOK;
@@ -251,11 +267,33 @@ esl_sq_GrowTo(ESL_SQ *sq, int64_t n)
 int
 esl_sq_Copy(const ESL_SQ *src, ESL_SQ *dst)
 {
+  int   x;        /* index for optional extra residue markups */
   int status;
 
   /* If <src> has structure annotation and <dst> does not, initialize an allocation in <dst> */
-  if (src->ss != NULL && dst->ss == NULL) ESL_ALLOC(dst->ss, sizeof(char) * dst->salloc);
+  if (src->ss != NULL && dst->ss  == NULL) ESL_ALLOC(dst->ss, sizeof(char) * dst->salloc);
 
+  /* similarly for optional extra residue markups */
+  if (src->nxr > 0) {
+    if (dst->nxr > 0) {
+      for (x = 0; x < dst->nxr; x++) {
+	if (dst->xr[x]     != NULL) { free(dst->xr[x]);     dst->xr[x]     = NULL; }
+	if (dst->xr_tag[x] != NULL) { free(dst->xr_tag[x]); dst->xr_tag[x] = NULL; }
+      }     
+      if (dst->xr     != NULL) { free(dst->xr);     dst->xr     = NULL; }
+      if (dst->xr_tag != NULL) { free(dst->xr_tag); dst->xr_tag = NULL; }
+    }
+    
+    dst->nxr = src->nxr;
+    ESL_ALLOC(dst->xr_tag, sizeof(char *) * dst->nxr);
+    ESL_ALLOC(dst->xr,     sizeof(char *) * dst->nxr);
+    
+    for (x = 0; x < dst->nxr; x++) {
+      ESL_ALLOC(dst->xr_tag[x], sizeof(char) * src->nalloc);
+      ESL_ALLOC(dst->xr[x],     sizeof(char) * src->salloc);
+    }
+  }
+  
   if ((status = esl_sq_SetName     (dst, src->name))   != eslOK) goto ERROR;
   if ((status = esl_sq_SetSource   (dst, src->source)) != eslOK) goto ERROR;
   if ((status = esl_sq_SetAccession(dst, src->acc))    != eslOK) goto ERROR;
@@ -264,8 +302,10 @@ esl_sq_Copy(const ESL_SQ *src, ESL_SQ *dst)
 
   if (src->seq != NULL && dst->seq != NULL) /* text to text */
     {
-      strcpy(dst->seq, src->seq);
+    strcpy(dst->seq, src->seq);
       if (src->ss != NULL) strcpy(dst->ss, src->ss);
+      for (x = 0; x < src->nxr; x++) 
+	if (src->xr[x] != NULL) strcpy(dst->xr[x], src->xr[x]);
     }
 #ifdef eslAUGMENT_ALPHABET
   else if (src->seq != NULL && dst->dsq != NULL) /* text to digital */
@@ -274,13 +314,17 @@ esl_sq_Copy(const ESL_SQ *src, ESL_SQ *dst)
       if (src->ss != NULL) {
 	strcpy(dst->ss+1, src->ss);
 	dst->ss[0] = '\0';
-      }
+	for (x = 0; x < src->nxr; x++) 
+	  if (src->xr[x] != NULL) { strcpy(dst->xr[x]+1, src->xr[x]); dst->xr[x][0] = '\0'; }
+     }
     }
   else if (src->dsq != NULL && dst->seq != NULL) /* digital to text */
     {
       if ((status = esl_abc_Textize(src->abc, src->dsq, src->n, dst->seq)) != eslOK) goto ERROR;
       if (src->ss != NULL) strcpy(dst->ss, src->ss+1);
-    }
+      for (x = 0; x < src->nxr; x++) 
+	if (src->xr[x] != NULL) strcpy(dst->xr[x], src->xr[x]+1);
+   }
   else 				/* digital to digital */
     {
       if (src->abc->type != dst->abc->type) 
@@ -290,9 +334,14 @@ esl_sq_Copy(const ESL_SQ *src, ESL_SQ *dst)
 	strcpy(dst->ss+1, src->ss+1);
 	dst->ss[0] = '\0';
       }
+      for (x = 0; x < src->nxr; x++) 
+	if (src->xr[x] != NULL) { strcpy(dst->xr[x]+1, src->xr[x]+1); dst->xr[x][0] = '\0'; }
     }
 #endif
-  
+   
+  for (x = 0; x < src->nxr; x++) 
+    if (src->xr_tag[x] != NULL) strcpy(dst->xr_tag[x], src->xr_tag[x]);
+
   dst->n     = src->n;
   dst->start = src->start;
   dst->end   = src->end;
@@ -327,6 +376,8 @@ esl_sq_Copy(const ESL_SQ *src, ESL_SQ *dst)
 int
 esl_sq_Compare(ESL_SQ *sq1, ESL_SQ *sq2)
 {
+  int   x;        /* index for optional extra residue markups */
+
   /* Annotation comparison */
   if (strcmp(sq1->name,   sq2->name)   != 0) return eslFAIL;
   if (strcmp(sq1->acc,    sq2->acc)    != 0) return eslFAIL;
@@ -362,6 +413,20 @@ esl_sq_Compare(ESL_SQ *sq1, ESL_SQ *sq2)
   if (sq1->hoff != -1 && sq2->hoff != -1 && sq1->hoff != sq2->hoff) return eslFAIL;
   if (sq1->eoff != -1 && sq2->eoff != -1 && sq1->eoff != sq2->eoff) return eslFAIL;
   
+  /* optional extra residue markup comparison */
+  if (sq1->nxr != sq2->nxr) return eslFAIL;
+  for (x = 0; x < sq1->nxr; x++) {
+    if (sq1->xr_tag[x] != NULL && sq2->xr_tag[x] != NULL) {
+      if (strcmp(sq1->xr_tag[x], sq2->xr_tag[x]) != 0)      return eslFAIL;
+    } else
+      if (sq1->xr_tag[x] != NULL || sq2->xr_tag[x] != NULL) return eslFAIL;
+    
+    if (sq1->xr[x] != NULL && sq2->xr[x] != NULL) {
+      if (strcmp(sq1->xr[x], sq2->xr[x]) != 0)      return eslFAIL;
+    } else
+      if (sq1->xr[x] != NULL || sq2->xr[x] != NULL) return eslFAIL;
+  }
+  
   /* alphabet comparison */
 #ifdef eslAUGMENT_ALPHABET  
   if (sq1->abc != NULL && (sq1->abc->type != sq2->abc->type)) return eslFAIL;
@@ -385,6 +450,8 @@ esl_sq_Compare(ESL_SQ *sq1, ESL_SQ *sq2)
 int
 esl_sq_Reuse(ESL_SQ *sq)
 {
+  int   x;        /* index for optional extra residue markups */
+
   sq->name[0]   = '\0';
   sq->acc[0]    = '\0';
   sq->desc[0]   = '\0';
@@ -396,6 +463,18 @@ esl_sq_Reuse(ESL_SQ *sq)
     if (sq->seq != NULL) sq->ss[0] = '\0';
     else                 sq->ss[0] = sq->ss[1] = '\0'; /* in digital mode, ss string is 1..n; 0 is a dummy \0 byte*/
   }
+
+  /* optional extra residue markup */
+  if (sq->nxr > 0) {
+    for (x = 0; x < sq->nxr; x++) {
+      if (sq->xr[x]     != NULL) { free(sq->xr[x]);     sq->xr[x]     = NULL; }
+      if (sq->xr_tag[x] != NULL) { free(sq->xr_tag[x]); sq->xr_tag[x] = NULL; }
+    }     
+    if (sq->xr     != NULL) { free(sq->xr);     sq->xr     = NULL; }
+    if (sq->xr_tag != NULL) { free(sq->xr_tag); sq->xr_tag = NULL; }
+    sq->nxr = 0;
+  }
+
   sq->n     = 0;
   sq->start = 0;
   sq->end   = 0;
@@ -447,6 +526,7 @@ esl_sq_IsText(const ESL_SQ *sq)
 void
 esl_sq_Destroy(ESL_SQ *sq)
 {
+  int   x;        /* index for optional extra residue markups */
   if (sq == NULL) return;
 
   if (sq->name   != NULL) free(sq->name);  
@@ -456,6 +536,14 @@ esl_sq_Destroy(ESL_SQ *sq)
   if (sq->dsq    != NULL) free(sq->dsq);   
   if (sq->ss     != NULL) free(sq->ss);    
   if (sq->source != NULL) free(sq->source);
+  if (sq->nxr > 0) {  
+    for (x = 0; x < sq->nxr; x++) {
+      if (sq->xr[x]     != NULL) free(sq->xr[x]);
+      if (sq->xr_tag[x] != NULL) free(sq->xr_tag[x]);
+    }
+    if (sq->xr     != NULL) free(sq->xr);
+    if (sq->xr_tag != NULL) free(sq->xr_tag);
+  }
   free(sq);
   return;
 }
@@ -524,7 +612,6 @@ esl_sq_CreateDigitalBlock(int count, const ESL_ALPHABET *abc)
 {
   int i;
   ESL_SQ_BLOCK *block;
-
   if ((block = sq_createblock(count, TRUE)) == NULL) return NULL;
   
   for (i = 0; i < count; ++i)
@@ -675,6 +762,7 @@ esl_sq_CreateDigitalFrom(const ESL_ALPHABET *abc, const char *name, const ESL_DS
 int
 esl_sq_Digitize(const ESL_ALPHABET *abc, ESL_SQ *sq)
 {
+  int   x;        /* index for optional extra residue markups */
   int status;
 
   /* Contract checks */
@@ -692,6 +780,12 @@ esl_sq_Digitize(const ESL_ALPHABET *abc, ESL_SQ *sq)
       void *tmp;
       ESL_RALLOC(sq->ss, tmp, sizeof(char) * sq->salloc);
     }
+    /* optional extra residue markups follow same convenctions as ss */
+    for (x = 0; x < sq->nxr; x++) 
+      if (sq->xr[x] != NULL) {
+	void *tmp;
+	ESL_RALLOC(sq->xr[x], tmp, sizeof(char) * sq->salloc);
+      }
   }
   ESL_ALLOC(sq->dsq, (sq->salloc) * sizeof(ESL_DSQ));
 
@@ -701,6 +795,12 @@ esl_sq_Digitize(const ESL_ALPHABET *abc, ESL_SQ *sq)
     memmove(sq->ss+1, sq->ss, sq->n+1);
     sq->ss[0] = '\0';
   }
+  for (x = 0; x < sq->nxr; x++) 
+    if (sq->xr[x] != NULL) {
+      memmove(sq->xr[x]+1, sq->xr[x], sq->n+1);
+      sq->xr[x][0] = '\0';
+    }
+  
   free(sq->seq);
   sq->seq = NULL;
   sq->abc = abc;
@@ -733,6 +833,7 @@ esl_sq_Digitize(const ESL_ALPHABET *abc, ESL_SQ *sq)
 int
 esl_sq_Textize(ESL_SQ *sq)
 {
+  int   x;        /* index for optional extra residue markups */
   int status;
 
   /* Contract checks */
@@ -747,7 +848,10 @@ esl_sq_Textize(ESL_SQ *sq)
   if ((status = esl_abc_Textize(sq->abc, sq->dsq, sq->n, sq->seq)) != eslOK) goto ERROR;
   if (sq->ss != NULL) 
     memmove(sq->ss, sq->ss+1, sq->n+1);	/* slide back to 0..n-1; +1 includes terminal \0 */
-
+  for (x = 0; x < sq->nxr; x++) 
+    if (sq->xr[x] != NULL) 
+      memmove(sq->xr[x], sq->xr[x]+1, sq->n+1);	/* slide back to 0..n-1; +1 includes terminal \0 */
+  
   free(sq->dsq);
   sq->dsq = NULL;
   sq->abc = NULL;           /* nullify reference (caller still owns real abc) */
@@ -760,7 +864,6 @@ esl_sq_Textize(ESL_SQ *sq)
 
 /* Function:  esl_sq_GuessAlphabet()
  * Synopsis:  Guess alphabet type of a single sequence.
- * Incept:    SRE, Wed May 16 11:03:44 2007 [Janelia]
  *
  * Purpose:   Guess the alphabet type of biosequence <sq>, and store the
  *            guess in <*ret_type>.
@@ -773,47 +876,29 @@ esl_sq_Textize(ESL_SQ *sq)
  *            
  *            The sequence must contain more than 10 residues, or it
  *            is called <eslUNKNOWN>.
- *            
- *            Specifically, this routine calls the sequence <eslDNA>
- *            if it consists only of the residues <ACGTN> and all four
- *            of <ACGT> occur. (And analogously for <eslRNA>,
- *            <ACGUN>.)  It calls the sequence <eslAMINO> either if it
- *            contains an amino-specific letter (<EFIJLOPQZ>), or if
- *            it contains at least 15 of the 20 canonical amino acids
- *            and consists only of canonical amino acids or <X>.
-
- *            Thus DNA sequences containing IUPAC degeneracies other
- *            than N are called <eslUNKNOWN>, rather than hazarding a
- *            guess. It may be possible to improve on this in the
- *            future by using residue occurrence frequencies.
- *            
- *            Note that a sequence of <ATATATA...> will be called
- *            <eslUNKNOWN>, whereas a sequence <ACGTACGTACGT...>
- *            (which could conceivably be "ala-cys-gly-thr...") will
- *            be called <eslDNA>. Peptides of simple mono and di-amino
- *            acid compositions do occur, but I have not (yet) seen a
- *            peptide consisting only of all four residues <ACGT>.
- *            
- *            The routine is designed to be conservative, calling
- *            <eslUNKNOWN> rather than making errors. In a test on the
- *            Oct 2006 version of the NCBI nonredundant databases,
- *            this routine called 0 <eslDNA> and 5694 <eslUNKNOWN> on
- *            4.0M protein sequences (99.9\% classification with no
- *            false positives) and 0 <eslAMINO> and 155756
- *            <eslUNKNOWN> in 4.4M DNA sequences (96\% classification
- *            with no false positives). (Well, actually, one DNA call
- *            was made in the protein database, but this was an
- *            exception that proves the rule; that entry was indeed a
- *            DNA contaminant. It has since been removed by NCBI.)
+ *
+ *            For details on the rules used to classify a residue
+ *            composition, see <esl_abc_GuessAlphabet()>. The rules
+ *            are good but not perfect. We err on the conservative
+ *            side, calling <eslUNKNOWN> rather than making
+ *            classification errors. However, errors are possible; an
+ *            example is a protein sequence <ACGTACGTACGT...>
+ *            ("ala-cys-gly-thr..."), which will be called <eslDNA>,
+ *            because it contains all and only DNA residues.
+ *
+ *            The routine is tested on large sequence databases to
+ *            make sure there are zero false positive classifications
+ *            on known sequences. See <esl_abc_GuessAlphabet()> for
+ *            details of these tests, and crossreferences.
  *
  * Returns:   <eslOK> on success, and <*ret_type> is set to
  *            <eslAMINO>, <eslRNA>, or <eslDNA>.
  *
- *            Returns <eslEAMBIGUOUS> if unable to determine the
+ *            Returns <eslENOALPHABET> if unable to determine the
  *            alphabet type; in this case, <*ret_type> is set to 
  *            <eslUNKNOWN>.
  *
- * Xref:      J1/62; 2007/0517-easel-guess-alphabet
+ * Xref:      See notes on esl_alphabet.c::esl_abc_GuessAlphabet()
  */
 int
 esl_sq_GuessAlphabet(ESL_SQ *sq, int *ret_type)
@@ -833,8 +918,38 @@ esl_sq_GuessAlphabet(ESL_SQ *sq, int *ret_type)
   }
   return esl_abc_GuessAlphabet(ct, ret_type);
 }
-#endif /*eslAUGMENT_ALPHABET*/
 
+
+/* Function:  esl_sq_ConvertDegen2X()
+ * Synopsis:  Convert all degenerate residues to X/N
+ * Incept:    SRE, Tue Apr 20 08:52:54 2010 [Janelia]
+ *
+ * Purpose:   Convert all the degenerate residue codes in digital
+ *            sequence <sq> to the code for "unknown residue" (maximum
+ *            degeneracy); for example, X for protein, N for nucleic
+ *            acid. 
+ *            
+ *            This is handy when you need to be compatible with
+ *            software that can't deal with unusual residue codes.
+ *            For example, WU-BLAST can't deal with O (pyrrolysine)
+ *            codes.
+ *            
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINVAL> if <sq> isn't in digital mode. 
+ *            (We only know how to interpret the alphabet
+ *            in digital mode. In text mode, letters are
+ *            just letters.)
+ */
+int
+esl_sq_ConvertDegen2X(ESL_SQ *sq)
+{
+  if (! esl_sq_IsDigital(sq)) ESL_EXCEPTION(eslEINVAL, "esl_sq_ConvertDegen2X() only works on digital sequences");
+  return esl_abc_ConvertDegen2X(sq->abc, sq->dsq);
+}
+
+
+#endif /*eslAUGMENT_ALPHABET*/
 /*---------- end of digitized ESL_SQ object functions -----------*/
 
 
@@ -1345,6 +1460,7 @@ int
 esl_sq_ReverseComplement(ESL_SQ *sq)
 {
   int64_t i;
+  int     x;               /* index for optional extra residue markups */
   int     status = eslOK;
 
   if (sq->seq != NULL)
@@ -1417,6 +1533,14 @@ esl_sq_ReverseComplement(ESL_SQ *sq)
   ESL_SWAP(sq->start, sq->end, int);
   /* revcomp invalidates any secondary structure annotation */
   if (sq->ss != NULL) { free(sq->ss); sq->ss = NULL; }
+  /* revcomp invalidates any extra residue markup */
+  if (sq->nxr > 0) {
+    for (x = 0; x < sq->nxr; x++) 
+      if (sq->xr[x] != NULL) { free(sq->xr_tag[x]); free(sq->xr[x]); sq->xr_tag[x] = NULL; sq->xr[x] = NULL; }  
+    free(sq->xr_tag); sq->xr_tag = NULL;
+    free(sq->xr);     sq->xr     = NULL;
+  }   
+  
   return status;
 }
 
@@ -1470,6 +1594,56 @@ esl_sq_Checksum(const ESL_SQ *sq, uint32_t *ret_checksum)
   return eslOK;
 }
 
+
+
+/* Function:  esl_sq_CountResidues()
+ * Synopsis:  compute character counts
+ *
+ * Purpose:   Given an ESL\_SQ <sq>, compute counts of all observed
+ *            residues in the range between <start> and <start>+<L>-1. Note
+ *            that a text-mode sequence starts at 0, while a digital-mode
+ *            sequence starts at 1. Will count degeneracies as partial
+ *            observations of the K canonical residues. Gaps, missing data,
+ *            and not-a-residue characters will be ignored (so $\sum_x f[x]$ is
+ *            not necessarily == L!). The array <*f> needs to be allocated for
+ *            sq->abc->K values.
+ *
+ *            The vector is not zeroed out, allowing counts to be gathered from
+ *            a collection of ESL\_SQs.
+ *
+ * Returns:   <eslOK> on success, <eslERANGE> when start or L are
+ *            outside the range of the sequence.
+ */
+int
+esl_sq_CountResidues(const ESL_SQ *sq, int start, int L, float *f)
+{
+  int i;
+
+  if (sq->seq != NULL) {   /* text */
+    if (start<0 || start+L>sq->n)
+      return eslERANGE; //range out of sequence bounds
+
+    for (i=start ; i < start+L; i++) {
+      if(! esl_abc_CIsGap(sq->abc, sq->seq[i])) // ignore gap characters
+        esl_abc_FCount(sq->abc, f, sq->abc->inmap[(int) sq->seq[i]], 1.);
+    }
+#ifdef eslAUGMENT_ALPHABET
+  } else  { /* digital sequence; 0 is a sentinel       */
+    if (start<1 || start+L>sq->n+1)
+      return eslERANGE; //range out of sequence bounds
+
+    for (i=start ; i < start+L; i++) {
+      if(! esl_abc_XIsGap(sq->abc, sq->dsq[i])) // ignore gap characters
+        esl_abc_FCount(sq->abc, f, sq->dsq[i], 1.);
+    }
+#endif
+  }
+
+  return eslOK;
+}
+
+
+
 /*----------------------  end, other functions -------------------*/
 
 
@@ -1518,6 +1692,9 @@ esl_sq_GetFromMSA(const ESL_MSA *msa, int which, ESL_SQ *sq)
   char   *acc      = NULL;
   char   *desc     = NULL;
   char   *ss       = NULL;
+  char  **xr_tag   = NULL;     /* extra residue markup tags                */
+  char  **xr       = NULL;     /* extra residue markup                     */
+  int     x;                   /* index for optional extra residue markups */
   int     status;
 
   if (which >= msa->nseq || which < 0) return eslEOD;
@@ -1531,31 +1708,67 @@ esl_sq_GetFromMSA(const ESL_MSA *msa, int which, ESL_SQ *sq)
   if (msa->sqdesc != NULL) desc = msa->sqdesc[which];
   if (msa->ss     != NULL) ss   = msa->ss[which]; 
 
+  /* a markup for unparsed #=GR lines is converted to a sequence extra residue markup */
+  ESL_ALLOC(xr_tag, sizeof(char *) * msa->ngr);
+  ESL_ALLOC(xr,     sizeof(char *) * msa->ngr);
+
+  for (x = 0; x < msa->ngr; x ++) {
+    xr_tag[x] = NULL;
+    xr[x]     = NULL;
+    if (msa->gr[x][which] != NULL) {
+      xr[sq->nxr] = msa->gr[x][which];
+      if (msa->gr_tag[x] != NULL) xr_tag[sq->nxr] = msa->gr_tag[x]; else goto ERROR; 
+      sq->nxr ++;
+    } 
+  }
+  if (sq->nxr > 0) {
+    ESL_ALLOC(sq->xr_tag, sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr_tag[x] = NULL;
+    ESL_ALLOC(sq->xr,     sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr[x]     = NULL;
+  }
+
   if ((status = esl_sq_SetName     (sq, msa->sqname[which])) != eslOK) goto ERROR;
   if ((status = esl_sq_SetAccession(sq, acc))                != eslOK) goto ERROR;
   if ((status = esl_sq_SetDesc     (sq, desc))               != eslOK) goto ERROR;
   if ((status = esl_sq_SetSource   (sq, msa->name))          != eslOK) goto ERROR;
   if ((status = esl_sq_GrowTo      (sq, msa->alen))          != eslOK) goto ERROR; /* can't be more than alen residues */
-
-  if (! msa->flags & eslMSA_DIGITAL) /* text mode to text mode */
+ 
+  if (! (msa->flags & eslMSA_DIGITAL)) /* text mode to text mode */
     {
       strcpy(sq->seq, msa->aseq[which]);
       if (ss != NULL) { 
-	strcpy(sq->ss, msa->ss[which]);
-	esl_strdealign(sq->ss,  sq->seq, gapchars, NULL);
+	if (sq->ss == NULL) esl_strdup(ss, -1, &(sq->ss));
+	else                strcpy(sq->ss, ss);
+	esl_strdealign(sq->ss, sq->seq, gapchars, NULL);
+      }
+      for (x = 0; x < sq->nxr; x ++) {
+	esl_strdup(xr[x],     -1, &(sq->xr[x]));
+	esl_strdup(xr_tag[x], -1, &(sq->xr_tag[x]));
+	esl_strdealign(sq->xr[x], sq->seq, gapchars, NULL);
       }
       esl_strdealign(sq->seq, sq->seq, gapchars, &(sq->n)); /* sq->n gets set as side effect */
-    }
+     }
 #ifdef eslAUGMENT_ALPHABET
   else
     {
       esl_abc_dsqcpy(msa->ax[which], msa->alen, sq->dsq);
       if (ss != NULL) { 
-	strcpy(sq->ss+1, ss); sq->ss[0] = '\0'; 
+	if (sq->ss == NULL) { /* even in digital mode, msa->ss is [0.alen-1] */
+	  ESL_ALLOC(sq->ss, sizeof(char) * (strlen(ss)+2));
+	  sq->ss[0] = '\0'; 
+	  strcpy(sq->ss+1, ss);
+	}
+	else  { strcpy(sq->ss+1, ss); sq->ss[0] = '\0'; }
 	esl_abc_CDealign(sq->abc, sq->ss+1, sq->dsq, NULL);
       }
+      for (x = 0; x < sq->nxr; x ++) { /* even in digital mode, msa->gr are [0.alen-1] */
+	ESL_ALLOC(sq->xr[x], sizeof(char) * (strlen(xr[x])+2));
+	sq->xr[x][0] = '\0'; 
+	strcpy(sq->xr[x]+1, xr[x]);
+	esl_abc_CDealign(sq->abc, sq->xr[x]+1, sq->dsq, NULL);	
+	esl_strdup(xr_tag[x], -1, &(sq->xr_tag[x]));
+      }
       esl_abc_XDealign(sq->abc, sq->dsq,  sq->dsq, &(sq->n)); /* sq->n gets set as side effect */
-    }
+  }
 #endif /*eslAUGMENT_ALPHABET*/
   
   /* This is a complete sequence; set bookkeeping accordingly */
@@ -1569,9 +1782,16 @@ esl_sq_GetFromMSA(const ESL_MSA *msa, int which, ESL_SQ *sq)
   sq->doff = -1;
   sq->hoff = -1;
   sq->eoff = -1;
+  
+  if (msa->ngr > 0) {
+    free(xr_tag); free(xr);    
+  }
   return eslOK;
 
  ERROR:
+  if (msa->ngr > 0) {
+      if (xr_tag != NULL) free(xr_tag); if (xr != NULL) free(xr);
+  }  
   return status;
 }
 
@@ -1589,7 +1809,7 @@ esl_sq_GetFromMSA(const ESL_MSA *msa, int which, ESL_SQ *sq)
  * 
  *            The retrieved sequence is dealigned. For a text mode
  *            sequence, gap characters to be removed are assumed to be
- *            <-_.>. For a digital mode sequence, gap characters are
+ *            <-_.~>. For a digital mode sequence, gap characters are
  *            defined by the digital alphabet.
  *
  * Returns:   <eslOK> on success, and a pointer to the newly fetched
@@ -1606,7 +1826,11 @@ esl_sq_FetchFromMSA(const ESL_MSA *msa, int which, ESL_SQ **ret_sq)
   char   *acc      = NULL;
   char   *desc     = NULL;
   char   *ss       = NULL;
-  char   *gapchars = "-_.~";	/* hardcoded for now; only affects text mode, not digital */
+  char   *gapchars = "-_.~";   /* hardcoded for now; only affects text mode, not digital */
+  char  **xr_tag   = NULL;     /* extra residue markup tags                */
+  char  **xr       = NULL;     /* extra residue markup                     */
+  int     nxr = 0;             /* number of extra residue markups          */
+  int     x;                   /* index for optional extra residue markups */
   int     status;
 
   if (which >= msa->nseq || which < 0) return eslEOD;
@@ -1616,10 +1840,42 @@ esl_sq_FetchFromMSA(const ESL_MSA *msa, int which, ESL_SQ **ret_sq)
   if (msa->sqdesc != NULL) desc = msa->sqdesc[which];
   if (msa->ss     != NULL) ss   = msa->ss[which]; 
 
+  /* a markup for unparsed #=GR lines is converted to a sequence extra residue markup */
+  if (msa->ngr > 0) {
+    ESL_ALLOC(xr_tag, sizeof(char *) * msa->ngr);
+    ESL_ALLOC(xr,     sizeof(char *) * msa->ngr);    
+    for (x = 0; x < msa->ngr; x ++) {
+      xr_tag[x] = NULL;
+      xr[x]     = NULL;
+      if (msa->gr[x][which] != NULL) {
+	xr[nxr] = msa->gr[x][which];
+	if (msa->gr_tag[x] != NULL) xr_tag[nxr] = msa->gr_tag[x]; else goto ERROR; 
+	nxr ++;
+      } 
+    }
+  }
+
   if (! (msa->flags & eslMSA_DIGITAL)) /* text mode MSA to text mode sequence */
     {
       if ((sq = esl_sq_CreateFrom(msa->sqname[which], msa->aseq[which], desc, acc, ss)) == NULL) goto ERROR;
       if (sq->ss != NULL) esl_strdealign(sq->ss,  sq->seq, gapchars, NULL);
+
+      if (nxr > 0) {
+	sq->nxr = nxr;
+	ESL_ALLOC(sq->xr_tag, sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr_tag[x] = NULL;
+	ESL_ALLOC(sq->xr,     sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr[x] = NULL;
+	for (x = 0; x < sq->nxr; x ++) {
+	  if (xr[x] != NULL) {
+	    if (sq->xr[x] == NULL) esl_strdup(xr[x], sq->n, &(sq->xr[x]));
+	    else                   strcpy(sq->xr[x], xr[x]);
+	    esl_strdealign(sq->xr[x],  sq->seq, gapchars, NULL);
+	  }
+	  if (xr_tag[x] != NULL) {
+	    if (sq->xr_tag[x] == NULL) esl_strdup(xr_tag[x], -1, &(sq->xr_tag[x]));
+	    else                       strcpy(sq->xr_tag[x], xr_tag[x]);
+	  }
+	}
+      }
       esl_strdealign(sq->seq, sq->seq, gapchars, &(sq->n));
     }
 #ifdef eslAUGMENT_ALPHABET
@@ -1627,6 +1883,26 @@ esl_sq_FetchFromMSA(const ESL_MSA *msa, int which, ESL_SQ **ret_sq)
     {
       if ((sq = esl_sq_CreateDigitalFrom(msa->abc, msa->sqname[which], msa->ax[which], msa->alen, desc, acc, ss)) == NULL) goto ERROR; 
       if (sq->ss != NULL) esl_abc_CDealign(sq->abc, sq->ss+1, sq->dsq, NULL);
+      if (nxr > 0) {
+	sq->nxr = nxr;
+	ESL_ALLOC(sq->xr_tag, sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr_tag[x] = NULL;
+	ESL_ALLOC(sq->xr,     sizeof(char *) * sq->nxr); for (x = 0; x < sq->nxr; x ++) sq->xr[x] = NULL;
+	for (x = 0; x < sq->nxr; x ++) {
+	  if (xr[x] != NULL) {
+	    if (sq->xr[x] == NULL) {
+	      ESL_ALLOC(sq->xr[x], sizeof(char) * (sq->n+2));
+	      sq->xr[x][0] = '\0';
+	      strcpy(sq->xr[x]+1, xr[x]);
+	    }
+	    else strcpy(sq->xr[x]+1, xr[x]); sq->xr[x][0] = '\0'; 	    
+	    esl_abc_CDealign(sq->abc, sq->xr[x]+1, sq->dsq, NULL);
+	  }
+	  if (xr_tag[x] != NULL) {
+	    if (sq->xr_tag[x] == NULL) esl_strdup(xr_tag[x], -1, &(sq->xr_tag[x]));
+	    else                        strcpy(sq->xr_tag[x], xr_tag[x]);
+	  }
+	}
+      }
       esl_abc_XDealign(sq->abc, sq->dsq,  sq->dsq, &(sq->n));
     }
 #endif
@@ -1638,10 +1914,17 @@ esl_sq_FetchFromMSA(const ESL_MSA *msa, int which, ESL_SQ **ret_sq)
   sq->L     = sq->n;
   sq->C     = 0;
   sq->W     = sq->n;
-  *ret_sq = sq;
-  return eslOK;
+  *ret_sq   = sq;
 
+  if (msa->ngr > 0) {
+    free(xr_tag); free(xr);
+  }  
+  return eslOK;
+  
  ERROR:
+  if (msa->ngr > 0) {
+    if (xr_tag != NULL) free(xr_tag); if (xr != NULL) free(xr);
+  }  
   esl_sq_Destroy(sq);
   *ret_sq = NULL;
   return eslEMEM;
@@ -1689,8 +1972,9 @@ sq_createblock(int count, int do_digital)
   ESL_ALLOC(block, sizeof(ESL_SQ_BLOCK));
 
   block->count = 0;
-  block->listSize = 0;
+  block->first_seqidx = -1;
   block->list  = NULL;
+  block->complete = TRUE;
 
   ESL_ALLOC(block->list, sizeof(ESL_SQ) * count);
   block->listSize = count;
@@ -1734,6 +2018,11 @@ sq_init(ESL_SQ *sq, int do_digital)
   ESL_ALLOC(sq->source, sizeof(char) * sq->srcalloc);
   if (do_digital) ESL_ALLOC(sq->dsq,  sizeof(ESL_DSQ) * sq->salloc);
   else            ESL_ALLOC(sq->seq,  sizeof(char)    * sq->salloc);
+
+  /* optional for extra residue markups */
+  sq->nxr    = 0;
+  sq->xr_tag = NULL;
+  sq->xr     = NULL;
 
   esl_sq_Reuse(sq);	/* initialization of sq->n, offsets, and strings */
   return eslOK;
@@ -1807,6 +2096,11 @@ sq_create_from(const char *name, const char *desc, const char *acc)
   ESL_ALLOC(sq->source, sizeof(char) * sq->srcalloc);
   sq->source[0] = '\0';
 
+  /* optional for extra residue markups */
+  sq->nxr    = 0;
+  sq->xr_tag = NULL;
+  sq->xr     = NULL;
+
   /* coord bookkeeping has to be set by the parent caller,
    * because that's where we know the seq length <n>. We don't
    * know it here.
@@ -1826,6 +2120,7 @@ sq_create_from(const char *name, const char *desc, const char *acc)
 static void
 sq_free(ESL_SQ *sq)
 {
+  int   x;        /* index for optional extra residue markups */
   if (sq->name   != NULL)   free(sq->name);
   if (sq->acc    != NULL)   free(sq->acc);
   if (sq->desc   != NULL)   free(sq->desc);
@@ -1833,6 +2128,14 @@ sq_free(ESL_SQ *sq)
   if (sq->seq    != NULL)   free(sq->seq);
   if (sq->dsq    != NULL)   free(sq->dsq);
   if (sq->ss     != NULL)   free(sq->ss);
+  if (sq->nxr > 0) {
+    for (x = 0; x < sq->nxr; x++) {
+      if (sq->xr[x]     != NULL) free(sq->xr[x]);
+      if (sq->xr_tag[x] != NULL) free(sq->xr_tag[x]);  
+    }       
+    if (sq->xr     != NULL) free(sq->xr);
+    if (sq->xr_tag != NULL) free(sq->xr_tag); 
+  }    
 }  
 
 /*----------------- end, internal functions ---------------------*/
@@ -2018,6 +2321,162 @@ utest_CreateDigital()
 }
 #endif /*eslAUGMENT_ALPHABET*/
 
+/* write_msa_with_seqmarkups()
+ * Write a good MSA with sequence markups to a tmpfile in Stockholm format.
+ */
+static void
+write_msa_with_seqmarkups(FILE *ofp)
+{
+  fprintf(ofp, "# STOCKHOLM 1.0\n");
+  fprintf(ofp, "seq1                         ACDE.FGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "#=GR seq1 tWS                ..<..<........>...>.\n");
+  fprintf(ofp, "seq2                         ACDEGFGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "seq3                         ACDEGFGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "#=GR seq3 SS                 ...<<..>>...........\n");
+  fprintf(ofp, "seq4                         ACDE.FGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "seq5                         ACDEGFGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "seq6                         ACDE.FGHKLMNPQRSTVWY\n");
+  fprintf(ofp, "#=GR seq6 SS                 ........<<<..>>>....\n");
+  fprintf(ofp, "#=GR seq6 tWH                .<...A...>....a.....\n");
+  fprintf(ofp, "#=GR seq6 csS                .<.................>\n");  
+  fprintf(ofp, "//\n");
+  return;
+}
+
+/* test optional extra residue markups in a sq */
+#include "esl_msafile.h"
+#include "esl_msafile_stockholm.h"
+static void
+utest_ExtraResMarkups()
+{
+  char                 msg[]       = "sq extra residue markups test driver failed";
+  char                 tmpfile[32];
+  FILE                *ofp  = NULL;
+  ESL_ALPHABET        *abc  = NULL;
+  ESLX_MSAFILE        *afp1 = NULL;
+  ESLX_MSAFILE        *afp2 = NULL;
+  ESL_MSA             *msa1 = NULL;
+  ESL_MSA             *msa2 = NULL;
+  ESL_SQ              *sq   = NULL;
+  ESL_SQ              *sq1  = NULL;
+  ESL_SQ              *sq2  = NULL;
+
+  strcpy(tmpfile, "esltmpXXXXXX"); 
+  if (esl_tmpfile_named(tmpfile, &ofp) != eslOK) esl_fatal(msg);
+  write_msa_with_seqmarkups(ofp);
+  fclose(ofp);
+
+  /* Digital msa to digital sq */
+  eslx_msafile_Open(&abc, tmpfile, NULL, eslMSAFILE_STOCKHOLM, NULL, &afp1);  
+  esl_msafile_stockholm_Read(afp1, &msa1);  
+
+  sq = esl_sq_CreateDigital(abc);
+  if (esl_sq_GetFromMSA(msa1, 0, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa1, 1, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa1, 2, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa1, 5, sq) != eslOK) esl_fatal(msg); 
+
+  /* test of sq_Copy */
+  sq1 = esl_sq_Create();
+  sq2 = esl_sq_CreateDigital(abc);
+  esl_sq_Copy(sq, sq1);
+  esl_sq_Copy(sq, sq2);
+  esl_sq_Destroy(sq1);
+  esl_sq_Destroy(sq2);
+  esl_sq_Destroy(sq);
+  
+  if (esl_sq_FetchFromMSA(msa1, 0, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa1, 1, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa1, 2, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa1, 5, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+
+  
+  /* Text msa to text sq */
+  eslx_msafile_Open(NULL, tmpfile, NULL, eslMSAFILE_STOCKHOLM, NULL, &afp2);  
+  esl_msafile_stockholm_Read(afp2, &msa2);  
+  
+  sq = esl_sq_Create();
+  if (esl_sq_GetFromMSA(msa2, 0, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa2, 1, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa2, 2, sq) != eslOK) esl_fatal(msg); esl_sq_Reuse(sq);
+  if (esl_sq_GetFromMSA(msa2, 5, sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  
+  if (esl_sq_FetchFromMSA(msa2, 0, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa2, 1, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa2, 2, &sq) != eslOK) esl_fatal(msg); esl_sq_Destroy(sq);
+  if (esl_sq_FetchFromMSA(msa2, 5, &sq) != eslOK) esl_fatal(msg); 
+  /* test of sq_Copy */
+  sq1 = esl_sq_Create();
+  sq2 = esl_sq_CreateDigital(abc);
+  esl_sq_Copy(sq, sq1);
+  esl_sq_Copy(sq, sq2);
+  esl_sq_Destroy(sq1);
+  esl_sq_Destroy(sq2);
+  esl_sq_Destroy(sq);
+
+  /* clean up */
+  remove(tmpfile);
+  eslx_msafile_Close(afp1);
+  eslx_msafile_Close(afp2);
+  esl_msa_Destroy(msa1);
+  esl_msa_Destroy(msa2);
+  esl_alphabet_Destroy(abc);
+} 
+
+/* test counting residues in a sq */
+static void
+utest_CountResidues()
+{
+  char         *msg  = "failure in utest_CountResidues()";
+  char         *name = "seqname";
+  char         *acc  = "XX00001";
+  char         *desc = "test sequence description";
+  char         *seq  = "GGGAATTCCC";
+  char         *ss   = "xxxx...xxx";
+  ESL_SQ       *sq   = NULL;
+  float        *cnts = NULL;
+  int          status;
+  ESL_ALPHABET *abc  = esl_alphabet_Create(eslDNA);
+
+  ESL_ALLOC(cnts, abc->Kp * sizeof(float));
+
+
+  if ((sq = esl_sq_CreateFrom(name, seq, desc, acc, ss))    == NULL)  esl_fatal(msg);
+  sq->abc = abc;
+  esl_vec_FSet (cnts, abc->K, 0);
+  esl_sq_CountResidues(sq, 0, sq->n, cnts);
+  if (cnts[0] != 2)  esl_fatal(msg);
+  if (cnts[1] != 3)  esl_fatal(msg);
+  if (cnts[2] != 3)  esl_fatal(msg);
+  if (cnts[3] != 2)  esl_fatal(msg);
+
+
+#ifdef eslAUGMENT_ALPHABET
+  esl_sq_Digitize(abc, sq);
+  esl_vec_FSet (cnts, abc->K, 0);
+  esl_sq_CountResidues(sq, 1, sq->n, cnts);
+  if (cnts[0] != 2)  esl_fatal(msg);
+  if (cnts[1] != 3)  esl_fatal(msg);
+  if (cnts[2] != 3)  esl_fatal(msg);
+  if (cnts[3] != 2)  esl_fatal(msg);
+#endif
+
+  free(cnts);
+  esl_sq_Destroy(sq);
+  esl_alphabet_Destroy(abc);
+  return;
+
+
+ERROR:
+  if (cnts != NULL) free(cnts);
+  if (sq != NULL)   esl_sq_Destroy(sq);
+  if (abc != NULL)  esl_alphabet_Destroy(abc);
+
+  esl_fatal(msg);
+  return;
+}
+
+
 #endif /* eslSQ_TESTDRIVE*/
 /*--------------------- end, unit tests -------------------------*/
 
@@ -2037,6 +2496,8 @@ utest_CreateDigital()
 #include "esl_alphabet.h"
 #include "esl_getopts.h"
 #include "esl_msa.h"
+#include "esl_msafile.h"
+#include "esl_msafile_stockholm.h"
 #include "esl_random.h"
 #include "esl_sq.h"
 
@@ -2058,10 +2519,13 @@ main(int argc, char **argv)
   utest_Create();
   utest_Set(r);
   utest_Format(r);
+  utest_CountResidues();
 
 #ifdef eslAUGMENT_ALPHABET
   utest_CreateDigital();
 #endif
+
+  utest_ExtraResMarkups();
 
   esl_randomness_Destroy(r);
   esl_getopts_Destroy(go);
@@ -2199,10 +2663,13 @@ int main(void)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_sq.c 884 2013-09-20 13:42:01Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_sq.c $
  *****************************************************************/

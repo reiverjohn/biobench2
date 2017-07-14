@@ -1,8 +1,14 @@
 /* Simple statistics on a sequence file
  * 
  * SRE, Sun Feb 24 15:33:53 2008 [UA5315 to St. Louis]
- * SVN $Id: esl-seqstat.c 509 2010-02-07 22:56:55Z eddys $  
+ * SVN $Id: esl-seqstat.c 849 2013-01-31 15:10:24Z eddys $  
  * from squid's seqstat (1994)
+ * 
+ * Wish list:
+ *   - add an option for printing sequence names only.
+ *     This would facilitate using esl-seqstat in incantations (with
+ *     esl-selectn and esl-sfetch) to extract subsets of sequences
+ *     from a large file.
  */
 #include "esl_config.h"
 
@@ -12,6 +18,7 @@
 #include <math.h>
 
 #include "easel.h"
+#include "esl_composition.h"
 #include "esl_getopts.h"
 #include "esl_sq.h"
 #include "esl_sqio.h"
@@ -33,8 +40,8 @@ static ESL_OPTIONS options[] = {
   { "--rna",      eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL, ALPH_OPTS, "specify that <seqfile> contains RNA sequence",        1 },
   { "--dna",      eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL, ALPH_OPTS, "specify that <seqfile> contains DNA sequence",        1 },
   { "--amino",    eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL, ALPH_OPTS, "specify that <seqfile> contains protein sequence",    1 },
-
-  { "--stall",    eslARG_NONE,    FALSE, NULL, NULL, NULL,NULL,       NULL, "arrest after start: for debugging under gdb",        99 },  
+  { "--comptbl",  eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL,      NULL, "alternative output: a table of residue compositions per seq", 1 },
+  { "--stall",    eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL,      NULL, "arrest after start: for debugging under gdb",        99 },  
   { 0,0,0,0,0,0,0,0,0,0 },
 };
 
@@ -79,9 +86,10 @@ main(int argc, char **argv)
   double         *monoc     = NULL; /* monoresidue composition per sequence  */
   double         *monoc_all = NULL; /* monoresidue composition over all seqs */
   int             do_comp   = FALSE;
+  int             do_comptbl = FALSE;
   int             status    = eslOK;
   int             wstatus;
-  int             i;
+  int             i, x;
   int             do_stall;       /* used to stall when debugging     */
 
 
@@ -92,8 +100,9 @@ main(int argc, char **argv)
   if (esl_opt_GetBoolean(go, "-h") )                   cmdline_help(argv[0], go);
   if (esl_opt_ArgNumber(go) != 1)                      cmdline_failure(argv[0], "Incorrect number of command line arguments.\n");
 
-  seqfile = esl_opt_GetArg(go, 1);
-  do_comp = esl_opt_GetBoolean(go, "-c");
+  seqfile    = esl_opt_GetArg(go, 1);
+  do_comp    = esl_opt_GetBoolean(go, "-c");
+  do_comptbl = esl_opt_GetBoolean(go, "--comptbl");
 
   if (esl_opt_GetString(go, "--informat") != NULL) {
     infmt = esl_sqio_EncodeFormat(esl_opt_GetString(go, "--informat"));
@@ -102,7 +111,6 @@ main(int argc, char **argv)
 
   do_stall = esl_opt_GetBoolean(go, "--stall"); /* a stall point for attaching gdb */
   while (do_stall); 
-
 
   /* open input file */
   status = esl_sqfile_Open(seqfile, infmt, NULL, &sqfp);
@@ -115,7 +123,7 @@ main(int argc, char **argv)
   else if (esl_opt_GetBoolean(go, "--amino")) alphatype = eslAMINO;
   else {
     status = esl_sqfile_GuessAlphabet(sqfp, &alphatype);
-    if      (status == eslEAMBIGUOUS) esl_fatal("Couldn't guess alphabet from first sequence in %s", seqfile);
+    if      (status == eslENOALPHABET) esl_fatal("Couldn't guess alphabet from first sequence in %s", seqfile);
     else if (status == eslEFORMAT)    esl_fatal("Parse failed (sequence file %s):\n%s\n",
 						sqfp->filename, esl_sqfile_GetErrorBuf(sqfp));     
     else if (status == eslENODATA)    esl_fatal("Sequence file %s contains no data?", seqfile);
@@ -125,18 +133,28 @@ main(int argc, char **argv)
   sq  = esl_sq_CreateDigital(abc);
   esl_sqfile_SetDigital(sqfp, abc);
 
-  if (do_comp) {
+  if (do_comp || do_comptbl) {
     ESL_ALLOC(monoc,     (abc->Kp) * sizeof(double));  
     ESL_ALLOC(monoc_all, (abc->Kp) * sizeof(double));  
     esl_vec_DSet(monoc_all, abc->Kp, 0.0);
     esl_vec_DSet(monoc,     abc->Kp, 0.0);
   }
 
+  /* Output header, if any */
+  if (do_comptbl) {
+    printf("#%-29s %6s", " Sequence name", "Length");
+    for (x = 0; x < abc->K; x++) printf("      %c", (char) abc->sym[x]);
+    fputc('\n', stdout);
+    printf("#%-29s %6s", "-----------------------------", "------");
+    for (x = 0; x < abc->K; x++) printf(" %6s", "------");
+    fputc('\n', stdout);
+  }
+
   while ((wstatus = esl_sqio_ReadWindow(sqfp, 0, 4096, sq)) != eslEOF)
     {
       if (wstatus == eslOK)
 	{
-	  if (do_comp) 
+	  if (do_comp || do_comptbl)
 	    for (i = 1; i <= sq->n; i++) 
 	      monoc[sq->dsq[i]]++;
 	}
@@ -148,14 +166,20 @@ main(int argc, char **argv)
 	    large = ESL_MAX(large, sq->L);
 	  }
 
-	  if (esl_opt_GetBoolean(go, "-a")) {
-	    printf("= %-20s %8" PRId64 " %s\n", sq->name, sq->L, (sq->desc != NULL) ? sq->desc : "");
+	  if (!do_comptbl && esl_opt_GetBoolean(go, "-a")) {
+	    printf("= %-25s %8" PRId64 " %s\n", sq->name, sq->L, (sq->desc != NULL) ? sq->desc : "");
+	  }
+	  
+	  if (do_comptbl) {
+	    printf("%-30s %6" PRId64, sq->name, sq->L);
+	    for (x = 0; x < abc->K; x++) printf(" %6.0f", monoc[x]);
+	    fputc('\n', stdout);
 	  }
 
 	  nres += sq->L;
 	  nseq++;
 	  esl_sq_Reuse(sq);
-	  if (do_comp) {
+	  if (do_comp || do_comptbl) {
 	    esl_vec_DAdd(monoc_all, monoc, abc->Kp);
 	    esl_vec_DSet(monoc, abc->Kp, 0.0);
 	  }
@@ -166,20 +190,21 @@ main(int argc, char **argv)
 					         wstatus, sqfp->filename);
     }
 
-  printf("Format:              %s\n",   esl_sqio_DecodeFormat(sqfp->format));
-  printf("Alphabet type:       %s\n",   esl_abc_DecodeType(abc->type));
-  printf("Number of sequences: %" PRId64 "\n", nseq);
-  printf("Total # residues:    %" PRId64 "\n", nres);
-  printf("Smallest:            %" PRId64 "\n", small);
-  printf("Largest:             %" PRId64 "\n", large);
-  printf("Average length:      %.1f\n", (float) nres / (float) nseq);
+  if (! do_comptbl)
+    {
+      printf("Format:              %s\n",   esl_sqio_DecodeFormat(sqfp->format));
+      printf("Alphabet type:       %s\n",   esl_abc_DecodeType(abc->type));
+      printf("Number of sequences: %" PRId64 "\n", nseq);
+      printf("Total # residues:    %" PRId64 "\n", nres);
+      printf("Smallest:            %" PRId64 "\n", small);
+      printf("Largest:             %" PRId64 "\n", large);
+      printf("Average length:      %.1f\n", (float) nres / (float) nseq);
 
-  if (do_comp) {
-    show_overall_composition(abc, monoc_all, nres);
-    free(monoc);
-    free(monoc_all);
-  }
+      if (do_comp) show_overall_composition(abc, monoc_all, nres);
+    }
 
+  if (monoc)     free(monoc);
+  if (monoc_all) free(monoc_all);
   esl_alphabet_Destroy(abc);
   esl_sq_Destroy(sq);
   esl_sqfile_Close(sqfp);
@@ -224,3 +249,5 @@ show_overall_composition(const ESL_ALPHABET *abc, const double *monoc_all, int64
     
   return;
 }
+
+

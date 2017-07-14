@@ -2,9 +2,7 @@
  * Statistical routines for mixtures of generalized extreme value 
  * distributions.
  * 
- * SRE, Mon Aug 15 08:48:19 2005 [St. Louis]
- * xref STL9/139  
- * SVN $Id: esl_mixgev.c 241 2008-04-01 19:01:52Z eddys $
+ * xref SRE:STL9/139  
  */
 #include "esl_config.h"
 
@@ -33,7 +31,6 @@
  ****************************************************************************/ 
 
 /* Function:  esl_mixgev_Create()
- * Incept:    SRE, Mon Aug 15 08:47:37 2005 [St. Louis]
  *
  * Purpose:   Creates an object to hold parameters for a <K>-component
  *            mixture of generalized extreme value distributions.
@@ -89,7 +86,6 @@ esl_mixgev_Create(int K)
 }
 
 /* Function:  esl_mixgev_Destroy()
- * Incept:    SRE, Mon Aug 15 08:57:48 2005 [St. Louis]
  *
  * Purpose:   Deallocates the mixture GEV parameter object <mg>.
  *
@@ -113,7 +109,6 @@ esl_mixgev_Destroy(ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_Copy()
- * Incept:    SRE, Mon Aug 15 09:04:10 2005 [St. Louis]
  *
  * Purpose:   Makes a copy of the mixture GEV parameter object <src>
  *            in <dest>. Caller must have already allocated <dest> to have
@@ -148,7 +143,6 @@ esl_mixgev_Copy(ESL_MIXGEV *src, ESL_MIXGEV *dest)
 }
 
 /* Function:  esl_mixgev_ForceGumbel()
- * Incept:    SRE, Mon Aug 15 09:08:35 2005 [St. Louis]
  *
  * Purpose:   Constrain component <which> of the mixture GEV <mg>
  *            to be a Gumbel (that is, constrain $\alpha=0$ for
@@ -180,7 +174,6 @@ esl_mixgev_ForceGumbel(ESL_MIXGEV *mg, int which)
  ****************************************************************************/ 
 
 /* Function:  esl_mixgev_pdf()
- * Incept:    SRE, Mon Aug 15 09:23:03 2005 [St. Louis]
  *
  * Purpose:   Returns the probability density function $P(X=x)$ for
  *            quantile <x>, given mixture GEV parameters <mg>.
@@ -197,7 +190,6 @@ esl_mixgev_pdf(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_logpdf()
- * Incept:    SRE, Mon Aug 15 09:30:38 2005 [St. Louis]
  *
  * Purpose:   Returns the log of the PDF ($\log P(X=x)$) for quantile <x>,
  *            given mixture GEV parameters <mg>.
@@ -217,7 +209,6 @@ esl_mixgev_logpdf(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_cdf()
- * Incept:    SRE, Mon Aug 15 09:51:36 2005 [St. Louis]
  *
  * Purpose:   Returns the cumulative distribution function $P(X \leq x)$
  *            for quantile <x>, given mixture GEV parameters <mg>.
@@ -234,7 +225,6 @@ esl_mixgev_cdf(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_logcdf()
- * Incept:    SRE, Mon Aug 15 09:56:10 2005 [St. Louis]
  *
  * Purpose:   Returns the log of the CDF $\log P(X \leq x)$
  *            for quantile <x>, given mixture GEV parameters <mg>.
@@ -255,7 +245,6 @@ esl_mixgev_logcdf(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_surv()
- * Incept:    SRE, Mon Aug 15 10:00:13 2005 [St. Louis]
  *
  * Purpose:   Returns the survivor function $P(X > x)$ (1-CDF)
  *            for quantile <x>, given mixture GEV parameters <mg>.
@@ -272,7 +261,6 @@ esl_mixgev_surv(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_logsurv()
- * Incept:    SRE, Mon Aug 15 10:03:55 2005 [St. Louis]
  *
  * Purpose:   Returns the log survivor function $\log P(X > x)$ (log(1-CDF))
  *            for quantile <x>, given mixture GEV parameters <mg>.
@@ -290,7 +278,6 @@ esl_mixgev_logsurv(double x, ESL_MIXGEV *mg)
 }
 
 /* Function:  esl_mixgev_invcdf()
- * Incept:    SRE, Sun Aug 21 14:32:53 2005 [St. Louis]
  *
  * Purpose:   Calculates the inverse CDF for a mixture GEV <mg>,
  *            returning the quantile <x> at which the CDF is <p>,
@@ -343,7 +330,6 @@ esl_mixgev_invcdf(double p, ESL_MIXGEV *mg)
  ****************************************************************************/ 
 
 /* Function:  esl_mixgev_generic_pdf()
- * Incept:    SRE, Thu Aug 25 08:03:24 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_mixgev_pdf()>, taking
  *            a void ptr to a <ESL_MIXGEV> parameter structure.
@@ -356,7 +342,6 @@ esl_mixgev_generic_pdf(double x, void *params)
 }
 
 /* Function:  esl_mixgev_generic_cdf()
- * Incept:    SRE, Sun Aug 21 14:44:06 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_mixgev_cdf()>, taking
  *            a void ptr to a <ESL_MIXGEV> parameter structure.
@@ -369,7 +354,6 @@ esl_mixgev_generic_cdf(double x, void *params)
 }
 
 /* Function:  esl_mixgev_generic_surv()
- * Incept:    SRE, Thu Aug 25 08:03:57 2005[St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_mixgev_surv()>, taking
  *            a void ptr to a <ESL_MIXGEV> parameter structure.
@@ -382,7 +366,6 @@ esl_mixgev_generic_surv(double x, void *params)
 }
 
 /* Function:  esl_mixgev_generic_invcdf()
- * Incept:    SRE, Sun Aug 21 14:44:59 2005 [St. Louis]
  *
  * Purpose:   Generic-API wrapper around <esl_mixgev_invcdf()>, taking
  *            a void ptr to a <ESL_MIXGEV> parameter structure.
@@ -403,14 +386,15 @@ esl_mixgev_generic_invcdf(double p, void *params)
  ****************************************************************************/ 
 
 /* Function:  esl_mixgev_Plot()
- * Incept:    SRE, Mon Aug 15 10:06:35 2005 [St. Louis]
  *
  * Purpose:   Plot some function <func> (for instance, <esl_mixgev_pdf()>)
  *            for mixture GEV parameters <mg>, for a range of
  *            quantiles x from <xmin> to <xmax> in steps of <xstep>;
  *            output to an open stream <fp> in xmgrace XY input format.
  *
- * Returns:   <eslOK>.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEWRITE> on any system write error.
  */
 int
 esl_mixgev_Plot(FILE *fp, ESL_MIXGEV *mg,
@@ -419,8 +403,8 @@ esl_mixgev_Plot(FILE *fp, ESL_MIXGEV *mg,
 {
   double x;
   for (x = xmin; x <= xmax; x += xstep)
-    fprintf(fp, "%f\t%g\n", x, (*func)(x, mg));
-  fprintf(fp, "&\n");
+    if (fprintf(fp, "%f\t%g\n", x, (*func)(x, mg)) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "mixgev plot write failed");
+  if (fprintf(fp, "&\n")                           < 0) ESL_EXCEPTION_SYS(eslEWRITE, "mixgev plot write failed");
   return eslOK;
 }
 /*-------------------- end plot dumping routines ---------------------------*/
@@ -435,7 +419,6 @@ esl_mixgev_Plot(FILE *fp, ESL_MIXGEV *mg,
 #ifdef eslAUGMENT_RANDOM
 
 /* Function:  esl_mixgev_Sample()
- * Incept:    SRE, Mon Aug 15 10:14:23 2005 [St. Louis]
  *
  * Purpose:   Sample a random variate x from a mixture GEV <mg>, 
  *            given random number source <r>.
@@ -570,7 +553,6 @@ mixgev_complete_func(double *p, int np, void *dptr)
 
 
 /* Function:  esl_mixgev_FitGuess()
- * Incept:    SRE, Tue Apr 25 09:18:18 2006 [St. Louis]
  *
  * Purpose:   Make initial randomized guesses at the parameters
  *            of mixture GEV <mg>, using random number generator
@@ -618,7 +600,6 @@ esl_mixgev_FitGuess(ESL_RANDOMNESS *r, double *x, int n, ESL_MIXGEV *mg)
 
 
 /* Function:  esl_mixgev_FitComplete()
- * Incept:    SRE, Tue Apr 25 09:26:58 2006 [St. Louis]
  *
  * Purpose:   Given <n> observed data values <x[0..n-1]>, and
  *            an initial guess at a mixture GEV fit to those data
@@ -832,10 +813,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_mixgev.c 727 2011-10-24 17:17:32Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_mixgev.c $
  *****************************************************************/

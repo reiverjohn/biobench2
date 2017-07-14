@@ -1,10 +1,11 @@
 /* Multidimensional optimization by conjugate gradient descent.
  * 
  * SRE, Wed Jun 22 09:53:05 2005
- * SVN $Id: esl_minimizer.h 162 2007-04-10 23:50:12Z eddys $
+ * SVN $Id: esl_minimizer.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_minimizer.h $
  */
-#ifndef ESL_MINIMIZER_INCLUDED
-#define ESL_MINIMIZER_INCLUDED
+#ifndef eslMINIMIZER_INCLUDED
+#define eslMINIMIZER_INCLUDED
 
 #define MAXITERATIONS 100
 
@@ -22,12 +23,11 @@ extern int esl_min_ConjugateGradientDescent(double *x, double *u, int n,
 					    void (*dfunc)(double *, int, void *, double *),
 					    void *prm, double tol, double *wrk, double *ret_fx);
 
-#endif /*ESL_MINIMIZER_INCLUDED*/
-
+#endif /*eslMINIMIZER_INCLUDED*/
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

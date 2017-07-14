@@ -2,9 +2,6 @@
  * 
  * Main testbed for exploring the statistical behavior of HMMER3
  * scores on random sequences.
- * 
- * SRE, Fri Apr 20 14:56:26 2007 [Janelia]
- * SVN $Id: hmmsim.c 3152 2010-02-07 22:55:22Z eddys $
  */
 #include "p7_config.h"
 
@@ -163,21 +160,21 @@ main(int argc, char **argv)
     {
       p7_banner(stdout, argv[0], banner);
       esl_usage(stdout, argv[0], usage);
-      puts("\nwhere general options are:");
+      puts("\nCommon options:");
       esl_opt_DisplayHelp(stdout, go, 1, 2, 80); /* 1=docgroup, 2 = indentation; 80=textwidth*/
-      puts("\noutput options (only in serial mode, for single HMM input):");
+      puts("\nOutput options (only in serial mode, for single HMM input):");
       esl_opt_DisplayHelp(stdout, go, 2, 2, 80); 
-      puts("\nalternative alignment styles :");
+      puts("\nAlternative alignment styles :");
       esl_opt_DisplayHelp(stdout, go, 3, 2, 80);
-      puts("\nalternative scoring algorithms :");
+      puts("\nAlternative scoring algorithms :");
       esl_opt_DisplayHelp(stdout, go, 4, 2, 80);
-      puts("\ncontrolling range of fitted tail masses :");
+      puts("\nControlling range of fitted tail masses :");
       esl_opt_DisplayHelp(stdout, go, 5, 2, 80);
-      puts("\ncontrolling E-value calibration :");
+      puts("\nControlling E-value calibration :");
       esl_opt_DisplayHelp(stdout, go, 6, 2, 80);
-      puts("\ndebugging :");
+      puts("\nDebugging :");
       esl_opt_DisplayHelp(stdout, go, 7, 2, 80);
-      puts("\nexperiments :");
+      puts("\nExperiments :");
       esl_opt_DisplayHelp(stdout, go, 8, 2, 80);
       exit(0);
     }
@@ -197,10 +194,7 @@ main(int argc, char **argv)
    */
   cfg.hmmfile  = esl_opt_GetArg(go, 1);
   cfg.r        = esl_randomness_Create(esl_opt_GetInteger(go, "--seed"));
-  cfg.abc      = esl_alphabet_Create(eslAMINO);
-
-  if (esl_opt_GetBoolean(go, "--bgflat")) cfg.bg = p7_bg_CreateUniform(cfg.abc);
-  else                                    cfg.bg = p7_bg_Create(cfg.abc);
+  //cfg.abc      = esl_alphabet_Create(eslAMINO);
 
   cfg.my_rank  = 0;		/* MPI init will change this soon, if --mpi was set */
   cfg.nproc    = 0;		/* MPI init will change this soon, if --mpi was set */
@@ -215,9 +209,7 @@ main(int argc, char **argv)
   cfg.ffp      = NULL;
   cfg.xfp      = NULL;
   cfg.alfp     = NULL;
-
-  p7_bg_SetLength(cfg.bg, esl_opt_GetInteger(go, "-L"));  /* set the null model background length in both master and workers. */
-
+  cfg.bg       = NULL;
 
   /* This is our stall point, if we need to wait until we get a
    * debugger attached to this process for debugging (especially
@@ -308,7 +300,7 @@ init_master_cfg(ESL_GETOPTS *go, struct cfg_s *cfg, char *errbuf)
   char *filename;
   int   status;
 
-  status = p7_hmmfile_Open(cfg->hmmfile, NULL, &(cfg->hfp));
+  status = p7_hmmfile_OpenE(cfg->hmmfile, NULL, &(cfg->hfp), NULL);
   if      (status == eslENOTFOUND) ESL_FAIL(eslFAIL, errbuf, "Failed to open HMM file %s for reading.\n",                   cfg->hmmfile);
   else if (status == eslEFORMAT)   ESL_FAIL(eslFAIL, errbuf, "File %s does not appear to be in a recognized HMM format.\n", cfg->hmmfile);
   else if (status != eslOK)        ESL_FAIL(eslFAIL, errbuf, "Unexpected error %d in opening HMM file %s.\n",       status, cfg->hmmfile);  
@@ -379,11 +371,17 @@ serial_master(ESL_GETOPTS *go, struct cfg_s *cfg)
       (av = malloc(sizeof(int)    * cfg->N)) == NULL)       p7_Fail("allocation failed");
 
   while ((status = p7_hmmfile_Read(cfg->hfp, &(cfg->abc), &hmm)) != eslEOF) 
-    {
+  {
       if      (status == eslEOD)       p7_Fail("read failed, HMM file %s may be truncated?", cfg->hmmfile);
       else if (status == eslEFORMAT)   p7_Fail("bad file format in HMM file %s",             cfg->hmmfile);
       else if (status == eslEINCOMPAT) p7_Fail("HMM file %s contains different alphabets",   cfg->hmmfile);
       else if (status != eslOK)        p7_Fail("Unexpected error in reading HMMs from %s",   cfg->hmmfile);
+
+      if (cfg->bg == NULL) {
+        if (esl_opt_GetBoolean(go, "--bgflat")) cfg->bg = p7_bg_CreateUniform(cfg->abc);
+        else                                    cfg->bg = p7_bg_Create(cfg->abc);
+        p7_bg_SetLength(cfg->bg, esl_opt_GetInteger(go, "-L"));  /* set the null model background length in both master and workers. */
+      }
 
       if (process_workunit(go, cfg, errbuf, hmm, xv, av, &mu, &lambda) != eslOK) p7_Fail(errbuf);
       if (output_result   (go, cfg, errbuf, hmm, xv, av,  mu,  lambda) != eslOK) p7_Fail(errbuf);
@@ -458,6 +456,13 @@ mpi_master(ESL_GETOPTS *go, struct cfg_s *cfg)
 	      else if (status == eslEFORMAT)   { xstatus = status; sprintf(errbuf, "bad file format in HMM file %s",             cfg->hmmfile); }
 	      else if (status == eslEINCOMPAT) { xstatus = status; sprintf(errbuf, "HMM file %s contains different alphabets",   cfg->hmmfile); }
 	      else if (status != eslEOF)       { xstatus = status; sprintf(errbuf, "Unexpected error in reading HMMs from %s",   cfg->hmmfile); }
+
+	      if (cfg->bg == NULL) { // first time only
+          if (esl_opt_GetBoolean(go, "--bgflat")) cfg->bg = p7_bg_CreateUniform(cfg->abc);
+          else                                    cfg->bg = p7_bg_Create(cfg->abc);
+	      }
+	      //this next step is redundant, but it avoids a race condition above.
+        p7_bg_SetLength(cfg->bg, esl_opt_GetInteger(go, "-L"));  /* set the null model background length in both master and workers. */
 	    }
 	}
 
@@ -956,3 +961,15 @@ elide_length_model(P7_PROFILE *gm, P7_BG *bg)
 }
 
 
+/*****************************************************************
+ * HMMER - Biological sequence analysis with profile HMMs
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * HMMER is distributed under the terms of the GNU General Public License
+ * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/hmmsim.c $
+ * SVN $Id: hmmsim.c 4601 2014-01-17 02:46:10Z wheelert $
+ *****************************************************************/

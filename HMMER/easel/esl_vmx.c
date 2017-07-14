@@ -9,8 +9,6 @@
  *     6. Example
  *     7. Copyright and license
  *     
- * SRE, Sun Dec 16 09:14:51 2007 [Janelia]    
- * SVN $Id: esl_vmx.c 388 2009-08-27 17:36:36Z farrarm $
  *****************************************************************
  * Credits:
  *
@@ -508,11 +506,16 @@ main(int argc, char **argv)
 #endif /*eslVMX_EXAMPLE*/
 #endif /*HAVE_VMX*/
 
-/* Solely to silence test drivers that check that all unit tests 
- * and examples compile and run: provide dummy test/example main()
- * for non-VMX platforms. 
- */
 #ifndef HAVE_VMX
+
+/* If we don't have VMX compiled in, provide some nothingness to:
+ *   a. prevent Mac OS/X ranlib from bitching about .o file that "has no symbols" 
+ *   b. prevent compiler from bitching about "empty compilation unit"
+ *   c. automatically pass the automated tests.
+ */
+#include "easel.h"
+
+void esl_vmx_DoAbsolutelyNothing(void) { return; }
 #if defined eslVMX_TESTDRIVE || defined eslVMX_EXAMPLE || eslVMX_BENCHMARK
 int main(void) { return 0; }
 #endif
@@ -520,12 +523,15 @@ int main(void) { return 0; }
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_vmx.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_vmx.c $
  *****************************************************************/
 
 /* Additionally, esl_sse_logf() and esl_sse_expf() are 

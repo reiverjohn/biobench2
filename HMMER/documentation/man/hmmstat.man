@@ -1,4 +1,4 @@
-.TH "hmmstat" 1 "@HMMER_DATE@" "HMMER @HMMER_VERSION@" "HMMER Manual"
+.TH "hmmstat" 1 "February 2015" "HMMER 3.1b2" "HMMER Manual"
 
 .SH NAME
 hmmstat - display summary statistics for a profile file
@@ -16,8 +16,15 @@ The
 .B hmmstat
 utility prints out a tabular file of summary statistics for each
 profile in
-.I <hmmfile>.
+.IR <hmmfile> .
 
+
+.PP 
+.I <hmmfile> 
+may be '-' (a dash character), in which case profiles
+are read from a <stdin> pipe instead of from a file.
+
+.PP
 The columns are:
 
 .TP
@@ -61,7 +68,7 @@ Probably not useful. Information content is a slightly
 different calculation than relative entropy. 
 
 .TP
-.B p relE
+.B "p relE"
 Mean positional relative entropy, in bits.
 This is a fancier version of the per-match-state relative entropy,
 taking into account the transition (insertion/deletion) probabilities;
@@ -95,21 +102,21 @@ for programs in the HMMER package.
 .PP
 For complete documentation, see the user guide that came with your
 HMMER distribution (Userguide.pdf); or see the HMMER web page
-(@HMMER_URL@).
+().
 
 
 
 .SH COPYRIGHT
 
 .nf
-@HMMER_COPYRIGHT@
-p@HMMER_LICENSE@
+Copyright (C) 2015 Howard Hughes Medical Institute.
+pFreely distributed under the GNU General Public License (GPLv3).
 .fi
 
 For additional information on copyright and licensing, see the file
 called COPYRIGHT in your HMMER source distribution, or see the HMMER
 web page 
-(@HMMER_URL@).
+().
 
 
 .SH AUTHOR

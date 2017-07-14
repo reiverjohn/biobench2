@@ -1,10 +1,11 @@
 /* Collection and display of score histograms.
  * 
  * SRE, Fri Jul  1 13:22:45 2005 [St. Louis]
- * SVN $Id: esl_histogram.h 509 2010-02-07 22:56:55Z eddys $
+ * SVN $Id: esl_histogram.h 727 2011-10-24 17:17:32Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_histogram.h $
  */
-#ifndef ESL_HISTOGRAM_INCLUDED
-#define ESL_HISTOGRAM_INCLUDED
+#ifndef eslHISTOGRAM_INCLUDED
+#define eslHISTOGRAM_INCLUDED
 
 #include <math.h>   /* floor() is in one of the macros */
 
@@ -73,8 +74,9 @@ typedef struct {
  */
 extern ESL_HISTOGRAM *esl_histogram_Create    (double bmin, double bmax, double w);
 extern ESL_HISTOGRAM *esl_histogram_CreateFull(double bmin, double bmax, double w);
-extern void           esl_histogram_Destroy(ESL_HISTOGRAM *h);
-extern int            esl_histogram_Add(ESL_HISTOGRAM *h, double x);
+extern void           esl_histogram_Destroy  (ESL_HISTOGRAM *h);
+extern int            esl_histogram_Score2Bin(ESL_HISTOGRAM *h, double x, int *ret_b);
+extern int            esl_histogram_Add      (ESL_HISTOGRAM *h, double x);
 
 /* Declarations about the binned data before parameter fitting:
  */
@@ -107,7 +109,7 @@ extern int esl_histogram_SetExpectedTail(ESL_HISTOGRAM *h, double base_val,
 
 /* Output/display of binned data:
  */
-extern int esl_histogram_Print       (FILE *fp, ESL_HISTOGRAM *h);
+extern int esl_histogram_Write       (FILE *fp, ESL_HISTOGRAM *h);
 extern int esl_histogram_Plot        (FILE *fp, ESL_HISTOGRAM *h);
 extern int esl_histogram_PlotSurvival(FILE *fp, ESL_HISTOGRAM *h);
 extern int esl_histogram_PlotQQ      (FILE *fp, ESL_HISTOGRAM *h, 
@@ -122,11 +124,11 @@ extern int esl_histogram_Goodness(ESL_HISTOGRAM *h, int nfitted,
 
 
 
-#endif /*!ESL_HISTOGRAM_INCLUDED*/
+#endif /*eslHISTOGRAM_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

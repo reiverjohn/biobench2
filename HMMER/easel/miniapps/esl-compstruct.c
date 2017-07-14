@@ -1,9 +1,6 @@
 /* esl-compstruct - calculate accuracy of RNA secondary structure predictions
- *
- * SRE, Mon Feb 14 10:03:57 2005
- * From squid's compstruct: SRE, Tue Aug 30 10:35:31 1994
- * SVN $Id: esl-compstruct.c 509 2010-02-07 22:56:55Z eddys $
  */
+#include "esl_config.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +10,7 @@
 #include "esl_getopts.h"
 #include "esl_sq.h"
 #include "esl_msa.h"
+#include "esl_msafile.h"
 #include "esl_wuss.h"
 
 static char banner[] = "calculate accuracy of RNA secondary structure predictions";
@@ -36,16 +34,16 @@ static ESL_OPTIONS options[] = {
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS *go;		/* application configuration       */
-  int          kstatus, tstatus;/* return code from Easel routine  */
-  int          fmt;		/* expected format of kfile, tfile */
-  char        *kfile, *tfile;   /* known, test structure file      */
-  ESL_MSAFILE *kfp, *tfp;       /* open kfile, tfile               */
-  ESL_MSA     *ka,  *ta; 	/* known, trusted alignment        */
-  int64_t      klen, tlen;	/* lengths of dealigned seqs       */
-  int         *kct, *tct;       /* known, test CT rep of structure */
-  int          i;		/* counter over sequences          */
-  int          pos;		/* counter over residues           */
+  ESL_GETOPTS  *go;		 /* application configuration       */
+  int           kstatus, tstatus;/* return code from Easel routine  */
+  int           fmt;		 /* expected format of kfile, tfile */
+  char         *kfile, *tfile;   /* known, test structure file      */
+  ESLX_MSAFILE *kfp, *tfp;       /* open kfile, tfile               */
+  ESL_MSA      *ka,  *ta; 	 /* known, trusted alignment        */
+  int64_t       klen, tlen;	 /* lengths of dealigned seqs       */
+  int          *kct, *tct;       /* known, test CT rep of structure */
+  int           i;		 /* counter over sequences          */
+  int           pos;		 /* counter over residues           */
 
   int nseq;		/* total number of sequences in the files */
   int nseq_rejected;	/* total number of sequences rejected     */
@@ -106,10 +104,8 @@ main(int argc, char **argv)
    * Open the two Stockholm files.
    ***********************************************/
 
-  if (esl_msafile_Open(kfile, fmt, NULL, &kfp) != eslOK)
-    esl_fatal("Failed to open trusted structure file %s for reading", kfile);
-  if (esl_msafile_Open(tfile, fmt, NULL, &tfp) != eslOK)
-    esl_fatal("Failed to open test structure file %s for reading", tfile);
+  if ( (status = eslx_msafile_Open(NULL, kfile, NULL, fmt, NULL, &kfp)) != eslOK) eslx_msafile_OpenFailure(kfp, status);
+  if ( (status = eslx_msafile_Open(NULL, tfile, NULL, fmt, NULL, &tfp)) != eslOK) eslx_msafile_OpenFailure(tfp, status);
   
   /***********************************************
    * Do structure comparisons, one seq at a time;
@@ -123,21 +119,16 @@ main(int argc, char **argv)
   
   printf("%20s   %17s %17s\n", "", "[sensitivity]", "[PPV]");
 
-  while (1)
+  while ( (kstatus = eslx_msafile_Read(kfp, &ka)) != eslEOF)
     {
-      kstatus = esl_msa_Read(kfp, &ka);
-      tstatus = esl_msa_Read(tfp, &ta);
-      if (kstatus != eslOK || tstatus != eslOK) break; /* normal or errors. */
+      if (  kstatus                                != eslOK) eslx_msafile_ReadFailure(kfp, kstatus);
+      if ( (tstatus = eslx_msafile_Read(tfp, &ta)) != eslOK) eslx_msafile_ReadFailure(tfp, tstatus);
 
       /* Sanity check on alignment
        */
-      if (ka->nseq != ta->nseq)
-	esl_fatal("trusted, test alignments don't have same seq #\n");
-      if (ka->ss == NULL)
-	esl_fatal("trusted alignment has no secondary structure annotation\n");
-      if (ta->ss == NULL)
-	esl_fatal("test alignment has no secondary structure annotation\n");
-
+      if (ka->nseq != ta->nseq)	esl_fatal("trusted, test alignments don't have same seq #\n");
+      if (ka->ss == NULL)	esl_fatal("trusted alignment has no secondary structure annotation\n");
+      if (ta->ss == NULL)	esl_fatal("test alignment has no secondary structure annotation\n");
       
       for (i = 0; i < ka->nseq; i++)
 	{
@@ -312,28 +303,6 @@ main(int argc, char **argv)
       esl_msa_Destroy(ta);
     }
 
-  /* At this point, we should have EOF status on both
-   * alignment files; if we don't, there's an error we have to handle.
-   */
-  if (kstatus != eslEOF || tstatus != eslEOF)
-    {
-      if (kstatus == eslEFORMAT)
-	esl_fatal("Parse error, line %d of trusted file %s:\n%s\n",
-		  kfp->linenumber, kfp->fname, kfp->errbuf);
-      if (tstatus == eslEFORMAT)
-	esl_fatal("Parse error, line %d of test file %s:\n%s\n",
-		  tfp->linenumber, tfp->fname, tfp->errbuf);
-      if (kstatus == eslOK) 
-	esl_fatal("Trusted file has more data than test file\n");
-      if (tstatus == eslOK)
-	esl_fatal("Test file has more data than trusted file\n");
-      if (kstatus != eslEOF)
-	esl_fatal("read error %d for trusted file\n", kstatus);
-      if (tstatus != eslEOF)
-	esl_fatal("read error %d for test file\n", tstatus);
-    }
-
-
   /* Print the final summary:
    */
   puts("\n");
@@ -354,8 +323,8 @@ main(int argc, char **argv)
   puts("");
 
   esl_getopts_Destroy(go);
-  esl_msafile_Close(tfp);
-  esl_msafile_Close(kfp);
+  eslx_msafile_Close(tfp);
+  eslx_msafile_Close(kfp);
   return 0;
 
  ERROR:
@@ -365,10 +334,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/miniapps/esl-compstruct.c $
+ * SVN $Id: esl-compstruct.c 668 2011-03-01 14:28:28Z nawrockie $
  *****************************************************************/

@@ -1,7 +1,4 @@
 /* hmmpress: prepare an HMM database for faster hmmscan searches.
- * 
- * SRE, Fri Oct 17 11:24:26 2008 [Janelia]
- * SVN $Id: hmmpress.c 3152 2010-02-07 22:55:22Z eddys $
  */
 #include "p7_config.h"
 
@@ -29,7 +26,7 @@ static void open_db_files(ESL_GETOPTS *go, char *basename, FILE **ret_mfp,  FILE
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS   *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS   *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   ESL_ALPHABET  *abc     = NULL;
   char          *hmmfile = esl_opt_GetArg(go, 1);
   P7_HMMFILE    *hfp     = NULL;
@@ -45,11 +42,14 @@ main(int argc, char **argv)
   int            nmodel  = 0;
   uint64_t       totM    = 0;
   int            status;
+  char           errbuf[eslERRBUFSIZE];
 
-  status = p7_hmmfile_OpenNoDB(hmmfile, NULL, &hfp);
-  if      (status == eslENOTFOUND) p7_Fail("Failed to open HMM file %s for reading.\n",                   hmmfile);
-  else if (status == eslEFORMAT)   p7_Fail("File %s does not appear to be in a recognized HMM format.\n", hmmfile);
-  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n",       status, hmmfile);  
+  if (strcmp(hmmfile, "-") == 0) p7_Fail("Can't use - for <hmmfile> argument: can't index standard input\n");
+
+  status = p7_hmmfile_OpenENoDB(hmmfile, NULL, &hfp, errbuf);
+  if      (status == eslENOTFOUND) p7_Fail("File existence/permissions problem in trying to open HMM file %s.\n%s\n", hmmfile, errbuf);
+  else if (status == eslEFORMAT)   p7_Fail("File format problem in trying to open HMM file %s.\n%s\n",                hmmfile, errbuf);
+  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n%s\n",                       status, hmmfile, errbuf);  
 
   if (hfp->do_stdin || hfp->do_gzip) p7_Fail("HMM file %s must be a normal file, not gzipped or a stdin pipe", hmmfile);
 
@@ -141,20 +141,20 @@ open_db_files(ESL_GETOPTS *go, char *basename, FILE **ret_mfp,  FILE **ret_ffp, 
   if (esl_sprintf(&ssifile, "%s.h3i", basename) != eslOK) p7_Die("esl_sprintf() failed");
   status = esl_newssi_Open(ssifile, allow_overwrite, &nssi);
   if      (status == eslENOTFOUND)   p7_Fail("failed to open SSI index %s", ssifile);
-  else if (status == eslEOVERWRITE)  p7_Fail("Looks like %s is already pressed (.h3i file present, anyway): delete old hmmpress indices first", basename);
+  else if (status == eslEOVERWRITE)  p7_Fail("Looks like %s is already pressed (.h3i file present, anyway):\nDelete old hmmpress indices first", basename);
   else if (status != eslOK)          p7_Fail("failed to create a new SSI index");
 
   if (esl_sprintf(&mfile, "%s.h3m", basename) != eslOK) p7_Die("esl_sprintf() failed");
-  if (! allow_overwrite && esl_FileExists(mfile))       p7_Fail("Binary HMM file %s already exists; delete old hmmpress indices first", mfile);
+  if (! allow_overwrite && esl_FileExists(mfile))       p7_Fail("Binary HMM file %s already exists;\nDelete old hmmpress indices first", mfile);
   if ((mfp = fopen(mfile, "wb"))              == NULL)  p7_Fail("Failed to open binary HMM file %s for writing", mfile);
 
   if (esl_sprintf(&ffile, "%s.h3f", basename) != eslOK) p7_Die("esl_sprintf() failed");
-  if (! allow_overwrite && esl_FileExists(ffile))       p7_Fail("Binary MSV filter file %s already exists; delete old hmmpress indices first", ffile);
+  if (! allow_overwrite && esl_FileExists(ffile))       p7_Fail("Binary MSV filter file %s already exists\nDelete old hmmpress indices first", ffile);
   if ((ffp = fopen(ffile, "wb"))              == NULL)  p7_Fail("Failed to open binary MSV filter file %s for writing", ffile);
 
   if (esl_sprintf(&pfile, "%s.h3p", basename) != eslOK) p7_Die("esl_sprintf() failed");
-  if (! allow_overwrite && esl_FileExists(pfile))       p7_Fail("Binary profile file %s already exists; delete old hmmpress indices first", pfile);
-  if ((pfp = fopen(pfile, "wb"))              == NULL)  p7_Fail("Failed to open binary pprofile file %s for writing", pfile);
+  if (! allow_overwrite && esl_FileExists(pfile))       p7_Fail("Binary profile file %s already exists\nDelete old hmmpress indices first", pfile);
+  if ((pfp = fopen(pfile, "wb"))              == NULL)  p7_Fail("Failed to open binary profile file %s for writing", pfile);
 
   free(mfile);     free(ffile);     free(pfile);      free(ssifile);
   *ret_mfp = mfp;  *ret_ffp = ffp;  *ret_pfp = pfp;   *ret_nssi = nssi;
@@ -164,10 +164,13 @@ open_db_files(ESL_GETOPTS *go, char *basename, FILE **ret_mfp,  FILE **ret_ffp, 
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License
  * (GPLv3). See the LICENSE file for details.
+ * 
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/src/hmmer/branches/3.1/src/hmmpress.c $
+ * SVN $Id: hmmpress.c 3630 2011-08-03 14:09:27Z eddys $
  *****************************************************************/

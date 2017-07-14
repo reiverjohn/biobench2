@@ -1,12 +1,10 @@
 /* Simple sequence indices: 
  * Fast sequence record lookup in large files by keywords, such
  * as names or accessions.
- * 
- * SVN $Id: esl_ssi.h 278 2008-07-11 22:08:01Z eddys $
- * SRE, Thu Mar  2 15:54:51 2006 [St. Louis]
  */
-#ifndef ESL_SSI_INCLUDED
-#define ESL_SSI_INCLUDED
+#ifndef eslSSI_INCLUDED
+#define eslSSI_INCLUDED
+#ifdef eslAUGMENT_SSI
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -154,13 +152,16 @@ extern int      esl_fwrite_i32(FILE *fp, int32_t  n);
 extern int      esl_fwrite_i64(FILE *fp, int64_t  n);
 extern int	esl_fread_offset(FILE *fp, int mode, off_t *ret_offset);
 extern int      esl_fwrite_offset(FILE *fp, off_t offset);
-
-
-#endif /* ESL_SSI_INCLUDED */
+#endif /* eslAUGMENT_SSI*/
+#ifndef eslAUGMENT_SSI
+typedef void ESL_SSI;
+typedef void ESL_NEWSSI;
+#endif
+#endif /* eslSSI_INCLUDED */
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

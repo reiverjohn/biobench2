@@ -10,8 +10,6 @@
  *    6. Test driver.
  *    7. Examples.
  * 
- * SVN $Id: esl_getopts.c 509 2010-02-07 22:56:55Z eddys $
- * SRE, Sat Jan  1 08:50:21 2005 [Panticosa, Spain]
  * xref STL8/p152; STL9/p5.
  */
 #include "esl_config.h"
@@ -34,8 +32,6 @@ static int esl_getopts(ESL_GETOPTS *g, int *ret_opti, char **ret_optarg);
 static int process_longopt(ESL_GETOPTS *g, int *ret_opti, char **ret_optarg);
 static int process_stdopt(ESL_GETOPTS *g, int *ret_opti, char **ret_optarg);
 static int verify_type_and_range(ESL_GETOPTS *g, int i, char *val, int setby);
-static int is_integer(char *s);
-static int is_real(char *s);
 static int verify_integer_range(char *arg, char *range);
 static int verify_real_range(char *arg, char *range);
 static int verify_char_range(char *arg, char *range);
@@ -51,7 +47,6 @@ static int process_optlist(ESL_GETOPTS *g, char **ret_s, int *ret_opti);
 
 /* Function:  esl_getopts_Create()
  * Synopsis:  Create a new <ESL_GETOPTS> object.
- * Incept:    SRE, Tue Jan 11 11:24:16 2005 [St. Louis]
  *
  * Purpose:   Creates an <ESL_GETOPTS> object, given the
  *            array of valid options <opt> (NULL-element-terminated).
@@ -137,7 +132,6 @@ esl_getopts_Create(ESL_OPTIONS *opt)
 
 /* Function:  esl_getopts_CreateDefaultApp()
  * Synopsis:  Initialize a standard Easel application.
- * Incept:    SRE, Wed Jun 13 16:21:22 2007 [Janelia]
  *
  * Purpose:   Carry out the usual sequence of events in initializing a
  *            small Easel-based application: parses the command line,
@@ -210,7 +204,7 @@ esl_getopts_CreateDefaultApp(ESL_OPTIONS *options, int nargs, int argc, char **a
     {
       if (banner != NULL) esl_banner(stdout, argv[0], banner);
       if (usage  != NULL) esl_usage (stdout, argv[0], usage);
-      puts("\n  where options are:");
+      puts("\nOptions:");
       esl_opt_DisplayHelp(stdout, go, 0, 2, 80);
       exit(0);
     }
@@ -227,7 +221,6 @@ esl_getopts_CreateDefaultApp(ESL_OPTIONS *options, int nargs, int argc, char **a
 
 /* Function:  esl_getopts_Reuse()
  * Synopsis:  Reset application state to default.
- * Incept:    SRE, Thu Dec  4 10:35:36 2008 [Janelia]
  *
  * Purpose:   Reset application configuration <g> to initial defaults,
  *            as if it were newly created (before any 
@@ -271,7 +264,6 @@ esl_getopts_Reuse(ESL_GETOPTS *g)
 
 /* Function:  esl_getopts_Destroy()
  * Synopsis:  Destroys an <ESL_GETOPTS> object.
- * Incept:    SRE, Thu Jan 13 08:55:10 2005 [St. Louis]
  *
  * Purpose:   Free's a created <ESL_GETOPTS> object.
  *
@@ -304,7 +296,6 @@ esl_getopts_Destroy(ESL_GETOPTS *g)
 
 /* Function:  esl_getopts_Dump()
  * Synopsis:  Dumps a summary of a <ESL_GETOPTS> configuration.
- * Incept:    SRE, Tue Jan 18 09:11:39 2005 [St. Louis]
  *
  * Purpose:   Dump the state of <g> to an output stream
  *            <ofp>, often stdout or stderr.
@@ -349,7 +340,6 @@ esl_getopts_Dump(FILE *ofp, ESL_GETOPTS *g)
 
 /* Function:  esl_opt_ProcessConfigfile()
  * Synopsis:  Parses options in a config file.
- * Incept:    SRE, Thu Jan 13 10:25:43 2005 [St. Louis]
  *
  * Purpose:   Given an open configuration file <fp> (and
  *            its name <filename>, for error reporting),
@@ -446,7 +436,6 @@ esl_opt_ProcessConfigfile(ESL_GETOPTS *g, char *filename, FILE *fp)
 
 /* Function:  esl_opt_ProcessEnvironment()
  * Synopsis:  Parses options in the environment.
- * Incept:    SRE, Thu Jan 13 10:17:58 2005 [St. Louis]
  *
  * Purpose:   For any option defined in <g> that can be modified
  *            by an environment variable, check the environment
@@ -460,6 +449,7 @@ esl_opt_ProcessConfigfile(ESL_GETOPTS *g, char *filename, FILE *fp)
  *            
  * Returns:   <eslOK> on success, and <g> is loaded with all
  *            options specified in the environment.
+ *
  *            Returns <eslEINVAL> on user input problems, 
  *            including type/range check failures, and 
  *            sets <g->errbuf> to a useful error message.
@@ -487,7 +477,6 @@ esl_opt_ProcessEnvironment(ESL_GETOPTS *g)
 
 /* Function:  esl_opt_ProcessCmdline()
  * Synopsis:  Parses options from the command line.
- * Incept:    SRE, Wed Jan 12 10:12:43 2005 [St. Louis]
  *
  * Purpose:   Process a command line (<argc> and <argv>), parsing out
  *            and setting application options in <g>. Option arguments
@@ -560,7 +549,6 @@ esl_opt_ProcessCmdline(ESL_GETOPTS *g, int argc, char **argv)
 
 /* Function:  esl_opt_ProcessSpoof()
  * Synopsis:  Parses a string as if it were a command line.
- * Incept:    SRE, Thu Dec  4 10:23:43 2008 [Janelia]
  *
  * Purpose:   Process the string <cmdline> as if it were a 
  *            complete command line. 
@@ -613,7 +601,6 @@ esl_opt_ProcessSpoof(ESL_GETOPTS *g, const char *cmdline)
 
 /* Function:  esl_opt_VerifyConfig()
  * Synopsis:  Validates configuration after options are set.
- * Incept:    SRE, Wed Jan 12 10:21:46 2005 [St. Louis]
  *
  * Purpose:   Given a <g> that we think is fully configured now --
  *            from config file(s), environment, and command line --
@@ -656,9 +643,17 @@ esl_opt_VerifyConfig(ESL_GETOPTS *g)
 	    {
 	      if (status != eslOK) ESL_EXCEPTION(eslEINVAL, "something's wrong with format of optlist: %s\n", s);
 	      if (g->val[reqi] == NULL)
-		ESL_FAIL(eslESYNTAX, g->errbuf,
-			 "Option %.24s requires (or has no effect without) option(s) %.24s", 
-			 g->opt[i].name, g->opt[i].required_opts);
+		{
+		  if (g->setby[i] >= eslARG_SETBY_CFGFILE)
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s (set by cfg file %d) requires (or has no effect without) option(s) %.24s", 
+			     g->opt[i].name, g->setby[i]-2, g->opt[i].required_opts);
+		  else if (g->setby[i] == eslARG_SETBY_ENV)
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s (set by env var %s) requires (or has no effect without) option(s) %.24s", 
+			     g->opt[i].name, g->opt[i].envvar, g->opt[i].required_opts);
+		  else
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s requires (or has no effect without) option(s) %.24s", 
+			     g->opt[i].name, g->opt[i].required_opts);
+		}
 	    }
 	}
     }
@@ -676,9 +671,18 @@ esl_opt_VerifyConfig(ESL_GETOPTS *g)
 	    {
 	      if (status != eslOK) ESL_EXCEPTION(eslEINVAL, "something's wrong with format of optlist: %s\n", s);
 	      if (incompati != i && (g->setby[incompati] != eslARG_SETBY_DEFAULT && g->val[incompati] != NULL))
-		ESL_FAIL(eslESYNTAX, g->errbuf,
-			 "Option %.24s is incompatible with option(s) %.24s", 
-			 g->opt[i].name, g->opt[i].incompat_opts);
+		{
+		  if (g->setby[i] >= eslARG_SETBY_CFGFILE)
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s (set by cfg file %d) is incompatible with option(s) %.24s", 
+			     g->opt[i].name, g->setby[i]-2, g->opt[i].incompat_opts); 
+		  
+		  else if (g->setby[i] == eslARG_SETBY_ENV)
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s (set by env var %s) is incompatible with option(s) %.24s", 
+			     g->opt[i].name, g->opt[i].envvar, g->opt[i].incompat_opts); 
+		  else
+		    ESL_FAIL(eslESYNTAX, g->errbuf, "Option %.24s is incompatible with option(s) %.24s", 
+			     g->opt[i].name, g->opt[i].incompat_opts); 
+		}
 	    }
 	}
     }
@@ -687,7 +691,6 @@ esl_opt_VerifyConfig(ESL_GETOPTS *g)
 
 /* Function:  esl_opt_ArgNumber()
  * Synopsis:  Returns number of command line arguments.
- * Incept:    SRE, Mon May 28 09:18:52 2007 [Janelia]
  *
  * Purpose:   Returns the number of command line arguments.
  *            
@@ -705,7 +708,6 @@ esl_opt_ArgNumber(const ESL_GETOPTS *g)
 
 /* Function:  esl_opt_SpoofCmdline()
  * Synopsis:  Create faux command line from current option configuration.
- * Incept:    SRE, Thu Dec  4 09:48:21 2008 [Janelia]
  *
  * Purpose:   Given the current configuration state of the application
  *            <g>, create a command line that would recreate the same
@@ -731,7 +733,7 @@ esl_opt_SpoofCmdline(const ESL_GETOPTS *g, char **ret_cmdline)
 
   /* Application name/path */
   ntot = strlen(g->argv[0]) + 1;
-  ESL_ALLOC(cmdline, sizeof(char) * ntot);
+  ESL_ALLOC(cmdline, sizeof(char) * (ntot+1));
   sprintf(cmdline, "%s ", g->argv[0]);
   
   /* Options */
@@ -739,9 +741,9 @@ esl_opt_SpoofCmdline(const ESL_GETOPTS *g, char **ret_cmdline)
     if (g->setby[i] != eslARG_SETBY_DEFAULT) 
       {
 	if (g->opt[i].type == eslARG_NONE) n = strlen(g->opt[i].name) + 1;
-	else                               n = strlen(g->opt[i].name) + strlen(g->val[i]) + 2;
+	else                               n = (strlen(g->opt[i].name) + strlen(g->val[i])) + 2;
 
-	ESL_RALLOC(cmdline, p, sizeof(char) * (ntot + n));
+	ESL_RALLOC(cmdline, p, sizeof(char) * (ntot + n + 1));
 
 	if (g->opt[i].type == eslARG_NONE) sprintf(cmdline + ntot, "%s ",    g->opt[i].name);
 	else                               sprintf(cmdline + ntot, "%s %s ", g->opt[i].name, g->val[i]);
@@ -753,7 +755,7 @@ esl_opt_SpoofCmdline(const ESL_GETOPTS *g, char **ret_cmdline)
   for (j = g->optind; j < g->argc; j++)
     {
       n = strlen(g->argv[j]) + 1;
-      ESL_RALLOC(cmdline, p, sizeof(char) * (ntot + n));
+      ESL_RALLOC(cmdline, p, sizeof(char) * (ntot + n + 1));
       sprintf(cmdline + ntot, "%s ", g->argv[j]);
       ntot += n;
     }
@@ -775,7 +777,6 @@ esl_opt_SpoofCmdline(const ESL_GETOPTS *g, char **ret_cmdline)
 
 /* Function:  esl_opt_IsDefault()
  * Synopsis:  Returns <TRUE> if option remained at default setting.
- * Incept:    SRE, Wed Jan  3 11:19:25 2007 [Janelia]
  *
  * Purpose:   Returns <TRUE> if option <optname> is in its
  *            default state; returns <FALSE> if <optname> was 
@@ -797,7 +798,6 @@ esl_opt_IsDefault(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_IsOn()
  * Synopsis:  Returns <TRUE> if option is set to a non-<NULL> value.
- * Incept:    SRE, Sat Feb 14 09:29:58 2009 [Janelia]
  *
  * Purpose:   Returns <TRUE> if option is on (set to a non-<NULL>
  *            value). 
@@ -828,7 +828,6 @@ esl_opt_IsOn(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_IsUsed()
  * Synopsis:  Returns <TRUE> if option is on, and this is not the default.
- * Incept:    SRE, Sat Feb 14 08:57:11 2009 [Janelia]
  *
  * Purpose:   Returns <TRUE> if option <optname> is in use: it has been
  *            set to a non-default value, and that value correspond to
@@ -852,9 +851,30 @@ esl_opt_IsUsed(const ESL_GETOPTS *g, char *optname)
 }
 
 
+/* Function:  esl_opt_GetSetter()
+ * Synopsis:  Returns code for who set this option.
+ *
+ * Purpose:   For a processed options object <g>, return the code
+ *            for who set option <optname>. This code is <eslARG_SETBY_DEFAULT>,
+ *            <eslARG_SETBY_CMDLINE>, <eslARG_SETBY_ENV>, or it
+ *            is $\geq$ <eslARG_SETBY_CFGFILE>. If the option 
+ *            was configured by a config file, the file number (the order
+ *            of <esl_opt_ProcessConfigFile()> calls) is encoded in codes
+ *            $\geq <eslARG_SETBY_CFGFILE>$ as
+ *            file number $=$ <code> - <eslARG_SETBY_CFGFILE> + 1.
+ */
+int
+esl_opt_GetSetter(const ESL_GETOPTS *g, char *optname)
+{
+  int opti;
+
+  if (get_optidx_exactly(g, optname, &opti) != eslOK)  esl_fatal("no such option %s\n", optname);
+  return g->setby[opti];
+}
+
+
 /* Function:  esl_opt_GetBoolean()
  * Synopsis:  Retrieve <TRUE>/<FALSE> for a boolean option.
- * Incept:    SRE, Wed Jan 12 13:46:09 2005 [St. Louis]
  *
  * Purpose:   Retrieves the configured TRUE/FALSE value for option <optname>
  *            from <g>.
@@ -875,7 +895,6 @@ esl_opt_GetBoolean(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_GetInteger()
  * Synopsis:  Retrieve value of an integer option.
- * Incept:    SRE, Wed Jan 12 11:37:28 2005 [St. Louis]
  *
  * Purpose:   Retrieves the configured value for option <optname>
  *            from <g>.
@@ -894,7 +913,6 @@ esl_opt_GetInteger(const ESL_GETOPTS *g, char *optname)
 		
 /* Function:  esl_opt_GetReal()
  * Synopsis:  Retrieve value of a real-valued option.
- * Incept:    SRE, Wed Jan 12 13:46:27 2005 [St. Louis]
  *
  * Purpose:   Retrieves the configured value for option <optname>
  *            from <g>.
@@ -914,7 +932,6 @@ esl_opt_GetReal(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_GetChar()
  * Synopsis:  Retrieve value of a character option.
- * Incept:    SRE, Wed Jan 12 13:47:36 2005 [St. Louis]
  *
  * Purpose:   Retrieves the configured value for option <optname>
  *            from <g>.
@@ -934,7 +951,6 @@ esl_opt_GetChar(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_GetString()
  * Synopsis:  Retrieve value of a string option.
- * Incept:    SRE, Wed Jan 12 13:47:36 2005 [St. Louis]
  *
  * Purpose:   Retrieves the configured value for option <optname>
  *            from <g>.
@@ -961,7 +977,6 @@ esl_opt_GetString(const ESL_GETOPTS *g, char *optname)
 
 /* Function:  esl_opt_GetArg()
  * Synopsis:  Retrieve numbered command line argument.
- * Incept:    SRE, Thu Jan 13 09:21:34 2005 [St. Louis]
  *
  * Purpose:   Returns a pointer to command line argument number
  *            <which>, where <which> ranges from <1..n> for <n>
@@ -993,7 +1008,6 @@ esl_opt_GetArg(const ESL_GETOPTS *g, int which)
 
 /* Function:  esl_opt_DisplayHelp()
  * Synopsis:  Formats one-line help for each option.
- * Incept:    SRE, Sun Feb 26 12:36:07 2006 [St. Louis]
  *
  * Purpose:   For each option in <go>, print one line of brief
  *            documentation for it, consisting of the option name
@@ -1025,7 +1039,8 @@ esl_opt_GetArg(const ESL_GETOPTS *g, int which)
  * Returns:   <eslOK> on success.
  *
  * Throws:    <eslEINVAL> if one or more help lines are too long for
- *            the specified <textwidth>.
+ *                        the specified <textwidth>.
+ *            <eslEWRITE> if a write fails.
  */
 int
 esl_opt_DisplayHelp(FILE *ofp, ESL_GETOPTS *go, int docgroup, int indent,
@@ -1077,46 +1092,42 @@ esl_opt_DisplayHelp(FILE *ofp, ESL_GETOPTS *go, int docgroup, int indent,
       show_defaults = FALSE;
       show_ranges   = FALSE;
     }
-  else
-    ESL_EXCEPTION(eslEINVAL, "Help line too long");
+  else ESL_EXCEPTION(eslEINVAL, "Help line too long");
 
-
-  /* Format and print the options in this docgroup.
-   */
+  /* Format and print the options in this docgroup. */
   for (i = 0; i < go->nopts; i++)
     if (! docgroup || docgroup == go->opt[i].docgrouptag)
       {
-	fprintf(ofp, "%*s", indent, "");
+	if (fprintf(ofp, "%*s", indent, "")      < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
 	n = 0;
-	fprintf(ofp, "%s",  go->opt[i].name);
+	if (fprintf(ofp, "%s",  go->opt[i].name) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
 	n += strlen(go->opt[i].name);
 
 	switch (go->opt[i].type) {
 	case eslARG_NONE:    break;
-	case eslARG_INT:     fprintf(ofp, " <n>"); n += 4; break;
-	case eslARG_REAL:    fprintf(ofp, " <x>"); n += 4; break;
-	case eslARG_CHAR:    fprintf(ofp, " <c>"); n += 4; break;
-	case eslARG_STRING:  fprintf(ofp, " <s>"); n += 4; break;
-	case eslARG_INFILE:  fprintf(ofp, " <f>"); n += 4; break;
-	case eslARG_OUTFILE: fprintf(ofp, " <f>"); n += 4; break;
+	case eslARG_INT:     if (fprintf(ofp, " <n>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
+	case eslARG_REAL:    if (fprintf(ofp, " <x>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
+	case eslARG_CHAR:    if (fprintf(ofp, " <c>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
+	case eslARG_STRING:  if (fprintf(ofp, " <s>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
+	case eslARG_INFILE:  if (fprintf(ofp, " <f>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
+	case eslARG_OUTFILE: if (fprintf(ofp, " <f>") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); n += 4; break;
 	}
 
-	fprintf(ofp, "%*s", optwidth-n, "");
-	fprintf(ofp, " :");
+	if (fprintf(ofp, "%*s", optwidth-n, "") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
+	if (fprintf(ofp, " :")                  < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
 
 	if (go->opt[i].help != NULL)
-	  fprintf(ofp, " %s", go->opt[i].help);
+	  { if (fprintf(ofp, " %s", go->opt[i].help) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); }
 	
 	if (show_defaults && go->opt[i].defval != NULL) 
 	  if (go->opt[i].type != eslARG_CHAR || *(go->opt[i].defval) != '\0')
-	    fprintf(ofp, "  [%s]", go->opt[i].defval);
+	    { if (fprintf(ofp, "  [%s]", go->opt[i].defval) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); }
 
 	if (show_ranges && go->opt[i].range != NULL)
-	  fprintf(ofp, "  (%s)", go->opt[i].range);
+	  { if (fprintf(ofp, "  (%s)", go->opt[i].range) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed"); }
 
-	fprintf(ofp, "\n");
+	if (fprintf(ofp, "\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
       }
-
   return eslOK;
 }
 /*------------------ end of the public API -----------------------*/
@@ -1571,7 +1582,7 @@ verify_type_and_range(ESL_GETOPTS *g, int i, char *val, int setby)
     break;
 
   case eslARG_INT:
-    if (! is_integer(val))
+    if (! esl_str_IsInteger(val))
       ESL_FAIL(eslESYNTAX, g->errbuf, 
 	       "Option %.24s takes integer arg; got %.24s %s", 
 	       g->opt[i].name, val, where);
@@ -1583,7 +1594,7 @@ verify_type_and_range(ESL_GETOPTS *g, int i, char *val, int setby)
     break;
 
   case eslARG_REAL:
-    if (! is_real(val))
+    if (! esl_str_IsReal(val))
       ESL_FAIL(eslESYNTAX, g->errbuf, 
 	       "Option %.24s takes real-valued arg; got %.24s %s",
 	       g->opt[i].name, val, where);
@@ -1618,91 +1629,6 @@ verify_type_and_range(ESL_GETOPTS *g, int i, char *val, int setby)
   }
 
   return eslOK;
-}
-
-/* Function: is_integer()
- * 
- * Returns TRUE if <s> points to something that atoi() will parse
- * completely and convert to an integer.
- */
-static int
-is_integer(char *s)
-{
-  int hex = 0;
-
-  if (s == NULL) return 0;
-  while (isspace((int) (*s))) s++;      /* skip whitespace */
-  if (*s == '-' || *s == '+') s++;      /* skip leading sign */
-				        /* skip leading conversion signals */
-  if ((strncmp(s, "0x", 2) == 0 && (int) strlen(s) > 2) ||
-      (strncmp(s, "0X", 2) == 0 && (int) strlen(s) > 2))
-    {
-      s += 2;
-      hex = 1;
-    }
-  else if (*s == '0' && (int) strlen(s) > 1)
-    s++;
-				/* examine remainder for garbage chars */
-  if (!hex)
-    while (*s != '\0')
-      {
-	if (!isdigit((int) (*s))) return 0;
-	s++;
-      }
-  else
-    while (*s != '\0')
-      {
-	if (!isxdigit((int) (*s))) return 0;
-	s++;
-      }
-  return 1;
-}
-
-
-/* is_real()
- * 
- * Returns TRUE if <s> is a string representation
- * of a valid floating point number, convertable
- * by atof().
- */
-static int
-is_real(char *s)
-{
-  int gotdecimal = 0;
-  int gotexp     = 0;
-  int gotreal    = 0;
-
-  if (s == NULL) return 0;
-
-  while (isspace((int) (*s))) s++; /* skip leading whitespace */
-  if (*s == '-' || *s == '+') s++; /* skip leading sign */
-
-  /* Examine remainder for garbage. Allowed one '.' and
-   * one 'e' or 'E'; if both '.' and e/E occur, '.'
-   * must be first.
-   */
-  while (*s != '\0')
-    {
-      if (isdigit((int) (*s))) 	gotreal++;
-      else if (*s == '.')
-	{
-	  if (gotdecimal) return 0; /* can't have two */
-	  if (gotexp) return 0;     /* e/E preceded . */
-	  else gotdecimal++;
-	}
-      else if (*s == 'e' || *s == 'E')
-	{
-	  if (gotexp) return 0;	/* can't have two */
-	  else gotexp++;
-	}
-      else if (isspace((int) (*s)))
-	break;
-      s++;
-    }
-
-  while (isspace((int) (*s))) s++;         /* skip trailing whitespace */
-  if (*s == '\0' && gotreal) return 1;
-  else return 0;
 }
 
 
@@ -2025,9 +1951,10 @@ main(void)
   fclose(f2);
 
   /* Put some test vars in the environment.
+   * (Note: apparently, on some OS's (Mac OS/X), setenv() necessarily leaks memory.)
    */
-  putenv("FOOTEST=");
-  putenv("HOSTTEST=wasp.cryptogenomicon.org");
+  setenv("FOOTEST",  "",                         1);
+  setenv("HOSTTEST", "wasp.cryptogenomicon.org", 1);
 
   /* Open the test config files for reading.
    */
@@ -2148,7 +2075,6 @@ main(int argc, char **argv)
 {
   ESL_GETOPTS *go;
   char        *arg;
-  char        *cmdline;
 
   if ((go = esl_getopts_Create(options))     == NULL)  esl_fatal("Bad options structure\n");  
   if (esl_opt_ProcessCmdline(go, argc, argv) != eslOK) esl_fatal("Failed to parse command line: %s\n", go->errbuf);
@@ -2175,7 +2101,6 @@ main(int argc, char **argv)
   printf("Cmdline arg:    %s\n", arg);
 
   esl_getopts_Destroy(go);
-  free(cmdline);
   return 0;
 }
 /*::cexcerpt::getopts_example::end::*/
@@ -2225,12 +2150,15 @@ main(int argc, char **argv)
 
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_getopts.c 727 2011-10-24 17:17:32Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_getopts.c $
  *****************************************************************/
 
 

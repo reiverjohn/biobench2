@@ -10,7 +10,7 @@
  *   7. Copyright and license information.
  * 
  * SRE, Mon Aug 18 20:01:01 2008 [Casa de Gatos]
- * SVN $Id: optacc.c 3018 2009-10-29 17:33:06Z farrarm $
+ * SVN $Id: optacc.c 3991 2012-04-17 21:08:00Z eddys $
  */
 #include "p7_config.h"
 
@@ -104,8 +104,8 @@ p7_OptimalAccuracy(const P7_OPROFILE *om, const P7_OMX *pp, P7_OMX *ox, float *r
 	{
 	  sv  =                _mm_and_ps(_mm_cmpgt_ps(*tp, zerov), xBv);  tp++;
 	  sv  = _mm_max_ps(sv, _mm_and_ps(_mm_cmpgt_ps(*tp, zerov), mpv)); tp++;
-	  sv  = _mm_max_ps(sv, _mm_and_ps(_mm_cmpgt_ps(*tp, zerov), dpv)); tp++;
 	  sv  = _mm_max_ps(sv, _mm_and_ps(_mm_cmpgt_ps(*tp, zerov), ipv)); tp++;
+	  sv  = _mm_max_ps(sv, _mm_and_ps(_mm_cmpgt_ps(*tp, zerov), dpv)); tp++;
 	  sv  = _mm_add_ps(sv, *ppp);                                      ppp += 2;
 	  xEv = _mm_max_ps(xEv, sv);
 	  
@@ -471,7 +471,7 @@ static char banner[] = "benchmark driver for optimal accuracy alignment, SSE ver
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -496,8 +496,8 @@ main(int argc, char **argv)
 
   p7_FLogsumInit();
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);                 p7_bg_SetLength(bg, L);
   gm = p7_profile_Create(hmm->M, abc);    p7_ProfileConfig(hmm, bg, gm, L, p7_LOCAL);
@@ -635,9 +635,9 @@ utest_optacc(ESL_GETOPTS *go, ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, i
 
 #if 0
       p7_omx_FDeconvert(ox1, gx1); 
-      p7_gmx_Dump(stdout, gx1); 
+      p7_gmx_Dump(stdout, gx1, p7_DEFAULT); 
       p7_omx_FDeconvert(ox2, gx1); 
-      p7_gmx_Dump(stdout, gx1); 
+      p7_gmx_Dump(stdout, gx1, p7_DEFAULT); 
 #endif
       if (p7_OATrace(om, ox2, ox1, tr)                    != eslOK) esl_fatal(msg);
       
@@ -645,16 +645,16 @@ utest_optacc(ESL_GETOPTS *go, ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, i
       if (p7_GBackward(sq->dsq, sq->n, gm, gx2, &bsc_g)   != eslOK) esl_fatal(msg);
 
 #if 0
-      p7_gmx_Dump(stdout, gx1); /* fwd */
-      p7_gmx_Dump(stdout, gx2); /* bck */
+      p7_gmx_Dump(stdout, gx1, p7_DEFAULT); /* fwd */
+      p7_gmx_Dump(stdout, gx2, p7_DEFAULT); /* bck */
 #endif
 
       if (p7_GDecoding(gm, gx1, gx2, gx2)                 != eslOK) esl_fatal(msg);
       if (p7_GOptimalAccuracy(gm, gx2, gx1, &accscore_g)  != eslOK) esl_fatal(msg);
       
 #if 0
-      p7_gmx_Dump(stdout, gx1); /* oa */
-      p7_gmx_Dump(stdout, gx2); /* pp */
+      p7_gmx_Dump(stdout, gx1, p7_DEFAULT); /* oa */
+      p7_gmx_Dump(stdout, gx2, p7_DEFAULT); /* pp */
 #endif
       if (p7_GOATrace(gm, gx2, gx1, trg)                  != eslOK) esl_fatal(msg);
 
@@ -786,7 +786,7 @@ static char banner[] = "test driver for SSE Forward, Backward implementations";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go   = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
   ESL_ALPHABET   *abc  = NULL;
   P7_BG          *bg   = NULL;
@@ -858,7 +858,7 @@ static char banner[] = "example of optimal accuracy alignment, SSE implementatio
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -880,8 +880,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
   p7_hmmfile_Close(hfp);
  
   /* Read in one sequence */
@@ -913,8 +913,8 @@ main(int argc, char **argv)
   p7_OptimalAccuracy(om, ox2, ox1, &accscore);	    /* <gx1> is now the OA matrix */
   p7_OATrace(om, ox2, ox1, tr);
   
-  if (esl_opt_GetBoolean(go, "-d")) { p7_omx_FDeconvert(ox2, gx);  p7_gmx_Dump(stdout, gx); }
-  if (esl_opt_GetBoolean(go, "-m")) { p7_omx_FDeconvert(ox1, gx);  p7_gmx_Dump(stdout, gx); }
+  if (esl_opt_GetBoolean(go, "-d")) { p7_omx_FDeconvert(ox2, gx);  p7_gmx_Dump(stdout, gx, p7_DEFAULT); }
+  if (esl_opt_GetBoolean(go, "-m")) { p7_omx_FDeconvert(ox1, gx);  p7_gmx_Dump(stdout, gx, p7_DEFAULT); }
 
   p7_trace_Dump(stdout, tr, gm, sq->dsq);
 
@@ -947,8 +947,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

@@ -12,11 +12,6 @@
  * Again, Sept 2005: xref STL10/24-26.      (Inherent target length dependency)
  * Again, Jan 2007:  xref STL11/125,136-137 (HMMER3)
  * Again, Jul 2007:  xref J1/103            (floating point ops)
- *
- * SRE, Mon May  2 10:55:16 2005 [St. Louis]
- * SRE, Fri Jan 12 08:06:33 2007 [Janelia] [Kate Bush, Aerial]
- * SRE, Tue Jul 10 13:19:46 2007 [Janelia] [HHGTTG]
- * SVN $Id: modelconfig.c 3152 2010-02-07 22:55:22Z eddys $
  */
 #include "p7_config.h"
 
@@ -37,7 +32,6 @@
  
 /* Function:  p7_ProfileConfig()
  * Synopsis:  Configure a search profile.
- * Incept:    SRE, Sun Sep 25 12:21:25 2005 [St. Louis]
  *
  * Purpose:   Given a model <hmm> with core probabilities, the null1
  *            model <bg>, a desired search <mode> (one of <p7_LOCAL>,
@@ -59,18 +53,19 @@ p7_ProfileConfig(const P7_HMM *hmm, const P7_BG *bg, P7_PROFILE *gm, int L, int 
   float *occ = NULL;
   float *tp, *rp;
   float  sc[p7_MAXCODE];
-  float  mthresh;
   float  Z;
  
   /* Contract checks */
   if (gm->abc->type != hmm->abc->type) ESL_XEXCEPTION(eslEINVAL, "HMM and profile alphabet don't match");
   if (hmm->M > gm->allocM)             ESL_XEXCEPTION(eslEINVAL, "profile too small to hold HMM");
+  if (! (hmm->flags & p7H_CONS))       ESL_XEXCEPTION(eslEINVAL, "HMM must have a consensus to transfer to the profile");
 
   /* Copy some pointer references and other info across from HMM  */
-  gm->M      = hmm->M;
-  gm->mode   = mode;
-  gm->roff   = -1;
-  gm->eoff   = -1;
+  gm->M                = hmm->M;
+  gm->max_length       = hmm->max_length;
+  gm->mode             = mode;
+  gm->roff             = -1;
+  gm->eoff             = -1;
   gm->offs[p7_MOFFSET] = -1;
   gm->offs[p7_FOFFSET] = -1;
   gm->offs[p7_POFFSET] = -1;
@@ -80,25 +75,13 @@ p7_ProfileConfig(const P7_HMM *hmm, const P7_BG *bg, P7_PROFILE *gm, int L, int 
   if ((status = esl_strdup(hmm->name,   -1, &(gm->name))) != eslOK) goto ERROR;
   if ((status = esl_strdup(hmm->acc,    -1, &(gm->acc)))  != eslOK) goto ERROR;
   if ((status = esl_strdup(hmm->desc,   -1, &(gm->desc))) != eslOK) goto ERROR;
-  if (hmm->flags & p7H_RF) strcpy(gm->rf, hmm->rf);
-  if (hmm->flags & p7H_CS) strcpy(gm->cs, hmm->cs);
+  if (hmm->flags & p7H_RF)    strcpy(gm->rf,        hmm->rf);
+  if (hmm->flags & p7H_MMASK) strcpy(gm->mm,        hmm->mm);
+  if (hmm->flags & p7H_CONS)  strcpy(gm->consensus, hmm->consensus); /* must be present, actually, so the flag test is just for symmetry w/ other optional HMM fields */
+  if (hmm->flags & p7H_CS)    strcpy(gm->cs,        hmm->cs);
   for (z = 0; z < p7_NEVPARAM; z++) gm->evparam[z] = hmm->evparam[z];
   for (z = 0; z < p7_NCUTOFFS; z++) gm->cutoff[z]  = hmm->cutoff[z];
   for (z = 0; z < p7_MAXABET;  z++) gm->compo[z]   = hmm->compo[z];
-
-  /* Determine the "consensus" residue for each match position.
-   * This is only used for alignment displays, not in any calculations.
-   */
-  if      (hmm->abc->type == eslAMINO) mthresh = 0.5;
-  else if (hmm->abc->type == eslDNA)   mthresh = 0.9;
-  else if (hmm->abc->type == eslRNA)   mthresh = 0.9;
-  else                                 mthresh = 0.5;
-  gm->consensus[0] = ' ';
-  for (k = 1; k <= hmm->M; k++) {
-    x = esl_vec_FArgMax(hmm->mat[k], hmm->abc->K);
-    gm->consensus[k] = ((hmm->mat[k][x] > mthresh) ? toupper(hmm->abc->sym[x]) : tolower(hmm->abc->sym[x]));
-  }
-  gm->consensus[hmm->M+1] = '\0';
 
   /* Entry scores. */
   if (p7_profile_IsLocal(gm))
@@ -157,15 +140,17 @@ p7_ProfileConfig(const P7_HMM *hmm, const P7_BG *bg, P7_PROFILE *gm, int L, int 
   sc[hmm->abc->Kp-2]  = -eslINFINITY; /* nonresidue character */
   sc[hmm->abc->Kp-1]  = -eslINFINITY; /* missing data character */
   for (k = 1; k <= hmm->M; k++) {
-    for (x = 0; x < hmm->abc->K; x++) 
-      sc[x] = log(hmm->mat[k][x] / bg->f[x]);
+    for (x = 0; x < hmm->abc->K; x++)
+     sc[x] = log((double)hmm->mat[k][x] / bg->f[x]);
+
     esl_abc_FExpectScVec(hmm->abc, sc, bg->f); 
+
     for (x = 0; x < hmm->abc->Kp; x++) {
       rp = gm->rsc[x] + k * p7P_NR;
       rp[p7P_MSC] = sc[x];
     }
   }
-  
+
   /* Insert emission scores */
   /* SRE, Fri Dec 5 08:41:08 2008: We currently hardwire insert scores
    * to 0, i.e. corresponding to the insertion emission probabilities
@@ -214,7 +199,6 @@ p7_ProfileConfig(const P7_HMM *hmm, const P7_BG *bg, P7_PROFILE *gm, int L, int 
 
 /* Function:  p7_ReconfigLength()
  * Synopsis:  Set the target sequence length of a model.
- * Incept:    SRE, Sun Sep 25 12:38:55 2005 [St. Louis]
  *
  * Purpose:   Given a model already configured for scoring, in some
  *            particular algorithm mode; reset the expected length
@@ -252,7 +236,6 @@ p7_ReconfigLength(P7_PROFILE *gm, int L)
 
 /* Function:  p7_ReconfigMultihit()
  * Synopsis:  Quickly reconfig model into multihit mode for target length <L>.
- * Incept:    SRE, Sat Feb 23 09:16:01 2008 [Janelia]
  *
  * Purpose:   Given a profile <gm> that's already been configured once,
  *            quickly reconfigure it into a multihit mode for target 
@@ -281,7 +264,6 @@ p7_ReconfigMultihit(P7_PROFILE *gm, int L)
 
 /* Function:  p7_ReconfigUnihit()
  * Synopsis:  Quickly reconfig model into unihit mode for target length <L>.
- * Incept:    SRE, Sat Feb 23 09:19:42 2008 [Janelia]
  *
  * Purpose:   Given a profile <gm> that's already been configured once,
  *            quickly reconfigure it into a unihit mode for target 
@@ -433,7 +415,6 @@ static int profile_local_endpoints(ESL_RANDOMNESS *r, P7_HMM *core, P7_PROFILE *
 int
 main(int argc, char **argv)
 {
-  int              status;
   ESL_ALPHABET    *abc     = NULL;     /* sequence alphabet                       */
   ESL_GETOPTS     *go      = NULL;     /* command line processing                 */
   ESL_RANDOMNESS  *r       = NULL;     /* source of randomness                    */
@@ -464,6 +445,8 @@ main(int argc, char **argv)
   ESL_DMATRIX     *kmx     = NULL;
   ESL_DMATRIX     *iref    = NULL; /* reference matrix: expected i distribution under ideality */
   int              Lbins;
+  int              status;
+  char             errbuf[eslERRBUFSIZE];
   
   /*****************************************************************
    * Parse the command line
@@ -500,10 +483,10 @@ main(int argc, char **argv)
     {	/* Read the HMM (and get alphabet from it) */
       P7_HMMFILE      *hfp     = NULL;
 
-      status = p7_hmmfile_Open(hmmfile, NULL, &hfp);
-      if      (status == eslENOTFOUND) p7_Fail("Failed to open HMM file %s for reading.\n",                   hmmfile);
-      else if (status == eslEFORMAT)   p7_Fail("File %s does not appear to be in a recognized HMM format.\n", hmmfile);
-      else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n",       status, hmmfile);  
+      status = p7_hmmfile_OpenE(hmmfile, NULL, &hfp, errbuf);
+      if      (status == eslENOTFOUND) p7_Fail("File existence/permissions problem in trying to open HMM file %s.\n%s\n", hmmfile, errbuf);
+      else if (status == eslEFORMAT)   p7_Fail("File format problem in trying to open HMM file %s.\n%s\n",                hmmfile, errbuf);
+      else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n%s\n",               status, hmmfile, errbuf);  
     
       if ((status = p7_hmmfile_Read(hfp, &abc, &hmm)) != eslOK) {
 	if      (status == eslEOD)       esl_fatal("read failed, HMM file %s may be truncated?", hmmfile);
@@ -620,7 +603,6 @@ main(int argc, char **argv)
 }
 
 /* ideal_local_endpoints()
- * Incept:    SRE, Fri Jan 26 13:01:34 2007 [Janelia]
  *
  * Purpose:  Implementation of the "two-step" fragment sampling
  *           algorithm, sampling a uniform local fragment w.r.t.
@@ -720,7 +702,6 @@ ideal_local_endpoints(ESL_RANDOMNESS *r, P7_HMM *hmm, ESL_SQ *sq, P7_TRACE *tr, 
 }
 
 /* profile_local_endpoints()
- * Incept:    SRE, Fri Jan 26 13:16:09 2007 [Janelia]
  *
  * Purpose:   Wrapper around <p7_ProfileEmit()>, sampling a local
  *            alignment fragment from the profile's probabilistic model
@@ -1141,8 +1122,8 @@ profile_local_endpoints(ESL_RANDOMNESS *r, P7_HMM *core, P7_PROFILE *gm, ESL_SQ 
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

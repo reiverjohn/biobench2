@@ -1,7 +1,7 @@
 /* hmmconvert: converting profile HMM files to HMMER3 HMM format.
  * 
  * SRE, Thu Oct 16 08:57:43 2008 [janelia] [Enigma MCMXC a.D.]
- * SVN $Id: hmmconvert.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: hmmconvert.c 3474 2011-01-17 13:25:32Z eddys $
  */
 #include "p7_config.h"
 
@@ -21,7 +21,7 @@ static ESL_OPTIONS options[] = {
   { "-a",        eslARG_NONE,"default",NULL, NULL, "-a,-b,-2",      NULL,    NULL, "ascii:  output models in HMMER3 ASCII format",                     0 },
   { "-b",        eslARG_NONE,   FALSE, NULL, NULL, "-a,-b,-2",      NULL,    NULL, "binary: output models in HMMER3 binary format",                    0 },
   { "-2",        eslARG_NONE,   FALSE, NULL, NULL, "-a,-b,-2",      NULL,    NULL, "HMMER2: output backward compatible HMMER2 ASCII format (ls mode)", 0 },
-  { "--outfmt",  eslARG_STRING, "3/b", NULL, NULL,      NULL,       NULL,    "-2", "choose output legacy 3.x file formats by name, such as '3/a'",     0 },
+  { "--outfmt",  eslARG_STRING, NULL,  NULL, NULL,      NULL,       NULL,    "-2", "choose output legacy 3.x file formats by name, such as '3/a'",     0 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 static char usage[]  = "[-options] <hmmfile>";
@@ -31,26 +31,28 @@ static char banner[] = "convert profile file to a HMMER format";
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS   *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS   *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   ESL_ALPHABET  *abc     = NULL;
   char          *hmmfile = esl_opt_GetArg(go, 1);
   P7_HMMFILE    *hfp     = NULL;
   P7_HMM        *hmm     = NULL;
   FILE          *ofp     = stdout;
   char          *outfmt  = esl_opt_GetString(go, "--outfmt");
-  int            fmtcode = -1;
+  int            fmtcode = -1;	/* -1 = write the current default format */
   int            status;
+  char           errbuf[eslERRBUFSIZE];
 
   if (outfmt != NULL) {
     if      (strcmp(outfmt, "3/a") == 0) fmtcode = p7_HMMFILE_3a;
     else if (strcmp(outfmt, "3/b") == 0) fmtcode = p7_HMMFILE_3b;
+    else if (strcmp(outfmt, "3/c") == 0) fmtcode = p7_HMMFILE_3c;
     else    p7_Fail("No such 3.x output format code %s.\n", outfmt);
   }
 
-  status = p7_hmmfile_Open(hmmfile, NULL, &hfp);
-  if      (status == eslENOTFOUND) p7_Fail("Failed to open HMM file %s for reading.\n",     hmmfile);
-  else if (status == eslEFORMAT)   p7_Fail("File %s does not appear to be in a recognized HMM format.\n", hmmfile);
-  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n", status, hmmfile);  
+  status = p7_hmmfile_OpenE(hmmfile, NULL, &hfp, errbuf);
+  if      (status == eslENOTFOUND) p7_Fail("File existence/permissions problem in trying to open HMM file %s.\n%s\n", hmmfile, errbuf);
+  else if (status == eslEFORMAT)   p7_Fail("File format problem in trying to open HMM file %s.\n%s\n",                hmmfile, errbuf);
+  else if (status != eslOK)        p7_Fail("Unexpected error %d in opening HMM file %s.\n%s\n",                       status, hmmfile, errbuf);  
 
   while ((status = p7_hmmfile_Read(hfp, &abc, &hmm)) == eslOK)
     {
@@ -72,8 +74,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

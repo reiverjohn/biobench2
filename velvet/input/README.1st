@@ -1,8 +1,0 @@
-Due to file size restrictions enforced by github, no input
-read data set is provided in this package.  Please download
-or create an appropriate short read data set collection for
-velvet benchmarking.
-
-Please note you will need to change the input file name used
-in the "runBench.pl" script to match your read data file 
-name.

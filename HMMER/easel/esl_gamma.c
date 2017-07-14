@@ -1,9 +1,6 @@
-/* esl_gamma.c 
- * Statistical routines for gamma distributions.
+/* Statistical routines for gamma distributions.
  * 
- * SRE, Sun Nov 13 16:41:10 2005 [HHMI HQ]
  * xref STL10/65
- * SVN $Id: esl_gamma.c 326 2009-02-28 15:49:07Z eddys $
  */
 #include "esl_config.h"
 
@@ -28,7 +25,6 @@ static double tau_function(double tau, double mean, double logsum);
  ****************************************************************************/ 
 
 /* Function:  esl_gam_pdf()
- * Incept:    SRE, Sun Nov 13 16:42:43 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the gamma PDF $P(X=x)$ given value <x>,
  *            location parameter <mu>, scale parameter <lambda>, and shape
@@ -44,12 +40,11 @@ esl_gam_pdf(double x, double mu, double lambda, double tau)
   if (y < 0.) return 0.;
 
   esl_stats_LogGamma(tau, &gamtau);
-  val = tau*log(lambda) + (tau-1.)*log(x-mu) - gamtau - y;
+  val  = ((tau*log(lambda) + (tau-1.)*log(x-mu)) - gamtau) - y;
   return exp(val);
 }
 
 /* Function:  esl_gam_logpdf()
- * Incept:    SRE, Mon Nov 14 12:45:36 2005 [HHMI HQ]
  *
  * Purpose:   Calculates log of the probability density function
  *            for the gamma, $\log P(X=x)$, given value <x>,
@@ -66,12 +61,11 @@ esl_gam_logpdf(double x, double mu, double lambda, double tau)
   if (x < 0.) return -eslINFINITY;
 
   esl_stats_LogGamma(tau, &gamtau);
-  val = tau*log(lambda) + (tau-1.)*log(x-mu) - gamtau - y;
+  val = ((tau*log(lambda) + (tau-1.)*log(x-mu)) - gamtau) - y;
   return val;
 }
 
 /* Function:  esl_gam_cdf()
- * Incept:    SRE, Mon Nov 14 12:47:36 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the cumulative distribution function
  *            for the gamma, $P(X \leq x)$, given value <x>, 
@@ -94,7 +88,6 @@ esl_gam_cdf(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_gam_logcdf()
- * Incept:    SRE, Mon Nov 14 13:10:21 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the log of the cumulative distribution function 
  *            for the gamma, $\log P(X \leq x)$, given value <x>, location
@@ -114,7 +107,6 @@ esl_gam_logcdf(double x, double mu, double lambda, double tau)
 }
 
 /* Function:  esl_gam_surv()
- * Incept:    SRE, Mon Nov 14 13:13:51 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the survival function for the gamma, $P(X > x)$,
  *            given value <x>, location parameter <mu>, scale parameter 
@@ -134,7 +126,6 @@ esl_gam_surv(double x, double mu, double lambda, double tau)
 
 
 /* Function:  esl_gam_logsurv()
- * Incept:    SRE, Mon Nov 14 13:14:05 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the log of the survival function for the gamma, 
  *            $\log P(X > x)$, given value <x>, location parameter <mu>,
@@ -158,7 +149,6 @@ esl_gam_logsurv(double x, double mu, double lambda, double tau)
 
 
 /* Function:  esl_gam_invcdf()
- * Incept:    SRE, Mon Nov 14 13:15:02 2005 [HHMI HQ]
  *
  * Purpose:   Calculates the inverse CDF for a gamma with location
  *            parameter <mu>, scale parameter <lambda> and shape
@@ -204,7 +194,6 @@ esl_gam_invcdf(double p, double mu, double lambda, double tau)
  ****************************************************************************/ 
 
 /* Function:  esl_gam_generic_pdf()
- * Incept:    SRE, Mon Nov 14 13:32:47 2005 [HHMI HQ]
  *
  * Purpose:   Generic-API wrapper around <esl_gam_pdf()>, taking 
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -219,7 +208,6 @@ esl_gam_generic_pdf(double x, void *params)
 
 
 /* Function:  esl_gam_generic_cdf()
- * Incept:    SRE, Mon Nov 14 13:37:28 2005 [HHMI HQ]
  *
  * Purpose:   Generic-API wrapper around <esl_gam_cdf()>, taking 
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -234,7 +222,6 @@ esl_gam_generic_cdf(double x, void *params)
 
 
 /* Function:  esl_gam_generic_surv()
- * Incept:    SRE, Mon Nov 14 13:35:30 2005 [HHMI HQ]
  *
  * Purpose:   Generic-API wrapper around <esl_gam_surv()>, taking 
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -249,7 +236,6 @@ esl_gam_generic_surv(double x, void *params)
 
 
 /* Function:  esl_gam_generic_invcdf()
- * Incept:    SRE, Mon Nov 14 13:36:48 2005 [HHMI HQ]
  *
  * Purpose:   Generic-API wrapper around <esl_gam_invcdf()>, taking 
  *            a void ptr to a double array containing $\mu$, $\lambda$,
@@ -270,14 +256,15 @@ esl_gam_generic_invcdf(double x, void *params)
  ****************************************************************************/ 
 
 /* Function:  esl_gam_Plot()
- * Incept:    SRE, Mon Nov 14 13:38:27 2005 [HHMI HQ]
  *
  * Purpose:   Plot some gamma distribution function <func> (for instance,
  *            <esl_gam_pdf()>) for parameters <mu>, <lambda>, and <tau>, for
  *            a range of values x from <xmin> to <xmax> in steps of <xstep>;
  *            output to an open stream <fp> in xmgrace XY input format.
  *
- * Returns:   <eslOK>.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEWRITE> on any system write error, such as a filled disk.
  */
 int
 esl_gam_Plot(FILE *fp, double mu, double lambda, double tau,
@@ -286,8 +273,8 @@ esl_gam_Plot(FILE *fp, double mu, double lambda, double tau,
 {
   double x;
   for (x = xmin; x <= xmax; x += xstep)
-    fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda, tau));
-  fprintf(fp, "&\n");
+    if (fprintf(fp, "%f\t%g\n", x, (*func)(x, mu, lambda, tau)) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "gamma plot write failed");
+  if (fprintf(fp, "&\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "gamma plot write failed");
   return eslOK;
 }
 /*-------------------- end plot dumping routines ---------------------------*/
@@ -298,7 +285,6 @@ esl_gam_Plot(FILE *fp, double mu, double lambda, double tau,
  ****************************************************************************/ 
 #ifdef eslAUGMENT_RANDOM
 /* Function:  esl_gam_Sample()
- * Incept:    SRE, Mon Nov 14 13:40:46 2005 [HHMI HQ]
  *
  * Purpose:   Sample a gamma-distributed random variate.
  */
@@ -320,7 +306,6 @@ esl_gam_Sample(ESL_RANDOMNESS *r, double mu, double lambda, double tau)
  ****************************************************************************/ 
 
 /* Function:  esl_gam_FitComplete()
- * Incept:    SRE, Wed Nov 16 17:27:37 2005 [St. Louis]
  *
  * Purpose:   Given complete data consisting of <n> samples <x[0]..x[n-1]>,
  *            and a known location parameter <mu>, determine and return
@@ -459,7 +444,7 @@ tau_function(double tau, double mean, double logsum)
   double psitau;
   
   esl_stats_Psi(tau, &psitau);
-  return (log(tau) - psitau - log(mean) + logsum);  
+  return ( ((log(tau) - psitau) - log(mean)) + logsum );  
 }
 
 
@@ -638,10 +623,13 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_gamma.c 727 2011-10-24 17:17:32Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_gamma.c $
  *****************************************************************/

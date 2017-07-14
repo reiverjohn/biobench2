@@ -8,7 +8,7 @@
 # EPN, Tue Feb  2 13:19:44 2010
 
 $eslalistat= shift;
-$tmppfx      = shift;
+$tmppfx    = shift;
 
 if (! -x "$eslalistat") { die "FAIL: didn't find esl-alistat binary $eslalistat"; }
 
@@ -31,6 +31,9 @@ close ALIFILE;
 open(ALIFILE, ">$tmppfx.dbl.stk") || die "FAIL: couldn't open $tmppfx.stk for writing alifile";
 print ALIFILE << "EOF";
 # STOCKHOLM 1.0
+#=GS seq1 WT 1.5
+#=GS seq2 WT 1.0
+#=GS seq3 WT 0.5
 seq1         aaAAAA..AAAA...Cc.cCCCCCC.C..GGGGGgggg
 #=GR seq1 PP 5789**..**88...*9.9****88.7..776543210
 seq2         ..AAAAa.AAAAaacCcccCCCCCCcCccGGGGG....
@@ -46,6 +49,7 @@ seq1         aaA
 #=GR seq1 PP 578
 seq2         ..A
 #=GR seq2 PP ..*
+#=GC SS_cons ...
 #=GC RF      ..A
 //
 EOF
@@ -62,7 +66,7 @@ aaAAAA..AAAA...Cc.cCCCCCC.C..GGGGGgggg
 EOF
 close ALIFILE;
 
-$output = `$eslalistat $smallA[$pass] -h`;
+$output = `$eslalistat -h`;
 if ($? != 0)                                     { die "FAIL: esl-alistat failed unexpectedly"; }
 if ($output !~ /Usage: esl-alistat/)             { die "FAIL: help output not right"; }
 
@@ -111,7 +115,7 @@ for($pass = 0; $pass < 2; $pass++) {
 
     if($pass == 0) { 
 	$output = `$eslalistat $smallA[$pass] --informat afa --rna $tmppfx.afa 2>&1`;
-	if ($? != 0)                                                                                                                               { die "FAIL: esl-alistat failed unexpectedly";}
+	if ($? != 0)                                         { die "FAIL: esl-alistat failed unexpectedly";}
 	if ($output !~ /Format:              aligned FASTA/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
 	if ($output !~ /Alignment length:    38/)        { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
 	if ($output !~ /Average length:      26.7/)      { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
@@ -129,6 +133,7 @@ for($pass = 0; $pass < 2; $pass++) {
 
     # test a file with 2 alignments
     $output = `$eslalistat $smallA[$pass] --rna $tmppfx.dbl.stk 2>&1`;
+    if ($? != 0)                                         { die "FAIL: esl-alistat failed unexpectedly";}
     if ($output !~ /Alignment length:    38/)        { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
     if ($output !~ /Average length:      26.7/)      { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
     if ($output !~ /Alignment number:    2/)         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
@@ -157,10 +162,16 @@ for($pass = 0; $pass < 2; $pass++) {
     system("$eslalistat --pcinfo  $tmppfx.pc $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
     if ($? != 0)                                         { die "FAIL: esl-alistat failed unexpectedly";}
     $output = `cat $tmppfx.pc`;
-    if($output !~ /31      18        3        0        0        0        0        0        0        0        1        1        0        1        0  0.82\d+/) { 
+    if($output !~ /31\s+18\s+3.0\s+0.0\s+0.0\s+0.0\s+0.0\s+0.0\s+0.0\s+0.0\s+1.0\s+1.0\s+0.0\s+1.0\s+0.0\s+0.82\d+/) { 
 	die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; 
     }
     if($output !~ /\# Alignment idx:  2/)                { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+
+    system("$eslalistat --list $tmppfx.list $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
+    if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
+    $output = `cat $tmppfx.list`;
+    if($output !~ /seq2.+seq2/s)                                  { die "FAIL: alignment lists created incorrectly on pass $pass2write"; }
+    if($output !~ /seq3/)                                         { die "FAIL: alignment lists created incorrectly on pass $pass2write"; }
 
     if($pass == 0) { # these are incompatible with --small 
 	system("$eslalistat --psinfo  $tmppfx.ps $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
@@ -176,15 +187,34 @@ for($pass = 0; $pass < 2; $pass++) {
 	system("$eslalistat --iinfo  $tmppfx.i $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
 	if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
 	$output = `cat $tmppfx.i`;
-        if($output !~ /16           1  0.33\d+     2.0\d+         2/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+        if($output !~ /16\s+1.0\s+0.33\d+\s+2.0/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+	if($output !~ /\# Alignment idx:  2/)     { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+
+	system("$eslalistat --cinfo $tmppfx.c --noambig $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
+	if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
+	$output = `cat $tmppfx.c`;
+	if($output !~ /3\s+3\.\d+\s+0\.\d+\s+0\.\d+\s+0/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
 	if($output !~ /\# Alignment idx:  2/)                         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
 
-	system("$eslalistat --list $tmppfx.list $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
+	system("$eslalistat --bpinfo  $tmppfx.bp $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
 	if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
-	$output = `cat $tmppfx.list`;
-        if($output !~ /seq3/)                                         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+	$output = `cat $tmppfx.bp`;
+        if($output !~ /16\s+34\s+0\s+0\s+0\s+0\s+0\s+0\s+2\s+0\s+0\s+0\s+0\s+0\s+0\s+0\s+0\s+0\s+/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+	if($output !~ /\# Alignment idx:  2/)                         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+
+	system("$eslalistat --weight --cinfo $tmppfx.c $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
+	if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
+	$output = `cat $tmppfx.c`;
+	if($output !~ /2\s+1\.5\s+0\.\d+\s+0\.\d+\s+0/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
 	if($output !~ /\# Alignment idx:  2/)                         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
     }
+
+    system("$eslalistat --cinfo $tmppfx.c $smallA[$pass] --rna $tmppfx.dbl.stk > /dev/null");
+    if ($? != 0)                                                  { die "FAIL: esl-alistat failed unexpectedly";}
+    $output = `cat $tmppfx.c`;
+    if($output !~ /3\s+3\.\d+\s+0\.\d+\s+0\.\d+\s+0/) { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+    if($output !~ /\# Alignment idx:  2/)                         { die "FAIL: alignment statistics calculated incorrectly on pass $pass2write"; }
+
 }
 
 
@@ -198,4 +228,5 @@ unlink "$tmppfx.list";
 unlink "$tmppfx.pc";
 unlink "$tmppfx.ps";
 unlink "$tmppfx.r";
+unlink "$tmppfx.c";
 exit 0;

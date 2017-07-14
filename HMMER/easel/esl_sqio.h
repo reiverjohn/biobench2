@@ -1,9 +1,10 @@
 /* Unaligned sequence file i/o.
  * 
- * SVN $Id: esl_sqio.h 509 2010-02-07 22:56:55Z eddys $
+ * SVN $Id: esl_sqio.h 863 2013-04-18 13:40:02Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_sqio.h $
  */
-#ifndef ESL_SQIO_INCLUDED
-#define ESL_SQIO_INCLUDED
+#ifndef eslSQIO_INCLUDED
+#define eslSQIO_INCLUDED
 
 #include <stdio.h>
 
@@ -18,8 +19,10 @@
 #endif
 #ifdef eslAUGMENT_MSA
 #include "esl_msa.h"
+#include "esl_msafile.h"
 #endif
 
+/*::cexcerpt::sq_sqio_data::begin::*/
 /* ESL_SQDATA:
  * Data for different sequence formats.
  */
@@ -29,6 +32,7 @@ typedef union {
   ESL_SQNCBI_DATA  ncbi;
 #endif
 } ESL_SQDATA;
+/*::cexcerpt::sq_sqio_data::end::*/
 
 /* ESL_SQFILE:
  * An open sequence file for reading.
@@ -61,7 +65,7 @@ typedef struct esl_sqio_s {
   int   (*read_window)     (struct esl_sqio_s *sqfp, int C, int W, ESL_SQ *sq);
   int   (*echo)            (struct esl_sqio_s *sqfp, const ESL_SQ *sq, FILE *ofp);
 
-  int   (*read_block)      (struct esl_sqio_s *sqfp, ESL_SQ_BLOCK *sqBlock);
+  int   (*read_block)      (struct esl_sqio_s *sqfp, ESL_SQ_BLOCK *sqBlock, int max_residues, int max_sequences, int long_target);
 
 #ifdef eslAUGMENT_SSI
   int   (*open_ssi)        (struct esl_sqio_s *sqfp, const char *ssifile_hint);
@@ -79,19 +83,48 @@ typedef struct esl_sqio_s {
   ESL_SQDATA data;            /* format specific data                     */
 } ESL_SQFILE;
 
+#if defined(eslAUGMENT_ALPHABET)  
+/* ESL_SQCACHE:
+ * A entire database cached into memory.
+ */
+typedef struct esl_sqcache_s {
+  char               *filename;    /* Name of file (for diagnostics)              */
+  int                 format;      /* Format code of this file                    */
+
+  const ESL_ALPHABET *abc;         /* alphabet for database                       */
+
+  uint32_t            seq_count;   /* number of sequences                         */
+  uint64_t            res_count;   /* number of residues                          */
+  uint32_t            max_seq;     /* longest sequence                            */
+
+  ESL_SQ             *sq_list;     /* list of cached sequences [0 .. seq_count-1] */
+
+  void               *residue_mem; /* memory holding the residues                 */
+  void               *header_mem;  /* memory holding the header strings           */
+
+  uint64_t            res_size;    /* size of residue memory allocation           */
+  uint64_t            hdr_size;    /* size of header memory allocation            */
+} ESL_SQCACHE;
+#endif
+
+/*::cexcerpt::sq_sqio_format::begin::*/
 /* Unaligned file format codes
  * These codes are coordinated with the msa module.
  *   - 0 is an unknown/unassigned format (eslSQFILE_UNKNOWN, eslMSAFILE_UNKNOWN)
  *   - <=100 is reserved for sqio, for unaligned formats
  *   - >100  is reserved for msa, for aligned formats
  */
-#define eslSQFILE_UNKNOWN 0
-#define eslSQFILE_FASTA   1
-#define eslSQFILE_EMBL    2	/* EMBL/Swissprot/TrEMBL */
-#define eslSQFILE_GENBANK 3	/* Genbank */
-#define eslSQFILE_DDBJ    4	/* DDBJ (currently passed to Genbank parser */
-#define eslSQFILE_UNIPROT 5     /* Uniprot (passed to EMBL parser) */
-#define eslSQFILE_NCBI    6     /* NCBI (blast db) */
+#define eslSQFILE_UNKNOWN      0
+#define eslSQFILE_FASTA        1
+#define eslSQFILE_EMBL         2     /* EMBL/Swiss-Prot/TrEMBL */
+#define eslSQFILE_GENBANK      3     /* GenBank */
+#define eslSQFILE_DDBJ         4     /* DDBJ (currently passed to GenBank parser */
+#define eslSQFILE_UNIPROT      5     /* UniProt (passed to EMBL parser) */
+#define eslSQFILE_NCBI         6     /* NCBI (blast db) */
+#define eslSQFILE_DAEMON       7     /* Farrar's "daemon" format for hmmpgmd queries: fasta with // end-of-record terminator */
+#define eslSQFILE_HMMPGMD      8     /* Farrar's hmmpgmd database format: fasta w/ extra header line starting in '#' */
+#define eslSQFILE_FMINDEX      9     /* the pressed FM-index format used for the FM-index-based MSV acceleration */
+/*::cexcerpt::sq_sqio_format::end::*/
 
 
 /* eslREADBUFSIZE is the fixed size of a block to bring in at one time,
@@ -107,6 +140,9 @@ extern void esl_sqfile_Close(ESL_SQFILE *sqfp);
 extern int  esl_sqfile_OpenDigital(const ESL_ALPHABET *abc, const char *filename, int format, const char *env, ESL_SQFILE **ret_sqfp);
 extern int  esl_sqfile_SetDigital(ESL_SQFILE *sqfp, const ESL_ALPHABET *abc);
 extern int  esl_sqfile_GuessAlphabet(ESL_SQFILE *sqfp, int *ret_type);
+
+extern int  esl_sqfile_Cache(const ESL_ALPHABET *abc, const char *seqfile, int fmt, const char *env, ESL_SQCACHE **ret_sqcache);
+extern void esl_sqfile_Free(ESL_SQCACHE *sqcache);
 #endif
 
 const char  *esl_sqfile_GetErrorBuf(const ESL_SQFILE *sqfp);
@@ -117,12 +153,12 @@ extern int   esl_sqio_EncodeFormat(char *fmtstring);
 extern char *esl_sqio_DecodeFormat(int fmt);
 extern int   esl_sqio_IsAlignment(int fmt);
 
-extern int   esl_sqio_Read      (ESL_SQFILE *sqfp, ESL_SQ *sq);
-extern int   esl_sqio_ReadInfo  (ESL_SQFILE *sqfp, ESL_SQ *sq);
-extern int   esl_sqio_ReadWindow(ESL_SQFILE *sqfp, int C, int W, ESL_SQ *sq);
-extern int   esl_sqio_Echo      (ESL_SQFILE *sqfp, const ESL_SQ *sq, FILE *ofp);
-
-extern int   esl_sqio_ReadBlock (ESL_SQFILE *sqfp, ESL_SQ_BLOCK *sqBlock);
+extern int   esl_sqio_Read        (ESL_SQFILE *sqfp, ESL_SQ *sq);
+extern int   esl_sqio_ReadInfo    (ESL_SQFILE *sqfp, ESL_SQ *sq);
+extern int   esl_sqio_ReadWindow  (ESL_SQFILE *sqfp, int C, int W, ESL_SQ *sq);
+extern int   esl_sqio_ReadSequence(ESL_SQFILE *sqfp, ESL_SQ *sq);
+extern int   esl_sqio_Echo        (ESL_SQFILE *sqfp, const ESL_SQ *sq, FILE *ofp);
+extern int   esl_sqio_ReadBlock   (ESL_SQFILE *sqfp, ESL_SQ_BLOCK *sqBlock, int max_residues, int max_sequences, int long_target);
 
 #ifdef eslAUGMENT_SSI
 extern int   esl_sqfile_OpenSSI         (ESL_SQFILE *sqfp, const char *ssifile_hint);
@@ -135,12 +171,13 @@ extern int   esl_sqio_FetchSubseq(ESL_SQFILE *sqfp, const char *source, int64_t 
 #endif
 
 extern int   esl_sqio_Write(FILE *fp, ESL_SQ *s, int format, int update);
+extern int   esl_sqio_Parse(char *buffer, int size, ESL_SQ *s, int format);
 
-#endif /*!ESL_SQIO_INCLUDED*/
+#endif /*eslSQIO_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

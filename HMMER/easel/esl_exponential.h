@@ -1,11 +1,11 @@
-/* esl_exponential.h
- * Exponential distributions.
+/* Exponential distributions.
  * 
  * SRE, Wed Aug 10 08:32:45 2005 [St. Louis]
- * SVN $Id: esl_exponential.h 172 2007-04-26 00:54:53Z eddys $
+ * SVN $Id: esl_exponential.h 770 2012-06-06 19:33:59Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_exponential.h $
  */
-#ifndef ESL_EXP_INCLUDED
-#define ESL_EXP_INCLUDED
+#ifndef eslEXPONENTIAL_INCLUDED
+#define eslEXPONENTIAL_INCLUDED
 
 #ifdef eslAUGMENT_RANDOM
 #include <esl_random.h>
@@ -21,6 +21,8 @@ extern double esl_exp_logcdf (double x, double mu, double lambda);
 extern double esl_exp_surv   (double x, double mu, double lambda);
 extern double esl_exp_logsurv(double x, double mu, double lambda);
 extern double esl_exp_invcdf (double p, double mu, double lambda);
+extern double esl_exp_invsurv(double p, double mu, double lambda);
+
 
 extern double esl_exp_generic_pdf   (double x, void *params);
 extern double esl_exp_generic_cdf   (double x, void *params);
@@ -44,11 +46,11 @@ extern int esl_exp_FitCompleteBinned(ESL_HISTOGRAM *h,
 #endif
 
 
-#endif /*ESL_EXP_INCLUDED*/
+#endif /*eslEXPONENTIAL_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

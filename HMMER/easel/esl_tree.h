@@ -1,11 +1,11 @@
-/* esl_tree.c
- * Phylogenetic trees.
+/* Phylogenetic trees.
  * 
- * SVN $Id: esl_tree.h 303 2008-11-24 19:09:31Z eddys $
  * SRE, Tue May  2 13:54:30 2006 [St. Louis]
+ * SVN $Id: esl_tree.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_tree.h $
  */
-#ifndef ESL_TREE_INCLUDED
-#define ESL_TREE_INCLUDED
+#ifndef eslTREE_INCLUDED
+#define eslTREE_INCLUDED
 
 #include <esl_dmatrix.h>
 #include <esl_random.h>
@@ -116,14 +116,11 @@ extern int esl_tree_Simulate(ESL_RANDOMNESS *r, int N, ESL_TREE **ret_T);
 extern int esl_tree_ToDistanceMatrix(ESL_TREE *T, ESL_DMATRIX **ret_D);
 
 
-#endif /*!ESL_TREE_INCLUDED*/
-
-
-
+#endif /*eslTREE_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

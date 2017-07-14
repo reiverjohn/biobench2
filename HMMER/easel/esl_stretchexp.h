@@ -1,17 +1,15 @@
-/* esl_stretchexp.h
- * Stretched exponential distributions.
+/* Stretched exponential distributions.
  * 
- * SRE, Fri Aug 19 13:51:14 2005 [St. Louis]
- * xref STL9/146
- * SVN $Id: esl_stretchexp.h 83 2005-12-13 20:54:07Z eddy $
+ * SRE, Fri Aug 19 13:51:14 2005 [St. Louis] [xref STL9/146]
+ * SVN $Id: esl_stretchexp.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_stretchexp.h $
  */
-#ifndef ESL_STRETCHEXP_INCLUDED
-#define ESL_STRETCHEXP_INCLUDED
+#ifndef eslSTRETCHEXP_INCLUDED
+#define eslSTRETCHEXP_INCLUDED
 
 #ifdef eslAUGMENT_RANDOM
 #include <esl_random.h>
 #endif
-
 #ifdef eslAUGMENT_HISTOGRAM
 #include <esl_histogram.h>
 #endif
@@ -48,12 +46,11 @@ extern int esl_sxp_FitCompleteBinned(ESL_HISTOGRAM *g,
 #endif /*eslAUGMENT_MINIMIZER*/
 
 
-#endif /*ESL_STRETCHEXP_INCLUDED*/
-
+#endif /*eslSTRETCHEXP_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

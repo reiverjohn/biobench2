@@ -6,7 +6,7 @@
 # Example:   ./esl-shuffle.itest.pl ./esl-shuffle        foo
 #
 # SRE, Tue Nov 10 17:27:22 2009
-# SVN $Id: esl-shuffle.itest.pl 509 2010-02-07 22:56:55Z eddys $
+# SVN $Id: esl-shuffle.itest.pl 589 2010-04-10 12:53:24Z eddys $
 
 $eslshuffle = shift;
 $tmppfx     = shift;
@@ -29,8 +29,6 @@ close TESTFILE;
 # regressions need to change.
 #
 @output = `$eslshuffle --seed 42 $tmppfx.fa`;
-print    "$eslshuffle --seed 42 $tmppfx.fa";
-print @output;
 if ($? != 0)                                 { die "FAIL: esl-shuffle failed unexpectedly"; }
 if ($output[0] !~ /^>seq1-shuffled$/)        { die "FAIL: shuffle output is incorrect";     }
 if ($output[1] !~ /^TIGEYHFWCKVSALQNPDRM$/)  { die "FAIL: shuffle output is incorrect";     }

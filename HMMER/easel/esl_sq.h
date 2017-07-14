@@ -1,10 +1,11 @@
 /* A sequence.
  * 
  * SRE, Mon Mar 31 17:03:51 2008 [Janelia]
- * SVN $Id: esl_sq.h 509 2010-02-07 22:56:55Z eddys $
+ * SVN $Id: esl_sq.h 850 2013-02-04 15:44:04Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_sq.h $
  */
-#ifndef ESL_SQ_INCLUDED
-#define ESL_SQ_INCLUDED
+#ifndef eslSQ_INCLUDED
+#define eslSQ_INCLUDED
 
 #ifdef eslAUGMENT_ALPHABET
 #include "esl_alphabet.h"
@@ -12,6 +13,7 @@
 #ifdef eslAUGMENT_MSA
 #include "esl_msa.h"
 #endif
+
 
 /* ESL_SQ - a biosequence
  * 
@@ -120,6 +122,13 @@ typedef struct {
   off_t    doff;	   /* data offset (start of sequence data); -1 if none */
   off_t    eoff;	   /* offset to last byte of record; -1 if unknown     */
 
+  /* Optional information for extra residue markups.
+   * The number of them, and their tags are arbitrary
+   */
+  char  **xr_tag;          /* markup tags for extra residue markups [0..ntr-1][free-text], [0..ntr-1][free-text], or NULL */
+  char  **xr;              /* annotations for extra residue markups [0..ntr-1][0..n-1],    [0..ntr-1][1..n],      or NULL */
+  int     nxr;		   /* number of extra residue markups                                                             */
+
   /* Copy of a pointer to the alphabet, if digital mode */
 #if defined(eslAUGMENT_ALPHABET)
   const ESL_ALPHABET *abc; /* reference to the alphabet for <dsq>              */
@@ -131,6 +140,8 @@ typedef struct {
 typedef struct {
   int      count;       /* number of <ESL_SQ> objects in the block */
   int      listSize;    /* maximum number elements in the list     */
+  int      complete;    /*TRUE if the the final ESL_SQ element on the block is complete, FALSE if it's only a partial winow of the full sequence*/
+  int64_t  first_seqidx;/*unique identifier of the first ESL_SQ object on list;  the seqidx of the i'th entry on list is first_seqidx+i */
   ESL_SQ  *list;        /* array of <ESL_SQ> objects               */
 } ESL_SQ_BLOCK;
 
@@ -166,6 +177,7 @@ extern int     esl_sq_SetCoordComplete(ESL_SQ *sq, int64_t L);
 extern int     esl_sq_CAddResidue (ESL_SQ *sq, char c);
 extern int     esl_sq_ReverseComplement(ESL_SQ *sq);
 extern int     esl_sq_Checksum(const ESL_SQ *sq, uint32_t *ret_checksum);
+extern int     esl_sq_CountResidues(const ESL_SQ *sq, int start, int L, float *f);
 
 #ifdef eslAUGMENT_ALPHABET
 extern ESL_SQ *esl_sq_CreateDigital(const ESL_ALPHABET *abc);
@@ -175,6 +187,7 @@ extern int     esl_sq_Digitize(const ESL_ALPHABET *abc, ESL_SQ *sq);
 extern int     esl_sq_Textize(ESL_SQ *sq);
 extern int     esl_sq_GuessAlphabet(ESL_SQ *sq, int *ret_type);
 extern int     esl_sq_XAddResidue(ESL_SQ *sq, ESL_DSQ x);
+extern int     esl_sq_ConvertDegen2X(ESL_SQ *sq);
 #endif
 
 #ifdef eslAUGMENT_MSA
@@ -188,11 +201,11 @@ extern ESL_SQ_BLOCK *esl_sq_CreateDigitalBlock(int count, const ESL_ALPHABET *ab
 #endif
 extern void          esl_sq_DestroyBlock(ESL_SQ_BLOCK *sqBlock);
 
-#endif /*!ESL_SQ_INCLUDED*/
+#endif /*eslSQ_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

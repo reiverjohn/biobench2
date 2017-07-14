@@ -8,7 +8,7 @@
  *    5. Copyright and license information.
  *    
  * SRE, Thu Jun 14 09:59:20 2007 [Janelia] [Tom Waits, Orphans]
- * SVN $Id: mpisupport.c 2963 2009-10-20 15:52:20Z farrarm $
+ * SVN $Id: mpi.c 4452 2013-05-05 01:44:04Z wheelert $
  */
 #include "p7_config.h"		
 
@@ -158,9 +158,10 @@ p7_oprofile_MPIPackSize(P7_OPROFILE *om, MPI_Comm comm, int *ret_n)
   if (om->acc       != NULL) len += strlen(om->acc)       + 1;
   if (om->desc      != NULL) len += strlen(om->desc)      + 1;
   if (om->rf        != NULL) len += strlen(om->rf)        + 1;
+  if (om->mm        != NULL) len += strlen(om->mm)        + 1;
   if (om->cs        != NULL) len += strlen(om->cs)        + 1;
   if (om->consensus != NULL) len += strlen(om->consensus) + 1;
-  if (MPI_Pack_size(6,           MPI_INT, comm, &sz) != 0) ESL_XEXCEPTION(eslESYS, "pack size failed");   n += sz;
+  if (MPI_Pack_size(7,           MPI_INT, comm, &sz) != 0) ESL_XEXCEPTION(eslESYS, "pack size failed");   n += sz;
   if (MPI_Pack_size(len,        MPI_CHAR, comm, &sz) != 0) ESL_XEXCEPTION(eslESYS, "pack size failed");   n += sz;
   cnt = p7_NEVPARAM + p7_NCUTOFFS + p7_MAXABET;
   if (MPI_Pack_size(cnt,       MPI_FLOAT, comm, &sz) != 0) ESL_XEXCEPTION(eslESYS, "pack size failed");   n += sz;
@@ -273,6 +274,10 @@ p7_oprofile_MPIPack(P7_OPROFILE *om, char *buf, int n, int *pos, MPI_Comm comm)
   if (MPI_Pack(&len,              1,                      MPI_INT, buf, n, pos, comm) != 0) ESL_EXCEPTION(eslESYS, "pack failed");
   if (len > 0)
     if (MPI_Pack( om->rf,         len,                   MPI_CHAR, buf, n, pos, comm) != 0) ESL_EXCEPTION(eslESYS, "pack failed");
+  len = (om->mm != NULL)        ? strlen(om->mm)+1 : 0;
+  if (MPI_Pack(&len,              1,                      MPI_INT, buf, n, pos, comm) != 0) ESL_EXCEPTION(eslESYS, "pack failed");
+  if (len > 0)
+    if (MPI_Pack( om->mm,         len,                   MPI_CHAR, buf, n, pos, comm) != 0) ESL_EXCEPTION(eslESYS, "pack failed");
   len = (om->cs != NULL)        ? strlen(om->cs)+1 : 0;
   if (MPI_Pack(&len,              1,                      MPI_INT, buf, n, pos, comm) != 0) ESL_EXCEPTION(eslESYS, "pack failed");
   if (len > 0)
@@ -423,6 +428,12 @@ p7_oprofile_MPIUnpack(char *buf, int n, int *pos, MPI_Comm comm, ESL_ALPHABET **
     ESL_ALLOC(om->rf, len);
     if (MPI_Unpack(buf, n, pos,  om->rf,         len,                   MPI_CHAR, comm) != 0) ESL_EXCEPTION(eslESYS, "mpi unpack failed");
     om->rf[len-1] = '\0';
+  }
+  if (MPI_Unpack(buf, n, pos, &len,              1,                      MPI_INT, comm) != 0) ESL_EXCEPTION(eslESYS, "mpi unpack failed");
+  if (len > 0) {
+    ESL_ALLOC(om->mm, len);
+    if (MPI_Unpack(buf, n, pos,  om->mm,         len,                   MPI_CHAR, comm) != 0) ESL_EXCEPTION(eslESYS, "mpi unpack failed");
+    om->mm[len-1] = '\0';
   }
   if (MPI_Unpack(buf, n, pos, &len,              1,                      MPI_INT, comm) != 0) ESL_EXCEPTION(eslESYS, "mpi unpack failed");
   if (len > 0) {
@@ -580,7 +591,7 @@ static char banner[] = "benchmark driver for MPI communication";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_ALPHABET   *abc     = esl_alphabet_Create(eslAMINO);
   P7_BG          *bg      = p7_bg_Create(abc);
@@ -607,7 +618,7 @@ main(int argc, char **argv)
       P7_HMM         *hmm     = NULL;
 
       /* Read HMMs from a file. */
-      if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+      if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
 
       esl_stopwatch_Start(w);
       while (p7_oprofile_ReadMSV(hfp, &abc, &om)  == eslOK &&
@@ -739,7 +750,7 @@ static char banner[] = "test driver for mpi.c";
 int
 main(int argc, char **argv)
 {
-  ESL_GETOPTS *go = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_GETOPTS *go = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
   int          my_rank;
   int          nproc;
 
@@ -761,18 +772,22 @@ main(int argc, char **argv)
 
 
 #else /*!HAVE_MPI*/
-/* Provide a null test driver if MPI isn't enabled, so
- * automated tests are always happy.
+/* If we don't have MPI compiled in, provide some nothingness to:
+ *   a. prevent Mac OS/X ranlib from bitching about .o file that "has no symbols" 
+ *   b. prevent compiler from bitching about "empty compilation unit"
+ *   c. automatically pass the automated tests.
  */
-#ifdef p7MPI_TESTDRIVE
+void p7_mpi_DoAbsolutelyNothing(void) { return; }
+
+#if defined p7MPI_TESTDRIVE || p7MPI_BENCHMARK || p7MPI_EXAMPLE
 int main(void) { return 0; }
 #endif
 #endif /*HAVE_MPI*/
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

@@ -1,7 +1,7 @@
 /* Miscellaneous summary statistics calculated for HMMs and profiles.
  * 
  * SRE, Fri May  4 11:43:20 2007 [Janelia]
- * SVN $Id: modelstats.c 3152 2010-02-07 22:55:22Z eddys $
+ * SVN $Id: modelstats.c 4385 2013-02-05 14:42:40Z wheelert $
  */
 
 #include "p7_config.h"
@@ -255,10 +255,11 @@ p7_hmm_CompositionKLDist(P7_HMM *hmm, P7_BG *bg, float *ret_KL, float **opt_avp)
 }
 
 
+
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

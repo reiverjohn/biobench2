@@ -3,18 +3,18 @@
  * 
  * Contents:
  *   1. The ESL_SCOREMATRIX object.
- *   2. Reading/writing score matrices.
- *   3. Interpreting score matrices probabilistically.
- *   4. Utility programs.
- *   5. Unit tests.
- *   6. Test driver.
- *   7. Example program.
- *   8. License and copyright.
- * 
- * SRE, Mon Apr  2 08:25:05 2007 [Janelia]
- * SVN $Id: esl_scorematrix.c 337 2009-05-12 02:13:02Z eddys $
+ *   2. Some classic score matrices.
+ *   3. Deriving a score matrix probabilistically.
+ *   4. Reading/writing matrices from/to files.
+ *   5. Implicit probabilistic basis, I:  given bg.
+ *   6. Implicit probabilistic basis, II: bg unknown. [Yu/Altschul03,05]
+ *   7. Experiment driver.
+ *   8  Utility programs.
+ *   9. Unit tests.
+ *  10. Test driver.
+ *  11. Example program.
+ *  12. License and copyright.
  */
-
 #include "esl_config.h"
 
 #include <string.h>
@@ -22,6 +22,7 @@
 
 #include "easel.h"
 #include "esl_alphabet.h"
+#include "esl_composition.h"
 #include "esl_dmatrix.h"
 #include "esl_fileparser.h"
 #include "esl_rootfinder.h"
@@ -29,13 +30,13 @@
 #include "esl_scorematrix.h"
 #include "esl_vectorops.h"
 
+
 /*****************************************************************
- * 1. The ESL_SCOREMATRIX object
+ *# 1. The ESL_SCOREMATRIX object
  *****************************************************************/
 
 /* Function:  esl_scorematrix_Create()
- * Synopsis:  Create an <ESL_SCOREMATRIX>.
- * Incept:    SRE, Mon Apr  2 08:38:10 2007 [Janelia]
+ * Synopsis:  Allocate and initialize an <ESL_SCOREMATRIX> object.
  *
  * Purpose:   Allocates a score matrix for alphabet <abc>, initializes
  *            all scores to zero.
@@ -49,9 +50,9 @@
 ESL_SCOREMATRIX *
 esl_scorematrix_Create(const ESL_ALPHABET *abc)
 {
+  ESL_SCOREMATRIX *S = NULL;
   int status;
   int i;
-  ESL_SCOREMATRIX *S = NULL;
 
   ESL_ALLOC(S, sizeof(ESL_SCOREMATRIX));
   S->s          = NULL;
@@ -68,7 +69,7 @@ esl_scorematrix_Create(const ESL_ALPHABET *abc)
   for (i = 0; i < abc->Kp; i++) S->s[i] = NULL;
   ESL_ALLOC(S->isval, sizeof(char) * abc->Kp);
   for (i = 0; i < abc->Kp; i++) S->isval[i] = FALSE;
-  ESL_ALLOC(S->outorder, sizeof(char) * abc->Kp);
+  ESL_ALLOC(S->outorder, sizeof(char) * (abc->Kp+1));
   S->outorder[0] = '\0';		/* init to empty string. */
 
   ESL_ALLOC(S->s[0], sizeof(int) * abc->Kp * abc->Kp);
@@ -82,54 +83,553 @@ esl_scorematrix_Create(const ESL_ALPHABET *abc)
   return NULL;
 }
 
-/* Function:  esl_scorematrix_SetIdentity()
- * Synopsis:  Set matrix to +1 match, 0 mismatch.
- * Incept:    SRE, Mon Apr 16 20:17:00 2007 [Janelia]
+
+
+/* Function:  esl_scorematrix_Copy()
+ * Synopsis:  Copy <src> matrix to <dest>.
  *
- * Purpose:   Sets score matrix <S> to be +1 for a match, 
- *            0 for a mismatch. <S> may be for any alphabet.
- *            
- *            Rarely useful in real use, but may be useful to create
- *            simple examples (including debugging).
+ * Purpose:   Copy <src> score matrix into <dest>. Caller
+ *            has allocated <dest> for the same alphabet as
+ *            <src>.
  *
- * Returns:   <eslOK> on success, and the scores in <S> are set.
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINCOMPAT> if <dest> isn't allocated for
+ *            the same alphabet as <src>.
+ *            <eslEMEM> on allocation error.
  */
 int
-esl_scorematrix_SetIdentity(ESL_SCOREMATRIX *S)
+esl_scorematrix_Copy(const ESL_SCOREMATRIX *src, ESL_SCOREMATRIX *dest)
 {
-  int a;
-  int x;
+  int i,j;
+  int status;
 
-  for (a = 0; a < S->abc_r->Kp*S->abc_r->Kp; a++) S->s[0][a] = 0;
-  for (a = 0; a < S->K; a++)                      S->s[a][a] = 1;
+  if (src->abc_r->type != dest->abc_r->type || src->K != dest->K || src->Kp != dest->Kp)
+    ESL_EXCEPTION(eslEINCOMPAT, "source and dest score matrix types don't match");
 
-  for (x = 0;           x < S->K;  x++)      S->isval[x] = TRUE;
-  for (x = S->abc_r->K; x < S->Kp; x++)      S->isval[x] = FALSE;
-  
-  strncpy(S->outorder, S->abc_r->sym, S->K);  
-  S->outorder[S->K] = '\0';
-  S->nc             = S->K;
+  for (i = 0; i < src->Kp; i++)
+    for (j = 0; j < src->Kp; j++)
+      dest->s[i][j] = src->s[i][j];
+  for (i = 0; i < src->Kp; i++)
+    dest->isval[i] = src->isval[i];
+  dest->nc = src->nc;
+  for (i = 0; i < src->nc; i++)
+    dest->outorder[i] = src->outorder[i];
+  dest->outorder[dest->nc] = '\0';
+
+  if ((status = esl_strdup(src->name, -1, &(dest->name))) != eslOK) return status;
+  if ((status = esl_strdup(src->path, -1, &(dest->path))) != eslOK) return status;
   return eslOK;
 }
 
-/* Function:  esl_scorematrix_SetBLOSUM62
- * Synopsis:  Set matrix to BLOSUM62 scores.
- * Incept:    SRE, Tue Apr  3 13:22:03 2007 [Janelia]
+/* Function:  esl_scorematrix_Clone()
+ * Synopsis:  Allocate a duplicate of a matrix. 
  *
- * Purpose:   Set the 20x20 canonical residue scores in an 
- *            allocated amino acid score matrix <S> to BLOSUM62
- *            scores \citep{Henikoff92}.
+ * Purpose:   Allocates a new matrix and makes it a duplicate
+ *            of <S>. Return a pointer to the new matrix.
  *
- * Returns:   <eslOK> on success, and the scores in <S> are set.
- * 
- * Throws:    <eslEMEM> on allocation error.
+ * Throws:    <NULL> on allocation failure.
+ */
+ESL_SCOREMATRIX *
+esl_scorematrix_Clone(const ESL_SCOREMATRIX *S)
+{
+  ESL_SCOREMATRIX *dup = NULL;
+
+  if ((dup = esl_scorematrix_Create(S->abc_r)) == NULL)  return NULL;
+  if (esl_scorematrix_Copy(S, dup)             != eslOK) { esl_scorematrix_Destroy(dup); return NULL; }
+  return dup;
+}
+
+
+/* Function:  esl_scorematrix_Compare()
+ * Synopsis:  Compare two matrices for equality.
+ *
+ * Purpose:   Compares two score matrices. Returns <eslOK> if they 
+ *            are identical, <eslFAIL> if they differ. Every aspect
+ *            of the two matrices is compared.
+ *            
+ *            The annotation (name, filename path) are not
+ *            compared; we may want to compare an internally
+ *            generated scorematrix to one read from a file.
  */
 int
-esl_scorematrix_SetBLOSUM62(ESL_SCOREMATRIX *S)
+esl_scorematrix_Compare(const ESL_SCOREMATRIX *S1, const ESL_SCOREMATRIX *S2)
 {
-  int x,y;
-  static int blosum62[29][29] = {
-    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~  */
+  int a,b;
+
+  if (strcmp(S1->outorder, S2->outorder) != 0) return eslFAIL;
+  if (S1->nc         != S2->nc)                return eslFAIL;
+  
+  for (a = 0; a < S1->nc; a++)
+    if (S1->isval[a] != S2->isval[a])          return eslFAIL;
+  
+  for (a = 0; a < S1->Kp; a++)
+    for (b = 0; b < S1->Kp; b++)
+      if (S1->s[a][b] != S2->s[a][b]) return eslFAIL;
+
+  return eslOK;
+}
+
+/* Function:  esl_scorematrix_CompareCanon()
+ * Synopsis:  Compares scores of canonical residues for equality.
+ *
+ * Purpose:   Compares the scores of canonical residues in 
+ *            two score matrices <S1> and <S2> for equality.
+ *            Returns <eslOK> if they are identical, <eslFAIL> 
+ *            if they differ. Peripheral aspects of the scoring matrices
+ *            having to do with noncanonical residues, output
+ *            order, and suchlike are ignored.
+ */
+int
+esl_scorematrix_CompareCanon(const ESL_SCOREMATRIX *S1, const ESL_SCOREMATRIX *S2)
+{
+  int a,b;
+
+  for (a = 0; a < S1->K; a++)
+    for (b = 0; b < S1->K; b++)
+      if (S1->s[a][b] != S2->s[a][b]) return eslFAIL;
+  return eslOK;
+}
+
+
+
+/* Function:  esl_scorematrix_Max()
+ * Synopsis:  Returns maximum value in score matrix.
+ *
+ * Purpose:   Returns the maximum value in score matrix <S>.
+ */
+int
+esl_scorematrix_Max(const ESL_SCOREMATRIX *S)
+{
+  int i,j;
+  int max = S->s[0][0];
+
+  for (i = 0; i < S->K; i++)
+    for (j = 0; j < S->K; j++)
+      if (S->s[i][j] > max) max = S->s[i][j];
+  return max;
+}
+
+/* Function:  esl_scorematrix_Min()
+ * Synopsis:  Returns minimum value in score matrix.
+ *
+ * Purpose:   Returns the minimum value in score matrix <S>.
+ */
+int
+esl_scorematrix_Min(const ESL_SCOREMATRIX *S)
+{
+  int i,j;
+  int min = S->s[0][0];
+
+  for (i = 0; i < S->K; i++)
+    for (j = 0; j < S->K; j++)
+      if (S->s[i][j] < min) min = S->s[i][j];
+  return min;
+}
+
+
+/* Function:  esl_scorematrix_IsSymmetric()
+ * Synopsis:  Returns <TRUE> for symmetric matrix.
+ *
+ * Purpose:   Returns <TRUE> if matrix <S> is symmetric,
+ *            or <FALSE> if it's not.
+ */
+int
+esl_scorematrix_IsSymmetric(const ESL_SCOREMATRIX *S)
+{
+  int i,j;
+
+  for (i = 0; i < S->K; i++)
+    for (j = i; j < S->K; j++)
+      if (S->s[i][j] != S->s[j][i]) return FALSE;
+  return TRUE;
+}
+
+/* Function:  esl_scorematrix_ExpectedScore()
+ * Synopsis:  Calculates the expected score of a matrix.
+ *
+ * Purpose:   Calculates the expected score of a matrix <S>,
+ *            given background frequencies <fi> and <fj>;
+ *            return it in <*ret_E>.
+ *            
+ *            The expected score is defined as
+ *            $\sum_{ab} f_a f_b \sigma_{ab}$.
+ *            
+ *            The expected score is in whatever units the score matrix
+ *            <S> is in. If you know $\lambda$, you can convert it to
+ *            units of bits ($\log 2$) by multiplying it by $\lambda /
+ *            \log 2$.
+ *
+ * Args:      S      - score matrix
+ *            fi     - background frequencies $f_i$ (0..K-1)
+ *            fj     - background frequencies $f_j$ (0..K-1)
+ *            ret_E  - RETURN: expected score
+ *
+ * Returns:   <eslOK> on success.
+ */
+int
+esl_scorematrix_ExpectedScore(ESL_SCOREMATRIX *S, double *fi, double *fj, double *ret_E)
+{
+  double E = 0.;
+  int    a,b;
+
+  for (a = 0; a < S->K; a++)
+    for (b = 0; b < S->K; b++)
+      E += fi[a] * fj[b] * (double) S->s[a][b];
+
+  *ret_E = E;
+  return eslOK;
+}
+
+
+/* Function:  esl_scorematrix_RelEntropy()
+ * Synopsis:  Calculates relative entropy of a matrix.
+ *
+ * Purpose:   Calculates the relative entropy of score matrix <S> in
+ *            bits, given its background distributions <fi> and <fj> and
+ *            its scale <lambda>.
+ *            
+ *            The relative entropy is defined as $\sum_{ab} p_{ab}
+ *            \log_2 \frac{p_{ab}} {f_a f_b}$, the average score (in
+ *            bits) of homologous aligned sequences. In general it is
+ *            $\geq 0$ (and certainly so in the case when background
+ *            frequencies $f_a$ and $f_b$ are the marginals of the
+ *            $p_{ab}$ joint ptobabilities).
+ *
+ * Args:      S          - score matrix
+ *            fi         - background freqs for sequence i
+ *            fj         - background freqs for sequence j
+ *            lambda     - scale factor $\lambda$ for <S>
+ *            ret_D      - RETURN: relative entropy.
+ * 
+ * Returns:   <eslOK> on success, and <ret_D> contains the relative
+ *            entropy.
+ *
+ * Throws:    <eslEMEM> on allocation error. 
+ *            <eslEINVAL> if the implied $p_{ij}$'s don't sum to one,
+ *            probably indicating that <lambda> was not the correct
+ *            <lambda> for <S>, <fi>, and <fj>.
+ *            In either exception, <ret_D> is returned as 0.0.
+ */
+int
+esl_scorematrix_RelEntropy(const ESL_SCOREMATRIX *S, const double *fi, const double *fj, double lambda, double *ret_D)
+{
+  int    status;
+  double pij;
+  double sum = 0.;
+  int    i,j;
+  double D = 0;
+
+  for (i = 0; i < S->K; i++)
+    for (j = 0; j < S->K; j++)
+      {
+	pij  = fi[i] * fj[j] * exp(lambda * (double) S->s[i][j]);
+	sum += pij;
+	if (pij > 0.) D += pij * log(pij / (fi[i] * fj[j]));
+	
+      }
+  if (esl_DCompare(sum, 1.0, 1e-3) != eslOK) 
+    ESL_XEXCEPTION(eslEINVAL, "pij's don't sum to one (%.4f): bad lambda or bad bg?", sum);
+
+  D /= eslCONST_LOG2;
+  *ret_D = D;
+  return eslOK;
+
+ ERROR:
+  *ret_D = 0.;
+  return status;
+}
+
+
+/* Function:  esl_scorematrix_JointToConditionalOnQuery()
+ * Synopsis:  Convert a joint probability matrix to conditional probs P(b|a)
+ *
+ * Purpose:   Given a joint probability matrix <P> that has been calculated
+ *            by <esl_scorematrix_ProbifyGivenBG()> or <esl_scorematrix_Probify()>
+ *            (or one that obeys the same conditions; see below), 
+ *            convert the joint probabilities <P(a,b)> to conditional 
+ *            probabilities <P(b | a)>, where <b> is a residue in the target,
+ *            and <a> is a residue in the query.
+ *            
+ *            $P(b \mid a) = P(ab) / P(a)$, where $P(a) = \sum_b P(ab)$.
+ *            
+ *            The value stored in <P->mx[a][b]> is $P(b \mid a)$.
+ *
+ *            All values in <P> involving the codes for gap,
+ *            nonresidue, and missing data (codes <K>,<Kp-2>, and
+ *            <Kp-1>) are 0.0, not probabilities. Only rows/columns
+ *            <i=0..K,K+1..Kp-3> are valid probability vectors.
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ *
+ * Xref:      J9/87.
+ */
+int
+esl_scorematrix_JointToConditionalOnQuery(const ESL_ALPHABET *abc, ESL_DMATRIX *P)
+{
+  int a,b;
+
+  /* P(b|a) = P(ab) / P(a) 
+   * and P(a) = P(a,X), the value at [a][Kp-3] 
+   */
+  for (a = 0; a < abc->Kp-2; a++)
+    for (b = 0; b < abc->Kp-2; b++)
+      P->mx[a][b] = (P->mx[a][abc->Kp-3] == 0.0 ? 0.0 : P->mx[a][b] / P->mx[a][abc->Kp-3]);
+  return eslOK;
+}
+
+
+
+/* Function:  esl_scorematrix_Destroy()
+ * Synopsis:  Frees a matrix.
+ *
+ * Purpose:   Frees a score matrix.
+ */
+void
+esl_scorematrix_Destroy(ESL_SCOREMATRIX *S)
+{
+  if (S == NULL) return;
+  if (S->s != NULL) {
+    if (S->s[0] != NULL) free(S->s[0]);
+    free(S->s);
+  }
+  if (S->isval    != NULL) free(S->isval);
+  if (S->outorder != NULL) free(S->outorder);
+  if (S->name     != NULL) free(S->name);
+  if (S->path     != NULL) free(S->path);
+  free(S);
+  return;
+}
+
+
+/*------------------- end, scorematrix object -------------------*/
+
+
+
+
+/*****************************************************************
+ *# 2. Some classic score matrices.
+ *****************************************************************/
+/* PAM30, PAM70, PAM120, PAM240, BLOSUM45, BLOSUM50, BLOSUM62, BLOSUM80, BLOSUM90 */
+/* Standard matrices are reformatted to Easel static data by the UTILITY1 program; see below */
+
+/* TODO: Instead of storing the classical low-precision versions of
+ * these, we should recalculate each one from its original
+ * probabilistic basis, and store it at higher integer precision,
+ * allowing the Yu/Altschul procedure to work. If we do that, we might also store
+ * lambda and background probabilities.
+ */
+
+#define eslAADIM 29
+
+struct esl_scorematrix_aa_preload_s {
+  char *name;
+  int   matrix[eslAADIM][eslAADIM];
+};
+
+static const struct esl_scorematrix_aa_preload_s ESL_SCOREMATRIX_AA_PRELOADS[] = {
+  { "PAM30", {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   6,  -6,  -3,  -2,  -8,  -2,  -7,  -5,  -7,  -6,  -5,  -4,  -2,  -4,  -7,   0,  -1,  -2, -13,  -8,   0,  -3,   0,  -3,   0,   0,  -3, -17,   0,  }, /* A */
+    {  -6,  10, -14, -14, -13,  -9,  -7,  -6, -14, -15, -13, -11,  -8, -14,  -8,  -3,  -8,  -6, -15,  -4,   0, -12,   0, -14,   0,   0,  -9, -17,   0,  }, /* C */
+    {  -3, -14,   8,   2, -15,  -3,  -4,  -7,  -4, -12, -11,   2,  -8,  -2, -10,  -4,  -5,  -8, -15, -11,   0,   6,   0,   1,   0,   0,  -5, -17,   0,  }, /* D */
+    {  -2, -14,   2,   8, -14,  -4,  -5,  -5,  -4,  -9,  -7,  -2,  -5,   1,  -9,  -4,  -6,  -6, -17,  -8,   0,   1,   0,   6,   0,   0,  -5, -17,   0,  }, /* E */
+    {  -8, -13, -15, -14,   9,  -9,  -6,  -2, -14,  -3,  -4,  -9, -10, -13,  -9,  -6,  -9,  -8,  -4,   2,   0, -10,   0, -13,   0,   0,  -8, -17,   0,  }, /* F */
+    {  -2,  -9,  -3,  -4,  -9,   6,  -9, -11,  -7, -10,  -8,  -3,  -6,  -7,  -9,  -2,  -6,  -5, -15, -14,   0,  -3,   0,  -5,   0,   0,  -5, -17,   0,  }, /* G */
+    {  -7,  -7,  -4,  -5,  -6,  -9,   9,  -9,  -6,  -6, -10,   0,  -4,   1,  -2,  -6,  -7,  -6,  -7,  -3,   0,  -1,   0,  -1,   0,   0,  -5, -17,   0,  }, /* H */
+    {  -5,  -6,  -7,  -5,  -2, -11,  -9,   8,  -6,  -1,  -1,  -5,  -8,  -8,  -5,  -7,  -2,   2, -14,  -6,   0,  -6,   0,  -6,   0,   0,  -5, -17,   0,  }, /* I */
+    {  -7, -14,  -4,  -4, -14,  -7,  -6,  -6,   7,  -8,  -2,  -1,  -6,  -3,   0,  -4,  -3,  -9, -12,  -9,   0,  -2,   0,  -4,   0,   0,  -5, -17,   0,  }, /* K */
+    {  -6, -15, -12,  -9,  -3, -10,  -6,  -1,  -8,   7,   1,  -7,  -7,  -5,  -8,  -8,  -7,  -2,  -6,  -7,   0,  -9,   0,  -7,   0,   0,  -6, -17,   0,  }, /* L */
+    {  -5, -13, -11,  -7,  -4,  -8, -10,  -1,  -2,   1,  11,  -9,  -8,  -4,  -4,  -5,  -4,  -1, -13, -11,   0, -10,   0,  -5,   0,   0,  -5, -17,   0,  }, /* M */
+    {  -4, -11,   2,  -2,  -9,  -3,   0,  -5,  -1,  -7,  -9,   8,  -6,  -3,  -6,   0,  -2,  -8,  -8,  -4,   0,   6,   0,  -3,   0,   0,  -3, -17,   0,  }, /* N */
+    {  -2,  -8,  -8,  -5, -10,  -6,  -4,  -8,  -6,  -7,  -8,  -6,   8,  -3,  -4,  -2,  -4,  -6, -14, -13,   0,  -7,   0,  -4,   0,   0,  -5, -17,   0,  }, /* P */
+    {  -4, -14,  -2,   1, -13,  -7,   1,  -8,  -3,  -5,  -4,  -3,  -3,   8,  -2,  -5,  -5,  -7, -13, -12,   0,  -3,   0,   6,   0,   0,  -5, -17,   0,  }, /* Q */
+    {  -7,  -8, -10,  -9,  -9,  -9,  -2,  -5,   0,  -8,  -4,  -6,  -4,  -2,   8,  -3,  -6,  -8,  -2, -10,   0,  -7,   0,  -4,   0,   0,  -6, -17,   0,  }, /* R */
+    {   0,  -3,  -4,  -4,  -6,  -2,  -6,  -7,  -4,  -8,  -5,   0,  -2,  -5,  -3,   6,   0,  -6,  -5,  -7,   0,  -1,   0,  -5,   0,   0,  -3, -17,   0,  }, /* S */
+    {  -1,  -8,  -5,  -6,  -9,  -6,  -7,  -2,  -3,  -7,  -4,  -2,  -4,  -5,  -6,   0,   7,  -3, -13,  -6,   0,  -3,   0,  -6,   0,   0,  -4, -17,   0,  }, /* T */
+    {  -2,  -6,  -8,  -6,  -8,  -5,  -6,   2,  -9,  -2,  -1,  -8,  -6,  -7,  -8,  -6,  -3,   7, -15,  -7,   0,  -8,   0,  -6,   0,   0,  -5, -17,   0,  }, /* V */
+    { -13, -15, -15, -17,  -4, -15,  -7, -14, -12,  -6, -13,  -8, -14, -13,  -2,  -5, -13, -15,  13,  -5,   0, -10,   0, -14,   0,   0, -11, -17,   0,  }, /* W */
+    {  -8,  -4, -11,  -8,   2, -14,  -3,  -6,  -9,  -7, -11,  -4, -13, -12, -10,  -7,  -6,  -7,  -5,  10,   0,  -6,   0,  -9,   0,   0,  -7, -17,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -3, -12,   6,   1, -10,  -3,  -1,  -6,  -2,  -9, -10,   6,  -7,  -3,  -7,  -1,  -3,  -8, -10,  -6,   0,   6,   0,   0,   0,   0,  -5, -17,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -3, -14,   1,   6, -13,  -5,  -1,  -6,  -4,  -7,  -5,  -3,  -4,   6,  -4,  -5,  -6,  -6, -14,  -9,   0,   0,   0,   6,   0,   0,  -5, -17,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -3,  -9,  -5,  -5,  -8,  -5,  -5,  -5,  -5,  -6,  -5,  -3,  -5,  -5,  -6,  -3,  -4,  -5, -11,  -7,   0,  -5,   0,  -5,   0,   0,  -5, -17,   0,  }, /* X */
+    { -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17,   0, -17,   0, -17,   0,   0, -17,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "PAM70", {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   5,  -4,  -1,  -1,  -6,   0,  -4,  -2,  -4,  -4,  -3,  -2,   0,  -2,  -4,   1,   1,  -1,  -9,  -5,   0,  -1,   0,  -1,   0,   0,  -2, -11,   0,  }, /* A */
+    {  -4,   9,  -9,  -9,  -8,  -6,  -5,  -4,  -9, -10,  -9,  -7,  -5,  -9,  -5,  -1,  -5,  -4, -11,  -2,   0,  -8,   0,  -9,   0,   0,  -6, -11,   0,  }, /* C */
+    {  -1,  -9,   6,   3, -10,  -1,  -1,  -5,  -2,  -8,  -7,   3,  -4,   0,  -6,  -1,  -2,  -5, -10,  -7,   0,   5,   0,   2,   0,   0,  -3, -11,   0,  }, /* D */
+    {  -1,  -9,   3,   6,  -9,  -2,  -2,  -4,  -2,  -6,  -4,   0,  -3,   2,  -5,  -2,  -3,  -4, -11,  -6,   0,   2,   0,   5,   0,   0,  -3, -11,   0,  }, /* E */
+    {  -6,  -8, -10,  -9,   8,  -7,  -4,   0,  -9,  -1,  -2,  -6,  -7,  -9,  -7,  -4,  -6,  -5,  -2,   4,   0,  -7,   0,  -9,   0,   0,  -5, -11,   0,  }, /* F */
+    {   0,  -6,  -1,  -2,  -7,   6,  -6,  -6,  -5,  -7,  -6,  -1,  -3,  -4,  -6,   0,  -3,  -3, -10,  -9,   0,  -1,   0,  -3,   0,   0,  -3, -11,   0,  }, /* G */
+    {  -4,  -5,  -1,  -2,  -4,  -6,   8,  -6,  -3,  -4,  -6,   1,  -2,   2,   0,  -3,  -4,  -4,  -5,  -1,   0,   0,   0,   1,   0,   0,  -3, -11,   0,  }, /* H */
+    {  -2,  -4,  -5,  -4,   0,  -6,  -6,   7,  -4,   1,   1,  -3,  -5,  -5,  -3,  -4,  -1,   3,  -9,  -4,   0,  -4,   0,  -4,   0,   0,  -3, -11,   0,  }, /* I */
+    {  -4,  -9,  -2,  -2,  -9,  -5,  -3,  -4,   6,  -5,   0,   0,  -4,  -1,   2,  -2,  -1,  -6,  -7,  -7,   0,  -1,   0,  -2,   0,   0,  -3, -11,   0,  }, /* K */
+    {  -4, -10,  -8,  -6,  -1,  -7,  -4,   1,  -5,   6,   2,  -5,  -5,  -3,  -6,  -6,  -4,   0,  -4,  -4,   0,  -6,   0,  -4,   0,   0,  -4, -11,   0,  }, /* L */
+    {  -3,  -9,  -7,  -4,  -2,  -6,  -6,   1,   0,   2,  10,  -5,  -5,  -2,  -2,  -3,  -2,   0,  -8,  -7,   0,  -6,   0,  -3,   0,   0,  -3, -11,   0,  }, /* M */
+    {  -2,  -7,   3,   0,  -6,  -1,   1,  -3,   0,  -5,  -5,   6,  -3,  -1,  -3,   1,   0,  -5,  -6,  -3,   0,   5,   0,  -1,   0,   0,  -2, -11,   0,  }, /* N */
+    {   0,  -5,  -4,  -3,  -7,  -3,  -2,  -5,  -4,  -5,  -5,  -3,   7,  -1,  -2,   0,  -2,  -3,  -9,  -9,   0,  -4,   0,  -2,   0,   0,  -3, -11,   0,  }, /* P */
+    {  -2,  -9,   0,   2,  -9,  -4,   2,  -5,  -1,  -3,  -2,  -1,  -1,   7,   0,  -3,  -3,  -4,  -8,  -8,   0,  -1,   0,   5,   0,   0,  -2, -11,   0,  }, /* Q */
+    {  -4,  -5,  -6,  -5,  -7,  -6,   0,  -3,   2,  -6,  -2,  -3,  -2,   0,   8,  -1,  -4,  -5,   0,  -7,   0,  -4,   0,  -2,   0,   0,  -3, -11,   0,  }, /* R */
+    {   1,  -1,  -1,  -2,  -4,   0,  -3,  -4,  -2,  -6,  -3,   1,   0,  -3,  -1,   5,   2,  -3,  -3,  -5,   0,   0,   0,  -2,   0,   0,  -1, -11,   0,  }, /* S */
+    {   1,  -5,  -2,  -3,  -6,  -3,  -4,  -1,  -1,  -4,  -2,   0,  -2,  -3,  -4,   2,   6,  -1,  -8,  -4,   0,  -1,   0,  -3,   0,   0,  -2, -11,   0,  }, /* T */
+    {  -1,  -4,  -5,  -4,  -5,  -3,  -4,   3,  -6,   0,   0,  -5,  -3,  -4,  -5,  -3,  -1,   6, -10,  -5,   0,  -5,   0,  -4,   0,   0,  -2, -11,   0,  }, /* V */
+    {  -9, -11, -10, -11,  -2, -10,  -5,  -9,  -7,  -4,  -8,  -6,  -9,  -8,   0,  -3,  -8, -10,  13,  -3,   0,  -7,   0, -10,   0,   0,  -7, -11,   0,  }, /* W */
+    {  -5,  -2,  -7,  -6,   4,  -9,  -1,  -4,  -7,  -4,  -7,  -3,  -9,  -8,  -7,  -5,  -4,  -5,  -3,   9,   0,  -4,   0,  -7,   0,   0,  -5, -11,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -1,  -8,   5,   2,  -7,  -1,   0,  -4,  -1,  -6,  -6,   5,  -4,  -1,  -4,   0,  -1,  -5,  -7,  -4,   0,   5,   0,   1,   0,   0,  -2, -11,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -1,  -9,   2,   5,  -9,  -3,   1,  -4,  -2,  -4,  -3,  -1,  -2,   5,  -2,  -2,  -3,  -4, -10,  -7,   0,   1,   0,   5,   0,   0,  -3, -11,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -2,  -6,  -3,  -3,  -5,  -3,  -3,  -3,  -3,  -4,  -3,  -2,  -3,  -2,  -3,  -1,  -2,  -2,  -7,  -5,   0,  -2,   0,  -3,   0,   0,  -3, -11,   0,  }, /* X */
+    { -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11,   0, -11,   0, -11,   0,   0, -11,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "PAM120",  {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   3,  -3,   0,   0,  -4,   1,  -3,  -1,  -2,  -3,  -2,  -1,   1,  -1,  -3,   1,   1,   0,  -7,  -4,   0,   0,   0,  -1,   0,   0,  -1,  -8,   0,  }, /* A */
+    {  -3,   9,  -7,  -7,  -6,  -4,  -4,  -3,  -7,  -7,  -6,  -5,  -4,  -7,  -4,   0,  -3,  -3,  -8,  -1,   0,  -6,   0,  -7,   0,   0,  -4,  -8,   0,  }, /* C */
+    {   0,  -7,   5,   3,  -7,   0,   0,  -3,  -1,  -5,  -4,   2,  -3,   1,  -3,   0,  -1,  -3,  -8,  -5,   0,   4,   0,   3,   0,   0,  -2,  -8,   0,  }, /* D */
+    {   0,  -7,   3,   5,  -7,  -1,  -1,  -3,  -1,  -4,  -3,   1,  -2,   2,  -3,  -1,  -2,  -3,  -8,  -5,   0,   3,   0,   4,   0,   0,  -1,  -8,   0,  }, /* E */
+    {  -4,  -6,  -7,  -7,   8,  -5,  -3,   0,  -7,   0,  -1,  -4,  -5,  -6,  -5,  -3,  -4,  -3,  -1,   4,   0,  -5,   0,  -6,   0,   0,  -3,  -8,   0,  }, /* F */
+    {   1,  -4,   0,  -1,  -5,   5,  -4,  -4,  -3,  -5,  -4,   0,  -2,  -3,  -4,   1,  -1,  -2,  -8,  -6,   0,   0,   0,  -2,   0,   0,  -2,  -8,   0,  }, /* G */
+    {  -3,  -4,   0,  -1,  -3,  -4,   7,  -4,  -2,  -3,  -4,   2,  -1,   3,   1,  -2,  -3,  -3,  -3,  -1,   0,   1,   0,   1,   0,   0,  -2,  -8,   0,  }, /* H */
+    {  -1,  -3,  -3,  -3,   0,  -4,  -4,   6,  -3,   1,   1,  -2,  -3,  -3,  -2,  -2,   0,   3,  -6,  -2,   0,  -3,   0,  -3,   0,   0,  -1,  -8,   0,  }, /* I */
+    {  -2,  -7,  -1,  -1,  -7,  -3,  -2,  -3,   5,  -4,   0,   1,  -2,   0,   2,  -1,  -1,  -4,  -5,  -5,   0,   0,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* K */
+    {  -3,  -7,  -5,  -4,   0,  -5,  -3,   1,  -4,   5,   3,  -4,  -3,  -2,  -4,  -4,  -3,   1,  -3,  -2,   0,  -4,   0,  -3,   0,   0,  -2,  -8,   0,  }, /* L */
+    {  -2,  -6,  -4,  -3,  -1,  -4,  -4,   1,   0,   3,   8,  -3,  -3,  -1,  -1,  -2,  -1,   1,  -6,  -4,   0,  -4,   0,  -2,   0,   0,  -2,  -8,   0,  }, /* M */
+    {  -1,  -5,   2,   1,  -4,   0,   2,  -2,   1,  -4,  -3,   4,  -2,   0,  -1,   1,   0,  -3,  -4,  -2,   0,   3,   0,   0,   0,   0,  -1,  -8,   0,  }, /* N */
+    {   1,  -4,  -3,  -2,  -5,  -2,  -1,  -3,  -2,  -3,  -3,  -2,   6,   0,  -1,   1,  -1,  -2,  -7,  -6,   0,  -2,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* P */
+    {  -1,  -7,   1,   2,  -6,  -3,   3,  -3,   0,  -2,  -1,   0,   0,   6,   1,  -2,  -2,  -3,  -6,  -5,   0,   0,   0,   4,   0,   0,  -1,  -8,   0,  }, /* Q */
+    {  -3,  -4,  -3,  -3,  -5,  -4,   1,  -2,   2,  -4,  -1,  -1,  -1,   1,   6,  -1,  -2,  -3,   1,  -5,   0,  -2,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* R */
+    {   1,   0,   0,  -1,  -3,   1,  -2,  -2,  -1,  -4,  -2,   1,   1,  -2,  -1,   3,   2,  -2,  -2,  -3,   0,   0,   0,  -1,   0,   0,  -1,  -8,   0,  }, /* S */
+    {   1,  -3,  -1,  -2,  -4,  -1,  -3,   0,  -1,  -3,  -1,   0,  -1,  -2,  -2,   2,   4,   0,  -6,  -3,   0,   0,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* T */
+    {   0,  -3,  -3,  -3,  -3,  -2,  -3,   3,  -4,   1,   1,  -3,  -2,  -3,  -3,  -2,   0,   5,  -8,  -3,   0,  -3,   0,  -3,   0,   0,  -1,  -8,   0,  }, /* V */
+    {  -7,  -8,  -8,  -8,  -1,  -8,  -3,  -6,  -5,  -3,  -6,  -4,  -7,  -6,   1,  -2,  -6,  -8,  12,  -2,   0,  -6,   0,  -7,   0,   0,  -5,  -8,   0,  }, /* W */
+    {  -4,  -1,  -5,  -5,   4,  -6,  -1,  -2,  -5,  -2,  -4,  -2,  -6,  -5,  -5,  -3,  -3,  -3,  -2,   8,   0,  -3,   0,  -5,   0,   0,  -3,  -8,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {   0,  -6,   4,   3,  -5,   0,   1,  -3,   0,  -4,  -4,   3,  -2,   0,  -2,   0,   0,  -3,  -6,  -3,   0,   4,   0,   2,   0,   0,  -1,  -8,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -1,  -7,   3,   4,  -6,  -2,   1,  -3,  -1,  -3,  -2,   0,  -1,   4,  -1,  -1,  -2,  -3,  -7,  -5,   0,   2,   0,   4,   0,   0,  -1,  -8,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -1,  -4,  -2,  -1,  -3,  -2,  -2,  -1,  -2,  -2,  -2,  -1,  -2,  -1,  -2,  -1,  -1,  -1,  -5,  -3,   0,  -1,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* X */
+    {  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,   0,  -8,   0,  -8,   0,   0,  -8,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "PAM240",  {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   2,  -2,   0,   0,  -4,   1,  -1,  -1,  -1,  -2,  -1,   0,   1,   0,  -2,   1,   1,   0,  -6,  -4,   0,   0,   0,   0,   0,   0,   0,  -8,   0,  }, /* A */
+    {  -2,  12,  -5,  -6,  -5,  -4,  -4,  -2,  -6,  -6,  -5,  -4,  -3,  -6,  -4,   0,  -2,  -2,  -8,   0,   0,  -5,   0,  -6,   0,   0,  -3,  -8,   0,  }, /* C */
+    {   0,  -5,   4,   4,  -6,   1,   1,  -2,   0,  -4,  -3,   2,  -1,   2,  -1,   0,   0,  -2,  -7,  -4,   0,   3,   0,   3,   0,   0,  -1,  -8,   0,  }, /* D */
+    {   0,  -6,   4,   4,  -6,   0,   1,  -2,   0,  -3,  -2,   1,  -1,   3,  -1,   0,   0,  -2,  -7,  -4,   0,   3,   0,   3,   0,   0,  -1,  -8,   0,  }, /* E */
+    {  -4,  -5,  -6,  -6,   9,  -5,  -2,   1,  -5,   2,   0,  -4,  -5,  -5,  -5,  -3,  -3,  -1,   0,   7,   0,  -5,   0,  -5,   0,   0,  -2,  -8,   0,  }, /* F */
+    {   1,  -4,   1,   0,  -5,   5,  -2,  -3,  -2,  -4,  -3,   0,  -1,  -1,  -3,   1,   0,  -1,  -7,  -5,   0,   0,   0,   0,   0,   0,  -1,  -8,   0,  }, /* G */
+    {  -1,  -4,   1,   1,  -2,  -2,   7,  -3,   0,  -2,  -2,   2,   0,   3,   2,  -1,  -1,  -2,  -3,   0,   0,   1,   0,   2,   0,   0,  -1,  -8,   0,  }, /* H */
+    {  -1,  -2,  -2,  -2,   1,  -3,  -3,   5,  -2,   2,   2,  -2,  -2,  -2,  -2,  -1,   0,   4,  -5,  -1,   0,  -2,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* I */
+    {  -1,  -6,   0,   0,  -5,  -2,   0,  -2,   5,  -3,   0,   1,  -1,   1,   3,   0,   0,  -3,  -4,  -5,   0,   1,   0,   0,   0,   0,  -1,  -8,   0,  }, /* K */
+    {  -2,  -6,  -4,  -3,   2,  -4,  -2,   2,  -3,   6,   4,  -3,  -3,  -2,  -3,  -3,  -2,   2,  -2,  -1,   0,  -4,   0,  -3,   0,   0,  -1,  -8,   0,  }, /* L */
+    {  -1,  -5,  -3,  -2,   0,  -3,  -2,   2,   0,   4,   7,  -2,  -2,  -1,   0,  -2,  -1,   2,  -4,  -3,   0,  -2,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* M */
+    {   0,  -4,   2,   1,  -4,   0,   2,  -2,   1,  -3,  -2,   2,  -1,   1,   0,   1,   0,  -2,  -4,  -2,   0,   2,   0,   1,   0,   0,   0,  -8,   0,  }, /* N */
+    {   1,  -3,  -1,  -1,  -5,  -1,   0,  -2,  -1,  -3,  -2,  -1,   6,   0,   0,   1,   0,  -1,  -6,  -5,   0,  -1,   0,   0,   0,   0,  -1,  -8,   0,  }, /* P */
+    {   0,  -6,   2,   3,  -5,  -1,   3,  -2,   1,  -2,  -1,   1,   0,   4,   1,  -1,  -1,  -2,  -5,  -4,   0,   1,   0,   3,   0,   0,  -1,  -8,   0,  }, /* Q */
+    {  -2,  -4,  -1,  -1,  -5,  -3,   2,  -2,   3,  -3,   0,   0,   0,   1,   6,   0,  -1,  -3,   2,  -4,   0,  -1,   0,   0,   0,   0,  -1,  -8,   0,  }, /* R */
+    {   1,   0,   0,   0,  -3,   1,  -1,  -1,   0,  -3,  -2,   1,   1,  -1,   0,   2,   1,  -1,  -3,  -3,   0,   0,   0,   0,   0,   0,   0,  -8,   0,  }, /* S */
+    {   1,  -2,   0,   0,  -3,   0,  -1,   0,   0,  -2,  -1,   0,   0,  -1,  -1,   1,   3,   0,  -5,  -3,   0,   0,   0,  -1,   0,   0,   0,  -8,   0,  }, /* T */
+    {   0,  -2,  -2,  -2,  -1,  -1,  -2,   4,  -3,   2,   2,  -2,  -1,  -2,  -3,  -1,   0,   4,  -6,  -3,   0,  -2,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* V */
+    {  -6,  -8,  -7,  -7,   0,  -7,  -3,  -5,  -4,  -2,  -4,  -4,  -6,  -5,   2,  -3,  -5,  -6,  17,   0,   0,  -5,   0,  -6,   0,   0,  -4,  -8,   0,  }, /* W */
+    {  -4,   0,  -4,  -4,   7,  -5,   0,  -1,  -5,  -1,  -3,  -2,  -5,  -4,  -4,  -3,  -3,  -3,   0,  10,   0,  -3,   0,  -4,   0,   0,  -2,  -8,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {   0,  -5,   3,   3,  -5,   0,   1,  -2,   1,  -4,  -2,   2,  -1,   1,  -1,   0,   0,  -2,  -5,  -3,   0,   3,   0,   2,   0,   0,  -1,  -8,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {   0,  -6,   3,   3,  -5,   0,   2,  -2,   0,  -3,  -2,   1,   0,   3,   0,   0,  -1,  -2,  -6,  -4,   0,   2,   0,   3,   0,   0,  -1,  -8,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {   0,  -3,  -1,  -1,  -2,  -1,  -1,  -1,  -1,  -1,  -1,   0,  -1,  -1,  -1,   0,   0,  -1,  -4,  -2,   0,  -1,   0,  -1,   0,   0,  -1,  -8,   0,  }, /* X */
+    {  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,   0,  -8,   0,  -8,   0,   0,  -8,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "BLOSUM45", {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   5,  -1,  -2,  -1,  -2,   0,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -2,   1,   0,   0,  -2,  -2,   0,  -1,   0,  -1,   0,   0,   0,  -5,   0,  }, /* A */
+    {  -1,  12,  -3,  -3,  -2,  -3,  -3,  -3,  -3,  -2,  -2,  -2,  -4,  -3,  -3,  -1,  -1,  -1,  -5,  -3,   0,  -2,   0,  -3,   0,   0,  -2,  -5,   0,  }, /* C */
+    {  -2,  -3,   7,   2,  -4,  -1,   0,  -4,   0,  -3,  -3,   2,  -1,   0,  -1,   0,  -1,  -3,  -4,  -2,   0,   5,   0,   1,   0,   0,  -1,  -5,   0,  }, /* D */
+    {  -1,  -3,   2,   6,  -3,  -2,   0,  -3,   1,  -2,  -2,   0,   0,   2,   0,   0,  -1,  -3,  -3,  -2,   0,   1,   0,   4,   0,   0,  -1,  -5,   0,  }, /* E */
+    {  -2,  -2,  -4,  -3,   8,  -3,  -2,   0,  -3,   1,   0,  -2,  -3,  -4,  -2,  -2,  -1,   0,   1,   3,   0,  -3,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* F */
+    {   0,  -3,  -1,  -2,  -3,   7,  -2,  -4,  -2,  -3,  -2,   0,  -2,  -2,  -2,   0,  -2,  -3,  -2,  -3,   0,  -1,   0,  -2,   0,   0,  -1,  -5,   0,  }, /* G */
+    {  -2,  -3,   0,   0,  -2,  -2,  10,  -3,  -1,  -2,   0,   1,  -2,   1,   0,  -1,  -2,  -3,  -3,   2,   0,   0,   0,   0,   0,   0,  -1,  -5,   0,  }, /* H */
+    {  -1,  -3,  -4,  -3,   0,  -4,  -3,   5,  -3,   2,   2,  -2,  -2,  -2,  -3,  -2,  -1,   3,  -2,   0,   0,  -3,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* I */
+    {  -1,  -3,   0,   1,  -3,  -2,  -1,  -3,   5,  -3,  -1,   0,  -1,   1,   3,  -1,  -1,  -2,  -2,  -1,   0,   0,   0,   1,   0,   0,  -1,  -5,   0,  }, /* K */
+    {  -1,  -2,  -3,  -2,   1,  -3,  -2,   2,  -3,   5,   2,  -3,  -3,  -2,  -2,  -3,  -1,   1,  -2,   0,   0,  -3,   0,  -2,   0,   0,  -1,  -5,   0,  }, /* L */
+    {  -1,  -2,  -3,  -2,   0,  -2,   0,   2,  -1,   2,   6,  -2,  -2,   0,  -1,  -2,  -1,   1,  -2,   0,   0,  -2,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* M */
+    {  -1,  -2,   2,   0,  -2,   0,   1,  -2,   0,  -3,  -2,   6,  -2,   0,   0,   1,   0,  -3,  -4,  -2,   0,   4,   0,   0,   0,   0,  -1,  -5,   0,  }, /* N */
+    {  -1,  -4,  -1,   0,  -3,  -2,  -2,  -2,  -1,  -3,  -2,  -2,   9,  -1,  -2,  -1,  -1,  -3,  -3,  -3,   0,  -2,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* P */
+    {  -1,  -3,   0,   2,  -4,  -2,   1,  -2,   1,  -2,   0,   0,  -1,   6,   1,   0,  -1,  -3,  -2,  -1,   0,   0,   0,   4,   0,   0,  -1,  -5,   0,  }, /* Q */
+    {  -2,  -3,  -1,   0,  -2,  -2,   0,  -3,   3,  -2,  -1,   0,  -2,   1,   7,  -1,  -1,  -2,  -2,  -1,   0,  -1,   0,   0,   0,   0,  -1,  -5,   0,  }, /* R */
+    {   1,  -1,   0,   0,  -2,   0,  -1,  -2,  -1,  -3,  -2,   1,  -1,   0,  -1,   4,   2,  -1,  -4,  -2,   0,   0,   0,   0,   0,   0,   0,  -5,   0,  }, /* S */
+    {   0,  -1,  -1,  -1,  -1,  -2,  -2,  -1,  -1,  -1,  -1,   0,  -1,  -1,  -1,   2,   5,   0,  -3,  -1,   0,   0,   0,  -1,   0,   0,   0,  -5,   0,  }, /* T */
+    {   0,  -1,  -3,  -3,   0,  -3,  -3,   3,  -2,   1,   1,  -3,  -3,  -3,  -2,  -1,   0,   5,  -3,  -1,   0,  -3,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* V */
+    {  -2,  -5,  -4,  -3,   1,  -2,  -3,  -2,  -2,  -2,  -2,  -4,  -3,  -2,  -2,  -4,  -3,  -3,  15,   3,   0,  -4,   0,  -2,   0,   0,  -2,  -5,   0,  }, /* W */
+    {  -2,  -3,  -2,  -2,   3,  -3,   2,   0,  -1,   0,   0,  -2,  -3,  -1,  -1,  -2,  -1,  -1,   3,   8,   0,  -2,   0,  -2,   0,   0,  -1,  -5,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -1,  -2,   5,   1,  -3,  -1,   0,  -3,   0,  -3,  -2,   4,  -2,   0,  -1,   0,   0,  -3,  -4,  -2,   0,   4,   0,   2,   0,   0,  -1,  -5,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -1,  -3,   1,   4,  -3,  -2,   0,  -3,   1,  -2,  -1,   0,  -1,   4,   0,   0,  -1,  -3,  -2,  -2,   0,   2,   0,   4,   0,   0,  -1,  -5,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {   0,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   0,   0,  -1,  -2,  -1,   0,  -1,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* X */
+    {  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,   0,  -5,   0,  -5,   0,   0,  -5,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "BLOSUM50",  {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   5,  -1,  -2,  -1,  -3,   0,  -2,  -1,  -1,  -2,  -1,  -1,  -1,  -1,  -2,   1,   0,   0,  -3,  -2,   0,  -2,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* A */
+    {  -1,  13,  -4,  -3,  -2,  -3,  -3,  -2,  -3,  -2,  -2,  -2,  -4,  -3,  -4,  -1,  -1,  -1,  -5,  -3,   0,  -3,   0,  -3,   0,   0,  -2,  -5,   0,  }, /* C */
+    {  -2,  -4,   8,   2,  -5,  -1,  -1,  -4,  -1,  -4,  -4,   2,  -1,   0,  -2,   0,  -1,  -4,  -5,  -3,   0,   5,   0,   1,   0,   0,  -1,  -5,   0,  }, /* D */
+    {  -1,  -3,   2,   6,  -3,  -3,   0,  -4,   1,  -3,  -2,   0,  -1,   2,   0,  -1,  -1,  -3,  -3,  -2,   0,   1,   0,   5,   0,   0,  -1,  -5,   0,  }, /* E */
+    {  -3,  -2,  -5,  -3,   8,  -4,  -1,   0,  -4,   1,   0,  -4,  -4,  -4,  -3,  -3,  -2,  -1,   1,   4,   0,  -4,   0,  -4,   0,   0,  -2,  -5,   0,  }, /* F */
+    {   0,  -3,  -1,  -3,  -4,   8,  -2,  -4,  -2,  -4,  -3,   0,  -2,  -2,  -3,   0,  -2,  -4,  -3,  -3,   0,  -1,   0,  -2,   0,   0,  -2,  -5,   0,  }, /* G */
+    {  -2,  -3,  -1,   0,  -1,  -2,  10,  -4,   0,  -3,  -1,   1,  -2,   1,   0,  -1,  -2,  -4,  -3,   2,   0,   0,   0,   0,   0,   0,  -1,  -5,   0,  }, /* H */
+    {  -1,  -2,  -4,  -4,   0,  -4,  -4,   5,  -3,   2,   2,  -3,  -3,  -3,  -4,  -3,  -1,   4,  -3,  -1,   0,  -4,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* I */
+    {  -1,  -3,  -1,   1,  -4,  -2,   0,  -3,   6,  -3,  -2,   0,  -1,   2,   3,   0,  -1,  -3,  -3,  -2,   0,   0,   0,   1,   0,   0,  -1,  -5,   0,  }, /* K */
+    {  -2,  -2,  -4,  -3,   1,  -4,  -3,   2,  -3,   5,   3,  -4,  -4,  -2,  -3,  -3,  -1,   1,  -2,  -1,   0,  -4,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* L */
+    {  -1,  -2,  -4,  -2,   0,  -3,  -1,   2,  -2,   3,   7,  -2,  -3,   0,  -2,  -2,  -1,   1,  -1,   0,   0,  -3,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* M */
+    {  -1,  -2,   2,   0,  -4,   0,   1,  -3,   0,  -4,  -2,   7,  -2,   0,  -1,   1,   0,  -3,  -4,  -2,   0,   4,   0,   0,   0,   0,  -1,  -5,   0,  }, /* N */
+    {  -1,  -4,  -1,  -1,  -4,  -2,  -2,  -3,  -1,  -4,  -3,  -2,  10,  -1,  -3,  -1,  -1,  -3,  -4,  -3,   0,  -2,   0,  -1,   0,   0,  -2,  -5,   0,  }, /* P */
+    {  -1,  -3,   0,   2,  -4,  -2,   1,  -3,   2,  -2,   0,   0,  -1,   7,   1,   0,  -1,  -3,  -1,  -1,   0,   0,   0,   4,   0,   0,  -1,  -5,   0,  }, /* Q */
+    {  -2,  -4,  -2,   0,  -3,  -3,   0,  -4,   3,  -3,  -2,  -1,  -3,   1,   7,  -1,  -1,  -3,  -3,  -1,   0,  -1,   0,   0,   0,   0,  -1,  -5,   0,  }, /* R */
+    {   1,  -1,   0,  -1,  -3,   0,  -1,  -3,   0,  -3,  -2,   1,  -1,   0,  -1,   5,   2,  -2,  -4,  -2,   0,   0,   0,   0,   0,   0,  -1,  -5,   0,  }, /* S */
+    {   0,  -1,  -1,  -1,  -2,  -2,  -2,  -1,  -1,  -1,  -1,   0,  -1,  -1,  -1,   2,   5,   0,  -3,  -2,   0,   0,   0,  -1,   0,   0,   0,  -5,   0,  }, /* T */
+    {   0,  -1,  -4,  -3,  -1,  -4,  -4,   4,  -3,   1,   1,  -3,  -3,  -3,  -3,  -2,   0,   5,  -3,  -1,   0,  -4,   0,  -3,   0,   0,  -1,  -5,   0,  }, /* V */
+    {  -3,  -5,  -5,  -3,   1,  -3,  -3,  -3,  -3,  -2,  -1,  -4,  -4,  -1,  -3,  -4,  -3,  -3,  15,   2,   0,  -5,   0,  -2,   0,   0,  -3,  -5,   0,  }, /* W */
+    {  -2,  -3,  -3,  -2,   4,  -3,   2,  -1,  -2,  -1,   0,  -2,  -3,  -1,  -1,  -2,  -2,  -1,   2,   8,   0,  -3,   0,  -2,   0,   0,  -1,  -5,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -2,  -3,   5,   1,  -4,  -1,   0,  -4,   0,  -4,  -3,   4,  -2,   0,  -1,   0,   0,  -4,  -5,  -3,   0,   5,   0,   2,   0,   0,  -1,  -5,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -1,  -3,   1,   5,  -4,  -2,   0,  -3,   1,  -3,  -1,   0,  -1,   4,   0,   0,  -1,  -3,  -2,  -2,   0,   2,   0,   5,   0,   0,  -1,  -5,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -1,  -2,  -1,  -1,  -2,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -2,  -1,  -1,  -1,   0,  -1,  -3,  -1,   0,  -1,   0,  -1,   0,   0,  -1,  -5,   0,  }, /* X */
+    {  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,   0,  -5,   0,  -5,   0,   0,  -5,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "BLOSUM62",  {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
     {   4,   0,  -2,  -1,  -2,   0,  -2,  -1,  -1,  -1,  -1,  -2,  -1,  -1,  -1,   1,   0,   0,  -3,  -2,   0,  -2,   0,  -1,   0,   0,   0,  -4,   0,  }, /* A */
     {   0,   9,  -3,  -4,  -2,  -3,  -3,  -1,  -3,  -1,  -1,  -3,  -3,  -3,  -3,  -1,  -1,  -1,  -2,  -2,   0,  -3,   0,  -3,   0,   0,  -2,  -4,   0,  }, /* C */
     {  -2,  -3,   6,   2,  -3,  -1,  -1,  -3,  -1,  -4,  -3,   1,  -1,   0,  -2,   0,  -1,  -3,  -4,  -3,   0,   4,   0,   1,   0,   0,  -1,  -4,   0,  }, /* D */
@@ -159,35 +659,272 @@ esl_scorematrix_SetBLOSUM62(ESL_SCOREMATRIX *S)
     {   0,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -2,  -1,  -1,   0,   0,  -1,  -2,  -1,   0,  -1,   0,  -1,   0,   0,  -1,  -4,   0,  }, /* X */
     {  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,   0,  -4,   0,  -4,   0,   0,  -4,   1,   0,  }, /* * */
     {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
-  };
-  /* The BLOSUM62 background frequencies are the actual frequencies used to create
-   * the matrix in 1992. */
-  /*                           A      C      D      E      F      G      H      I      K      L      M      N      P      Q      R      S      T      V      W      Y */
-  /* double blosum62f[20] = { 0.074, 0.025, 0.054, 0.054, 0.047, 0.074, 0.026, 0.068, 0.058, 0.099, 0.025, 0.045, 0.039, 0.034, 0.052, 0.057, 0.051, 0.073, 0.013, 0.032 };
-   */
+    }},
+    
+  { "BLOSUM80", {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   7,  -1,  -3,  -2,  -4,   0,  -3,  -3,  -1,  -3,  -2,  -3,  -1,  -2,  -3,   2,   0,  -1,  -5,  -4,   0,  -3,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* A */
+    {  -1,  13,  -7,  -7,  -4,  -6,  -7,  -2,  -6,  -3,  -3,  -5,  -6,  -5,  -6,  -2,  -2,  -2,  -5,  -5,   0,  -6,   0,  -7,   0,   0,  -4,  -8,   0,  }, /* C */
+    {  -3,  -7,  10,   2,  -6,  -3,  -2,  -7,  -2,  -7,  -6,   2,  -3,  -1,  -3,  -1,  -2,  -6,  -8,  -6,   0,   6,   0,   1,   0,   0,  -3,  -8,   0,  }, /* D */
+    {  -2,  -7,   2,   8,  -6,  -4,   0,  -6,   1,  -6,  -4,  -1,  -2,   3,  -1,  -1,  -2,  -4,  -6,  -5,   0,   1,   0,   6,   0,   0,  -2,  -8,   0,  }, /* E */
+    {  -4,  -4,  -6,  -6,  10,  -6,  -2,  -1,  -5,   0,   0,  -6,  -6,  -5,  -5,  -4,  -4,  -2,   0,   4,   0,  -6,   0,  -6,   0,   0,  -3,  -8,   0,  }, /* F */
+    {   0,  -6,  -3,  -4,  -6,   9,  -4,  -7,  -3,  -7,  -5,  -1,  -5,  -4,  -4,  -1,  -3,  -6,  -6,  -6,   0,  -2,   0,  -4,   0,   0,  -3,  -8,   0,  }, /* G */
+    {  -3,  -7,  -2,   0,  -2,  -4,  12,  -6,  -1,  -5,  -4,   1,  -4,   1,   0,  -2,  -3,  -5,  -4,   3,   0,  -1,   0,   0,   0,   0,  -2,  -8,   0,  }, /* H */
+    {  -3,  -2,  -7,  -6,  -1,  -7,  -6,   7,  -5,   2,   2,  -6,  -5,  -5,  -5,  -4,  -2,   4,  -5,  -3,   0,  -6,   0,  -6,   0,   0,  -2,  -8,   0,  }, /* I */
+    {  -1,  -6,  -2,   1,  -5,  -3,  -1,  -5,   8,  -4,  -3,   0,  -2,   2,   3,  -1,  -1,  -4,  -6,  -4,   0,  -1,   0,   1,   0,   0,  -2,  -8,   0,  }, /* K */
+    {  -3,  -3,  -7,  -6,   0,  -7,  -5,   2,  -4,   6,   3,  -6,  -5,  -4,  -4,  -4,  -3,   1,  -4,  -2,   0,  -7,   0,  -5,   0,   0,  -2,  -8,   0,  }, /* L */
+    {  -2,  -3,  -6,  -4,   0,  -5,  -4,   2,  -3,   3,   9,  -4,  -4,  -1,  -3,  -3,  -1,   1,  -3,  -3,   0,  -5,   0,  -3,   0,   0,  -2,  -8,   0,  }, /* M */
+    {  -3,  -5,   2,  -1,  -6,  -1,   1,  -6,   0,  -6,  -4,   9,  -4,   0,  -1,   1,   0,  -5,  -7,  -4,   0,   5,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* N */
+    {  -1,  -6,  -3,  -2,  -6,  -5,  -4,  -5,  -2,  -5,  -4,  -4,  12,  -3,  -3,  -2,  -3,  -4,  -7,  -6,   0,  -4,   0,  -2,   0,   0,  -3,  -8,   0,  }, /* P */
+    {  -2,  -5,  -1,   3,  -5,  -4,   1,  -5,   2,  -4,  -1,   0,  -3,   9,   1,  -1,  -1,  -4,  -4,  -3,   0,  -1,   0,   5,   0,   0,  -2,  -8,   0,  }, /* Q */
+    {  -3,  -6,  -3,  -1,  -5,  -4,   0,  -5,   3,  -4,  -3,  -1,  -3,   1,   9,  -2,  -2,  -4,  -5,  -4,   0,  -2,   0,   0,   0,   0,  -2,  -8,   0,  }, /* R */
+    {   2,  -2,  -1,  -1,  -4,  -1,  -2,  -4,  -1,  -4,  -3,   1,  -2,  -1,  -2,   7,   2,  -3,  -6,  -3,   0,   0,   0,  -1,   0,   0,  -1,  -8,   0,  }, /* S */
+    {   0,  -2,  -2,  -2,  -4,  -3,  -3,  -2,  -1,  -3,  -1,   0,  -3,  -1,  -2,   2,   8,   0,  -5,  -3,   0,  -1,   0,  -2,   0,   0,  -1,  -8,   0,  }, /* T */
+    {  -1,  -2,  -6,  -4,  -2,  -6,  -5,   4,  -4,   1,   1,  -5,  -4,  -4,  -4,  -3,   0,   7,  -5,  -3,   0,  -6,   0,  -4,   0,   0,  -2,  -8,   0,  }, /* V */
+    {  -5,  -5,  -8,  -6,   0,  -6,  -4,  -5,  -6,  -4,  -3,  -7,  -7,  -4,  -5,  -6,  -5,  -5,  16,   3,   0,  -8,   0,  -5,   0,   0,  -5,  -8,   0,  }, /* W */
+    {  -4,  -5,  -6,  -5,   4,  -6,   3,  -3,  -4,  -2,  -3,  -4,  -6,  -3,  -4,  -3,  -3,  -3,   3,  11,   0,  -5,   0,  -4,   0,   0,  -3,  -8,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -3,  -6,   6,   1,  -6,  -2,  -1,  -6,  -1,  -7,  -5,   5,  -4,  -1,  -2,   0,  -1,  -6,  -8,  -5,   0,   6,   0,   0,   0,   0,  -3,  -8,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -2,  -7,   1,   6,  -6,  -4,   0,  -6,   1,  -5,  -3,  -1,  -2,   5,   0,  -1,  -2,  -4,  -5,  -4,   0,   0,   0,   6,   0,   0,  -1,  -8,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -1,  -4,  -3,  -2,  -3,  -3,  -2,  -2,  -2,  -2,  -2,  -2,  -3,  -2,  -2,  -1,  -1,  -2,  -5,  -3,   0,  -3,   0,  -1,   0,   0,  -2,  -8,   0,  }, /* X */
+    {  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,   0,  -8,   0,  -8,   0,   0,  -8,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+
+  { "BLOSUM90",  {
+    /*  A    C    D    E    F    G    H    I    K    L    M    N    P    Q    R    S    T    V    W    Y    -    B    J    Z    O    U    X    *    ~           */
+    {   5,  -1,  -3,  -1,  -3,   0,  -2,  -2,  -1,  -2,  -2,  -2,  -1,  -1,  -2,   1,   0,  -1,  -4,  -3,   0,  -2,   0,  -1,   0,   0,  -1,  -6,   0,  }, /* A */
+    {  -1,   9,  -5,  -6,  -3,  -4,  -5,  -2,  -4,  -2,  -2,  -4,  -4,  -4,  -5,  -2,  -2,  -2,  -4,  -4,   0,  -4,   0,  -5,   0,   0,  -3,  -6,   0,  }, /* C */
+    {  -3,  -5,   7,   1,  -5,  -2,  -2,  -5,  -1,  -5,  -4,   1,  -3,  -1,  -3,  -1,  -2,  -5,  -6,  -4,   0,   4,   0,   0,   0,   0,  -2,  -6,   0,  }, /* D */
+    {  -1,  -6,   1,   6,  -5,  -3,  -1,  -4,   0,  -4,  -3,  -1,  -2,   2,  -1,  -1,  -1,  -3,  -5,  -4,   0,   0,   0,   4,   0,   0,  -2,  -6,   0,  }, /* E */
+    {  -3,  -3,  -5,  -5,   7,  -5,  -2,  -1,  -4,   0,  -1,  -4,  -4,  -4,  -4,  -3,  -3,  -2,   0,   3,   0,  -4,   0,  -4,   0,   0,  -2,  -6,   0,  }, /* F */
+    {   0,  -4,  -2,  -3,  -5,   6,  -3,  -5,  -2,  -5,  -4,  -1,  -3,  -3,  -3,  -1,  -3,  -5,  -4,  -5,   0,  -2,   0,  -3,   0,   0,  -2,  -6,   0,  }, /* G */
+    {  -2,  -5,  -2,  -1,  -2,  -3,   8,  -4,  -1,  -4,  -3,   0,  -3,   1,   0,  -2,  -2,  -4,  -3,   1,   0,  -1,   0,   0,   0,   0,  -2,  -6,   0,  }, /* H */
+    {  -2,  -2,  -5,  -4,  -1,  -5,  -4,   5,  -4,   1,   1,  -4,  -4,  -4,  -4,  -3,  -1,   3,  -4,  -2,   0,  -5,   0,  -4,   0,   0,  -2,  -6,   0,  }, /* I */
+    {  -1,  -4,  -1,   0,  -4,  -2,  -1,  -4,   6,  -3,  -2,   0,  -2,   1,   2,  -1,  -1,  -3,  -5,  -3,   0,  -1,   0,   1,   0,   0,  -1,  -6,   0,  }, /* K */
+    {  -2,  -2,  -5,  -4,   0,  -5,  -4,   1,  -3,   5,   2,  -4,  -4,  -3,  -3,  -3,  -2,   0,  -3,  -2,   0,  -5,   0,  -4,   0,   0,  -2,  -6,   0,  }, /* L */
+    {  -2,  -2,  -4,  -3,  -1,  -4,  -3,   1,  -2,   2,   7,  -3,  -3,   0,  -2,  -2,  -1,   0,  -2,  -2,   0,  -4,   0,  -2,   0,   0,  -1,  -6,   0,  }, /* M */
+    {  -2,  -4,   1,  -1,  -4,  -1,   0,  -4,   0,  -4,  -3,   7,  -3,   0,  -1,   0,   0,  -4,  -5,  -3,   0,   4,   0,  -1,   0,   0,  -2,  -6,   0,  }, /* N */
+    {  -1,  -4,  -3,  -2,  -4,  -3,  -3,  -4,  -2,  -4,  -3,  -3,   8,  -2,  -3,  -2,  -2,  -3,  -5,  -4,   0,  -3,   0,  -2,   0,   0,  -2,  -6,   0,  }, /* P */
+    {  -1,  -4,  -1,   2,  -4,  -3,   1,  -4,   1,  -3,   0,   0,  -2,   7,   1,  -1,  -1,  -3,  -3,  -3,   0,  -1,   0,   4,   0,   0,  -1,  -6,   0,  }, /* Q */
+    {  -2,  -5,  -3,  -1,  -4,  -3,   0,  -4,   2,  -3,  -2,  -1,  -3,   1,   6,  -1,  -2,  -3,  -4,  -3,   0,  -2,   0,   0,   0,   0,  -2,  -6,   0,  }, /* R */
+    {   1,  -2,  -1,  -1,  -3,  -1,  -2,  -3,  -1,  -3,  -2,   0,  -2,  -1,  -1,   5,   1,  -2,  -4,  -3,   0,   0,   0,  -1,   0,   0,  -1,  -6,   0,  }, /* S */
+    {   0,  -2,  -2,  -1,  -3,  -3,  -2,  -1,  -1,  -2,  -1,   0,  -2,  -1,  -2,   1,   6,  -1,  -4,  -2,   0,  -1,   0,  -1,   0,   0,  -1,  -6,   0,  }, /* T */
+    {  -1,  -2,  -5,  -3,  -2,  -5,  -4,   3,  -3,   0,   0,  -4,  -3,  -3,  -3,  -2,  -1,   5,  -3,  -3,   0,  -4,   0,  -3,   0,   0,  -2,  -6,   0,  }, /* V */
+    {  -4,  -4,  -6,  -5,   0,  -4,  -3,  -4,  -5,  -3,  -2,  -5,  -5,  -3,  -4,  -4,  -4,  -3,  11,   2,   0,  -6,   0,  -4,   0,   0,  -3,  -6,   0,  }, /* W */
+    {  -3,  -4,  -4,  -4,   3,  -5,   1,  -2,  -3,  -2,  -2,  -3,  -4,  -3,  -3,  -3,  -2,  -3,   2,   8,   0,  -4,   0,  -3,   0,   0,  -2,  -6,   0,  }, /* Y */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* - */
+    {  -2,  -4,   4,   0,  -4,  -2,  -1,  -5,  -1,  -5,  -4,   4,  -3,  -1,  -2,   0,  -1,  -4,  -6,  -4,   0,   4,   0,   0,   0,   0,  -2,  -6,   0,  }, /* B */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* J */
+    {  -1,  -5,   0,   4,  -4,  -3,   0,  -4,   1,  -4,  -2,  -1,  -2,   4,   0,  -1,  -1,  -3,  -4,  -3,   0,   0,   0,   4,   0,   0,  -1,  -6,   0,  }, /* Z */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* O */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* U */
+    {  -1,  -3,  -2,  -2,  -2,  -2,  -2,  -2,  -1,  -2,  -1,  -2,  -2,  -1,  -2,  -1,  -1,  -2,  -3,  -2,   0,  -2,   0,  -1,   0,   0,  -2,  -6,   0,  }, /* X */
+    {  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,   0,  -6,   0,  -6,   0,   0,  -6,   1,   0,  }, /* * */
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  }, /* ~ */
+    }},
+};
+
+
+#define eslNTDIM 18
+
+struct esl_scorematrix_nt_preload_s {
+  char *name;
+  int   matrix[eslNTDIM][eslNTDIM];
+};
+
+static const struct esl_scorematrix_nt_preload_s ESL_SCOREMATRIX_NT_PRELOADS[] = {
+  { "DNA1", {
+    /*   A    C    G    T    -    R    Y    M    K    S    W    H    B    V    D    N    *    ~ */
+     {  41, -32, -26, -26,   0,  18, -29,  17, -26, -29,  18,   6, -28,   6,   7,   0, -38,   0, }, /*A*/
+     { -32,  39, -38, -17,   0, -35,  18,  15, -26,  14, -24,   6,   6,   3, -28,  -1, -38,   0, }, /*C*/
+     { -26, -38,  46, -31,   0,  22, -34, -32,  21,  20, -29, -32,   8,   9,  10,   1, -38,   0, }, /*G*/
+     { -26, -17, -31,  39,   0, -28,  18, -21,  15, -23,  16,   7,   7, -24,   5,   0, -38,   0, }, /*T*/
+     {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, }, /*-*/
+     {  18, -35,  22, -28,   0,  20, -32,  -2,   3,   1,   0,  -9,  -7,   7,   8,   1, -38,   0, }, /*R*/
+     { -29,  18, -34,  18,   0, -32,  18,   0,  -1,  -1,   0,   7,   6,  -9,  -9,  -1, -38,   0, }, /*Y*/
+     {  17,  15, -32, -21,   0,  -2,   0,  16, -26,  -3,   1,   6,  -8,   4,  -7,  -1, -38,   0, }, /*M*/
+     { -26, -26,  21,  15,   0,   3,  -1, -26,  18,   3,  -1,  -8,   7,  -5,   7,   1, -38,   0, }, /*K*/
+     { -29,  14,  20, -23,   0,   1,  -1,  -3,   3,  17, -26,  -9,   7,   6,  -6,   0, -38,   0, }, /*S*/
+     {  18, -24, -29,  16,   0,   0,   0,   1,  -1, -26,  17,   7,  -8,  -7,   6,   0, -38,   0, }, /*W*/
+     {   6,   6, -32,   7,   0,  -9,   7,   6,  -8,  -9,   7,   7,  -3,  -3,  -3,   0, -38,   0, }, /*H*/
+     { -28,   6,   8,   7,   0,  -7,   6,  -8,   7,   7,  -8,  -3,   7,  -2,  -2,   0, -38,   0, }, /*B*/
+     {   6,   3,   9, -24,   0,   7,  -9,   4,  -5,   6,  -7,  -3,  -2,   6,  -1,   0, -38,   0, }, /*V*/
+     {   7, -28,  10,   5,   0,   8,  -9,  -7,   7,  -6,   6,  -3,  -2,  -1,   7,   0, -38,   0, }, /*D*/
+     {   0,  -1,   1,   0,   0,   1,  -1,  -1,   1,   0,   0,   0,   0,   0,   0,   0,   0,   0, }, /*N*/
+     { -38, -38, -38, -38,   0, -38, -38, -38, -38, -38, -38, -38, -38, -38, -38,   0, -38,   0, }, /***/
+     {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, }, /*~*/
+   }},
+
+};
+
+
+
+
+
+
+/* Function:  esl_scorematrix_Set()
+ * Synopsis:  Set one of several standard matrices.
+ *
+ * Purpose:   Set the allocated score matrix <S> to standard score
+ *            matrix <name>, where <name> is the name of one of
+ *            several matrices built-in to Easel. For example,
+ *            <esl_scorematrix_Set("BLOSUM62", S)>.
+ *            
+ *            The alphabet for <S> (<S->abc_r>) must be set already.
+ *            
+ *            Built-in amino acid score matrices in Easel include
+ *            BLOSUM45, BLOSUM50, BLOSUM62, BLOSUM80, BLOSUM90, PAM30,
+ *            PAM70, PAM120, and PAM240.
+ *
+ * Returns:   <eslOK> on success, and the scores in <S> are set.
+ *            
+ *            <eslENOTFOUND> if <name> is not available as a built-in matrix
+ *            for the alphabet that's set in <S>.
+ * 
+ * Throws:    <eslEMEM> on allocation error.
+ */
+int
+esl_scorematrix_Set(const char *name, ESL_SCOREMATRIX *S)
+{
+  int which;
+  int x, y;
+
+  if (S->abc_r->type == eslAMINO)
+  {
+      int nmat = sizeof(ESL_SCOREMATRIX_AA_PRELOADS) / sizeof(struct esl_scorematrix_aa_preload_s);
+      for (which = 0; which < nmat; which++)
+        if (strcmp(ESL_SCOREMATRIX_AA_PRELOADS[which].name, name) == 0) break;
+      if (which >= nmat) return eslENOTFOUND;
+
+      strcpy(S->outorder, "ARNDCQEGHILKMFPSTWYVBZX*"); 
+      /* All standard PAM, BLOSUM matrices have same list of valid
+       * residues. If that ever changes, make <outorder> a data elem in the
+       * structures above.
+       */
+
+      /* Transfer scores from static built-in storage */
+      for (x = 0; x < S->Kp; x++)
+        for (y = 0; y < S->Kp; y++)
+          S->s[x][y] = ESL_SCOREMATRIX_AA_PRELOADS[which].matrix[x][y];
+
+  }
+  else if (S->abc_r->type == eslDNA || S->abc_r->type == eslRNA)
+  {
+    int nmat = sizeof(ESL_SCOREMATRIX_NT_PRELOADS) / sizeof(struct esl_scorematrix_nt_preload_s);
+    for (which = 0; which < nmat; which++)
+      if (strcmp(ESL_SCOREMATRIX_NT_PRELOADS[which].name, name) == 0) break;
+    if (which >= nmat) return eslENOTFOUND;
+
+    strcpy(S->outorder, "ACGTRYMKSWHBVDN");
+
+    /* Transfer scores from static built-in storage */
+    for (x = 0; x < S->Kp; x++)
+      for (y = 0; y < S->Kp; y++)
+        S->s[x][y] = ESL_SCOREMATRIX_NT_PRELOADS[which].matrix[x][y];
+
+  }
+  else return eslENOTFOUND;	/* no DNA matrices are built in yet! */
+
+  
+  /* Use <outorder> list to set <isval[x]> */
+  S->nc = strlen(S->outorder);
+  for (y = 0; y < S->nc; y++) {
+    x = esl_abc_DigitizeSymbol(S->abc_r, S->outorder[y]);
+    S->isval[x] = TRUE;
+  }
+
+  /* Copy the name */
+  if (esl_strdup(name, -1, &(S->name)) != eslOK) return eslEMEM;
+  return eslOK;
+}
+
+
+/* Function:  esl_scorematrix_SetIdentity()
+ * Synopsis:  Set matrix to +1 match, 0 mismatch.
+ *
+ * Purpose:   Sets score matrix <S> to be +1 for a match, 
+ *            0 for a mismatch. <S> may be for any alphabet.
+ *            
+ *            Rarely useful in real use, but may be useful to create
+ *            simple examples (including debugging).
+ *
+ * Returns:   <eslOK> on success, and the scores in <S> are set.
+ */
+int
+esl_scorematrix_SetIdentity(ESL_SCOREMATRIX *S)
+{
+  int a;
+  int x;
+
+  for (a = 0; a < S->abc_r->Kp*S->abc_r->Kp; a++) S->s[0][a] = 0;
+  for (a = 0; a < S->K; a++)                      S->s[a][a] = 1;
 
   for (x = 0;           x < S->K;  x++)      S->isval[x] = TRUE;
   for (x = S->abc_r->K; x < S->Kp; x++)      S->isval[x] = FALSE;
-  x = esl_abc_DigitizeSymbol(S->abc_r, 'B'); S->isval[x] = TRUE;
-  x = esl_abc_DigitizeSymbol(S->abc_r, 'Z'); S->isval[x] = TRUE;
-  x = esl_abc_DigitizeSymbol(S->abc_r, 'X'); S->isval[x] = TRUE;
-    
-  for (x = 0; x < S->Kp; x++)
-    for (y = 0; y < S->Kp; y++)
-      S->s[x][y] = blosum62[x][y];
+  
+  strncpy(S->outorder, S->abc_r->sym, S->K);  
+  S->outorder[S->K] = '\0';
+  S->nc             = S->K;
+  return eslOK;
+}
+/*---------------- end, some classic score matrices  --------*/
 
-  /* Bookkeeping necessary to be able to reproduce BLOSUM62 output format exactly, if we need to Write() */
-  strcpy(S->outorder, "ARNDCQEGHILKMFPSTWYVBZX*");
-  S->nc         = strlen(S->outorder);
 
-  if (esl_strdup("BLOSUM62", -1, &(S->name)) != eslOK) return eslEMEM;
+/*****************************************************************
+ *# 3. Deriving a score matrix probabilistically.
+ *****************************************************************/
+
+/* Function:  esl_scorematrix_SetFromProbs()
+ * Synopsis:  Set matrix from target and background probabilities.
+ *
+ * Purpose:   Sets the scores in a new score matrix <S> from target joint
+ *            probabilities in <P>, query background probabilities <fi>, and 
+ *            target background probabilities <fj>, with scale factor <lambda>:
+ *                 $s_{ij} = \frac{1}{\lambda} \frac{p_{ij}}{f_i f_j}$.
+ *                 
+ *            Size of everything must match the canonical alphabet
+ *            size in <S>. That is, <S->abc->K> is the canonical
+ *            alphabet size of <S>; <P> must contain $K times K$
+ *            probabilities $P_{ij}$, and <fi>,<fj> must be vectors of
+ *            K probabilities. All probabilities must be nonzero.
+ *            
+ * Args:      S      - score matrix to set scores in
+ *            lambda - scale factor     
+ *            P      - matrix of joint probabilities P_ij (KxK)
+ *            fi     - query background probabilities (0..K-1)
+ *            fj     - target background probabilities 
+ *
+ * Returns:   <eslOK> on success, and <S> contains the calculated score matrix.
+ */
+int
+esl_scorematrix_SetFromProbs(ESL_SCOREMATRIX *S, double lambda, const ESL_DMATRIX *P, const double *fi, const double *fj)
+{
+  int    i,j;
+  double sc;
+  
+  for (i = 0; i < S->abc_r->K; i++)
+    for (j = 0; j < S->abc_r->K; j++)
+      {
+	sc = log(P->mx[i][j] / (fi[i] * fj[j])) / lambda;
+	S->s[i][j] = (int) (sc + (sc>0 ? 0.5 : -0.5)); /* that's rounding to the nearest integer */
+      }
+
+  for (i = 0; i < S->abc_r->K; i++)
+    S->isval[i] = TRUE;
+  S->nc = S->abc_r->K;
+
+  strncpy(S->outorder, S->abc_r->sym, S->abc_r->K);
+  S->outorder[S->nc] = '\0';
   return eslOK;
 }
 
 
 /* Function:  esl_scorematrix_SetWAG()
  * Synopsis:  Set matrix using the WAG evolutionary model.           
- * Incept:    SRE, Thu Apr 12 13:23:28 2007 [Janelia]
  *
  * Purpose:   Parameterize an amino acid score matrix <S> using the WAG
  *            rate matrix \citep{WhelanGoldman01} as the underlying
@@ -238,256 +975,16 @@ esl_scorematrix_SetWAG(ESL_SCOREMATRIX *S, double lambda, double t)
   if (Q != NULL) esl_dmatrix_Destroy(P);
   return status;
 }
-
-
-/* Function:  esl_scorematrix_SetFromProbs()
- * Synopsis:  Set matrix from target and background probabilities.
- * Incept:    SRE, Wed Apr 11 17:37:45 2007 [Janelia]
- *
- * Purpose:   Sets the scores in a new score matrix <S> from target joint
- *            probabilities in <P>, query background probabilities <fi>, and 
- *            target background probabilities <fj>, with scale factor <lambda>:
- *                 $s_{ij} = \frac{1}{\lambda} \frac{p_{ij}}{f_i f_j}$.
- *                 
- *            Size of everything must match the canonical alphabet
- *            size in <S>. That is, <S->abc->K> is the canonical
- *            alphabet size of <S>; <P> must contain $K times K$
- *            probabilities $P_{ij}$, and <fi>,<fj> must be vectors of
- *            K probabilities. All probabilities must be nonzero.
- *            
- * Args:      S      - score matrix to set scores in
- *            lambda - scale factor     
- *            P      - matrix of joint probabilities P_ij (KxK)
- *            fi     - query background probabilities (0..K-1)
- *            fj     - target background probabilities 
- *
- * Returns:   <eslOK> on success, and <S> contains the calculated score matrix.
- */
-int
-esl_scorematrix_SetFromProbs(ESL_SCOREMATRIX *S, double lambda, const ESL_DMATRIX *P, const double *fi, const double *fj)
-{
-  int    i,j;
-  double sc;
-  
-  for (i = 0; i < S->abc_r->K; i++)
-    for (j = 0; j < S->abc_r->K; j++)
-      {
-	sc = log(P->mx[i][j] / (fi[i] * fj[j])) / lambda;
-	S->s[i][j] = (int) (sc + (sc>0 ? 0.5 : -0.5)); /* that's rounding to the nearest integer */
-      }
-
-  for (i = 0; i < S->abc_r->K; i++)
-    S->isval[i] = TRUE;
-  S->nc = S->abc_r->K;
-
-  strncpy(S->outorder, S->abc_r->sym, S->abc_r->K);
-  S->outorder[S->nc] = '\0';
-  return eslOK;
-}
-
-
-/* Function:  esl_scorematrix_Copy()
- * Synopsis:  Copy <src> matrix to <dest>.
- * Incept:    SRE, Tue May 15 10:24:20 2007 [Janelia]
- *
- * Purpose:   Copy <src> score matrix into <dest>. Caller
- *            has allocated <dest> for the same alphabet as
- *            <src>.
- *
- * Returns:   <eslOK> on success.
- *
- * Throws:    <eslEINCOMPAT> if <dest> isn't allocated for
- *            the same alphabet as <src>.
- *            <eslEMEM> on allocation error.
- */
-int
-esl_scorematrix_Copy(const ESL_SCOREMATRIX *src, ESL_SCOREMATRIX *dest)
-{
-  int i,j;
-  int status;
-
-  if (src->abc_r->type != dest->abc_r->type || src->K != dest->K || src->Kp != dest->Kp)
-    ESL_EXCEPTION(eslEINCOMPAT, "source and dest score matrix types don't match");
-
-  for (i = 0; i < src->K; i++)
-    for (j = 0; j < src->K; j++)
-      dest->s[i][j] = src->s[i][j];
-  for (i = 0; i < src->Kp; i++)
-    dest->isval[i] = src->isval[i];
-  dest->nc = src->nc;
-  for (i = 0; i < src->nc; i++)
-    dest->outorder[i] = src->outorder[i];
-  dest->outorder[dest->nc] = '\0';
-
-  if ((status = esl_strdup(src->name, -1, &(dest->name))) != eslOK) return status;
-  if ((status = esl_strdup(src->path, -1, &(dest->path))) != eslOK) return status;
-  return eslOK;
-}
-
-/* Function:  esl_scorematrix_Clone()
- * Synopsis:  Allocate a duplicate of a matrix. 
- * Incept:    SRE, Tue May 15 10:24:20 2007 [Janelia]
- *
- * Purpose:   Allocates a new matrix and makes it a duplicate
- *            of <S>. Return a pointer to the new matrix.
- *
- * Throws:    <NULL> on allocation failure.
- */
-ESL_SCOREMATRIX *
-esl_scorematrix_Clone(const ESL_SCOREMATRIX *S)
-{
-  ESL_SCOREMATRIX *dup = NULL;
-
-  if ((dup = esl_scorematrix_Create(S->abc_r)) == NULL)  return NULL;
-  if (esl_scorematrix_Copy(S, dup)             != eslOK) { esl_scorematrix_Destroy(dup); return NULL; }
-  return dup;
-}
-
-
-/* Function:  esl_scorematrix_Compare()
- * Synopsis:  Compare two matrices for equality.
- * Incept:    SRE, Tue Apr  3 14:17:12 2007 [Janelia]
- *
- * Purpose:   Compares two score matrices. Returns <eslOK> if they 
- *            are identical, <eslFAIL> if they differ. Every aspect
- *            of the two matrices is compared.
- *            
- *            The annotation (name, filename path) are not
- *            compared; we may want to compare an internally
- *            generated scorematrix to one read from a file.
- */
-int
-esl_scorematrix_Compare(const ESL_SCOREMATRIX *S1, const ESL_SCOREMATRIX *S2)
-{
-  int a,b;
-
-  if (strcmp(S1->outorder, S2->outorder) != 0) return eslFAIL;
-  if (S1->nc         != S2->nc)                return eslFAIL;
-  
-  for (a = 0; a < S1->nc; a++)
-    if (S1->isval[a] != S2->isval[a])          return eslFAIL;
-  
-  for (a = 0; a < S1->Kp; a++)
-    for (b = 0; b < S1->Kp; b++)
-      if (S1->s[a][b] != S2->s[a][b]) return eslFAIL;
-
-  return eslOK;
-}
-
-/* Function:  esl_scorematrix_CompareCanon()
- * Synopsis:  Compares scores of canonical residues for equality.
- * Incept:    SRE, Tue May 15 11:00:38 2007 [Janelia]
- *
- * Purpose:   Compares the scores of canonical residues in 
- *            two score matrices <S1> and <S2> for equality.
- *            Returns <eslOK> if they are identical, <eslFAIL> 
- *            if they differ. Peripheral aspects of the scoring matrices
- *            having to do with noncanonical residues, output
- *            order, and suchlike are ignored.
- */
-int
-esl_scorematrix_CompareCanon(const ESL_SCOREMATRIX *S1, const ESL_SCOREMATRIX *S2)
-{
-  int a,b;
-
-  for (a = 0; a < S1->K; a++)
-    for (b = 0; b < S1->K; b++)
-      if (S1->s[a][b] != S2->s[a][b]) return eslFAIL;
-  return eslOK;
-}
-
-
-
-/* Function:  esl_scorematrix_Max()
- * Synopsis:  Returns maximum value in score matrix.
- * Incept:    SRE, Thu Apr 12 18:04:35 2007 [Janelia]
- *
- * Purpose:   Returns the maximum value in score matrix <S>.
- */
-int
-esl_scorematrix_Max(const ESL_SCOREMATRIX *S)
-{
-  int i,j;
-  int max = S->s[0][0];
-
-  for (i = 0; i < S->K; i++)
-    for (j = 0; j < S->K; j++)
-      if (S->s[i][j] > max) max = S->s[i][j];
-  return max;
-}
-
-/* Function:  esl_scorematrix_Min()
- * Synopsis:  Returns minimum value in score matrix.
- * Incept:    SRE, Thu Apr 12 18:06:50 2007 [Janelia]
- *
- * Purpose:   Returns the minimum value in score matrix <S>.
- */
-int
-esl_scorematrix_Min(const ESL_SCOREMATRIX *S)
-{
-  int i,j;
-  int min = S->s[0][0];
-
-  for (i = 0; i < S->K; i++)
-    for (j = 0; j < S->K; j++)
-      if (S->s[i][j] < min) min = S->s[i][j];
-  return min;
-}
-
-
-/* Function:  esl_scorematrix_IsSymmetric()
- * Synopsis:  Returns <TRUE> for symmetric matrix.
- * Incept:    SRE, Sat May 12 18:17:17 2007 [Janelia]
- *
- * Purpose:   Returns <TRUE> if matrix <S> is symmetric,
- *            or <FALSE> if it's not.
- */
-int
-esl_scorematrix_IsSymmetric(const ESL_SCOREMATRIX *S)
-{
-  int i,j;
-
-  for (i = 0; i < S->K; i++)
-    for (j = i; j < S->K; j++)
-      if (S->s[i][j] != S->s[j][i]) return FALSE;
-  return TRUE;
-}
-
-
-
-/* Function:  esl_scorematrix_Destroy()
- * Synopsis:  Frees a matrix.
- * Incept:    SRE, Mon Apr  2 08:46:44 2007 [Janelia]
- *
- * Purpose:   Frees a score matrix.
- */
-void
-esl_scorematrix_Destroy(ESL_SCOREMATRIX *S)
-{
-  if (S == NULL) return;
-  if (S->s != NULL) {
-    if (S->s[0] != NULL) free(S->s[0]);
-    free(S->s);
-  }
-  if (S->isval    != NULL) free(S->isval);
-  if (S->outorder != NULL) free(S->outorder);
-  if (S->name     != NULL) free(S->name);
-  if (S->path     != NULL) free(S->path);
-  free(S);
-  return;
-}
-
-
+/*--------------- end, deriving score matrices ------------------*/
 
 
 
 /*****************************************************************
- * 2. Reading/writing score matrices.
+ *# 4. Reading/writing matrices from/to files
  *****************************************************************/
 
-/* Function:  esl_sco_Read()
+/* Function:  esl_scorematrix_Read()
  * Synopsis:  Read a standard matrix input file.
- * Incept:    SRE, Mon Apr  2 08:26:40 2007 [Janelia]
  *
  * Purpose:   Given a pointer <efp> to an open file parser for a file
  *            containing a score matrix (such as a PAM or BLOSUM
@@ -519,7 +1016,7 @@ esl_scorematrix_Destroy(ESL_SCOREMATRIX *S)
  * Throws:    <eslEMEM> on allocation error.
  */
 int
-esl_sco_Read(ESL_FILEPARSER *efp, const ESL_ALPHABET *abc, ESL_SCOREMATRIX **ret_S)
+esl_scorematrix_Read(ESL_FILEPARSER *efp, const ESL_ALPHABET *abc, ESL_SCOREMATRIX **ret_S)
 {
   int status;
   ESL_SCOREMATRIX *S     = NULL;
@@ -609,49 +1106,53 @@ esl_sco_Read(ESL_FILEPARSER *efp, const ESL_ALPHABET *abc, ESL_SCOREMATRIX **ret
   return status;
 }
 
-/* Function:  esl_sco_Write()
+/* Function:  esl_scorematrix_Write()
  * Synopsis:  Write a BLAST-compatible score matrix file.
- * Incept:    SRE, Tue Apr  3 13:55:10 2007 [Janelia]
  *
  * Purpose:   Writes a score matrix <S> to an open stream <fp>, in 
  *            format compatible with BLAST, FASTA, and other common
  *            sequence alignment software.
  *
  * Returns:   <eslOK> on success.
+ * 
+ * Throws:    <eslEWRITE> on any system write error, such as filled disk.
  */
 int
-esl_sco_Write(FILE *fp, const ESL_SCOREMATRIX *S)
+esl_scorematrix_Write(FILE *fp, const ESL_SCOREMATRIX *S)
 {
   int a,b;			
   int x,y;
   int nc = S->nc;
   
   /* The header line, with column labels for residues */
-  fprintf(fp, "  ");
-  for (a = 0; a < nc; a++) fprintf(fp, "  %c ", S->outorder[a]);
-  fprintf(fp, "\n");
+  if (fprintf(fp, "  ") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed"); 
+  for (a = 0; a < nc; a++) 
+    { if (fprintf(fp, "  %c ", S->outorder[a]) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed"); }
+  if (fprintf(fp, "\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed");
   
   /* The data */
   for (a = 0; a < nc; a++)
     {
-      fprintf(fp, "%c ", S->outorder[a]);
+      if (fprintf(fp, "%c ", S->outorder[a]) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed");
       for (b = 0; b < nc; b++)
 	{
 	  x = esl_abc_DigitizeSymbol(S->abc_r, S->outorder[a]);
 	  y = esl_abc_DigitizeSymbol(S->abc_r, S->outorder[b]);
-	  fprintf(fp, "%3d ", S->s[x][y]);
+	  if (fprintf(fp, "%3d ", S->s[x][y]) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed");
 	}
-      fprintf(fp, "\n");
+      if (fprintf(fp, "\n") < 0) ESL_EXCEPTION_SYS(eslEWRITE, "score matrix write failed");
     }
   return eslOK;
 }
+/*-------------- end, reading/writing matrices ------------------*/
+
+
 
 /*****************************************************************
- * 3. Interpreting score matrices probabilistically.
+ *# 5. Implicit probabilistic basis, I: given bg.
  *****************************************************************/ 
 
 static int set_degenerate_probs(const ESL_ALPHABET *abc, ESL_DMATRIX *P, double *fi, double *fj);
-
 
 struct lambda_params {
   const double *fi;
@@ -679,23 +1180,41 @@ lambda_fdf(double lambda, void *params, double *ret_fx, double *ret_dfx)
   return eslOK;
 }
 
-/* Function:  esl_sco_ProbifyGivenBG()
+/* Function:  esl_scorematrix_ProbifyGivenBG()
  * Synopsis:  Obtain $P_{ij}$ for matrix with known $\lambda$ and background. 
- * Incept:    SRE, Thu Apr 12 17:46:20 2007 [Janelia]
  *
  * Purpose:   Given a score matrix <S> and known query and target
- *            background frequencies <fi> and <fj>, calculate scale
+ *            background frequencies <fi> and <fj> respectively, calculate scale
  *            <lambda> and implicit target probabilities \citep{Altschul01}. 
  *            Optionally returns either (or both) in <opt_lambda> and <opt_P>.
  *
  *            The implicit target probabilities are returned in a
- *            newly allocated $K \times K$ <ESL_DMATRIX>, over only
- *            the canonical (typically 4 or 20) residues in the
- *            residue alphabet.
+ *            newly allocated $Kp \times Kp$ <ESL_DMATRIX>, over both
+ *            the canonical (typically K=4 or K=20) residues in the
+ *            residue alphabet, and the degenerate residue codes.
+ *            Values involving degenerate residue codes are marginal
+ *            probabilities (i.e. summed over the degeneracy).
+ *            Only actual residue degeneracy can have nonzero values
+ *            for <p_ij>; by convention, all values involving the
+ *            special codes for gap, nonresidue, and missing data
+ *            (<K>, <Kp-2>, <Kp-1>) are 0.
+ *            
+ *            If the caller wishes to convert this joint probability
+ *            matrix to conditionals, it can take advantage of the
+ *            fact that the degenerate probability <P(X,j)> is our
+ *            marginalized <pj>, and <P(i,X)> is <pi>. 
+ *             i.e., <P(j|i) = P(i,j) / P(i) = P(i,j) / P(X,j)>.
+ *            Those X values are <P->mx[i][esl_abc_GetUnknown(abc)]>,
+ *            <P->mx[esl_abc_GetUnknown(abc)][j]>; equivalently, just use
+ *            code <Kp-3> for X.
+ *             
+ *            By convention, i is always the query sequence, and j is
+ *            always the target. We do not assume symmetry in the
+ *            scoring system, though that is usually the case.
  *            
  * Args:      S          - score matrix
- *            fi         - background frequencies for sequence i
- *            fj         - background frequencies for sequence j
+ *            fi         - background frequencies for query sequence i
+ *            fj         - background frequencies for target sequence j
  *            opt_lambda - optRETURN: calculated $\lambda$ parameter
  *            opt_P      - optRETURN: implicit target probabilities $p_{ij}$; a KxK DMATRIX.                  
  *
@@ -710,10 +1229,9 @@ lambda_fdf(double lambda, void *params, double *ret_fx, double *ret_dfx)
  *            In these cases, <*ret_lambda> is 0.0, and <*ret_P> is <NULL>. 
  */
 int
-esl_sco_ProbifyGivenBG(const ESL_SCOREMATRIX *S, const double *fi, const double *fj, 
-		       double *opt_lambda, ESL_DMATRIX **opt_P)
+esl_scorematrix_ProbifyGivenBG(const ESL_SCOREMATRIX *S, const double *fi, const double *fj, 
+			       double *opt_lambda, ESL_DMATRIX **opt_P)
 {
-  int    status;
   ESL_ROOTFINDER *R = NULL;
   ESL_DMATRIX    *P = NULL;
   struct lambda_params p;
@@ -721,9 +1239,9 @@ esl_sco_ProbifyGivenBG(const ESL_SCOREMATRIX *S, const double *fi, const double 
   double lambda;
   int    i,j;
   double fx, dfx;
+  int    status;
 
-  /* First, solve for lambda by rootfinding.
-   */
+  /* First, solve for lambda by rootfinding. */
   /* Set up the data passed to the lambda_fdf function. */
   p.fi = fi;
   p.fj = fj;
@@ -745,8 +1263,7 @@ esl_sco_ProbifyGivenBG(const ESL_SCOREMATRIX *S, const double *fi, const double 
   if ((    R   = esl_rootfinder_CreateFDF(lambda_fdf, &p) )         == NULL) { status = eslEMEM; goto ERROR; }
   if (( status = esl_root_NewtonRaphson(R, lambda_guess, &lambda))  != eslOK) goto ERROR;
   
-  /* Now, given solution for lambda, calculate P
-   */
+  /* Now, given solution for lambda, calculate P */
   if (opt_P != NULL) 
     {
       if ((P = esl_dmatrix_Create(S->Kp, S->Kp)) == NULL) { status = eslEMEM; goto ERROR; }
@@ -771,18 +1288,205 @@ esl_sco_ProbifyGivenBG(const ESL_SCOREMATRIX *S, const double *fi, const double 
 }
 
 
+/* set_degenerate_probs()
+ * 
+ * Used by both esl_scorematrix_Probify() and
+ * esl_scorematrix_ProbifyGivenBG() to set degenerate residue
+ * probabilities once probs for canonical residues are known.
+ * 
+ * Input: P->mx[i][j] are joint probabilities p_ij for the canonical
+ *        alphabet 0..abc->K-1, but P matrix is allocated for Kp X Kp.
+ * 
+ * Calculate marginal sums for all i,j pairs involving degeneracy
+ * codes. Fill in [i][j'=K..Kp-1], [i'=K..Kp-1][j], and
+ * [i'=K..Kp-1][j'=K..Kp-1] for degeneracies i',j'. Any p_ij involving
+ * a gap (K), nonresidue (Kp-2), or missing data (Kp-1) character is
+ * set to 0.0 by convention.
+ *
+ * Don't assume symmetry. 
+ * 
+ * If <fi> or <fj> background probability vectors are non-<NULL>, set
+ * them too.  (Corresponding to the assumption of background =
+ * marginal probs, rather than background being given.) This takes
+ * advantage of the fact that P(X,i) is already the marginalized p_i,
+ * and P(j,X) is p_j.
+ */
+static int
+set_degenerate_probs(const ESL_ALPHABET *abc, ESL_DMATRIX *P, double *fi, double *fj)
+{
+  int i,j;	/* indices into canonical codes  */
+  int ip,jp;	/* indices into degenerate codes */
 
-/* This section is an implementation of one of the ideas in
- * Yu and Altschul, PNAS 100:15688, 2003 [YuAltschul03]:
+  /* sum to get [i=0..K] canonicals to [jp=K+1..Kp-3] degeneracies; 
+   * and [jp=K,Kp-2,Kp-1] set to 0.0
+   */
+  for (i = 0; i < abc->K; i++)
+    {
+      P->mx[i][abc->K] = 0.0;
+      for (jp = abc->K+1; jp < abc->Kp-2; jp++)
+	{
+	  P->mx[i][jp] = 0.0;
+	  for (j = 0; j < abc->K; j++)
+	    if (abc->degen[jp][j]) P->mx[i][jp] += P->mx[i][j];
+	}
+      P->mx[i][abc->Kp-2] = 0.0;
+      P->mx[i][abc->Kp-1] = 0.0;
+    }
+
+  esl_vec_DSet(P->mx[abc->K], abc->Kp, 0.0); /* gap row: all 0.0 by convention */
+
+  /* [ip][all] */
+  for (ip = abc->K+1; ip < abc->Kp-2; ip++)
+    {
+      /* [ip][j]: degenerate i, canonical j */
+      for (j = 0; j < abc->K; j++)      
+	{
+	  P->mx[ip][j] = 0.0;
+	  for (i = 0; i < abc->K; i++)
+	    if (abc->degen[ip][i]) P->mx[ip][j] += P->mx[i][j];
+	}
+      P->mx[ip][abc->K] = 0.0;
+
+      /* [ip][jp]: both positions degenerate */
+      for (jp = abc->K+1; jp < abc->Kp-2; jp++)      
+	{
+	  P->mx[ip][jp] = 0.0;
+	  for (j = 0; j < abc->K; j++)
+	    if (abc->degen[jp][j]) P->mx[ip][jp] += P->mx[ip][j];
+	}
+      P->mx[ip][abc->Kp-2] = 0.0;      
+      P->mx[ip][abc->Kp-1] = 0.0;      
+    }
+
+  esl_vec_DSet(P->mx[abc->Kp-2], abc->Kp, 0.0); /* nonresidue data * row, all 0.0 */
+  esl_vec_DSet(P->mx[abc->Kp-1], abc->Kp, 0.0); /* missing data ~ row, all 0.0    */
+
+  if (fi != NULL) { /* fi[i'] = p(i',X) */
+    fi[abc->K] = 0.0;
+    for (ip = abc->K+1; ip < abc->Kp-2; ip++) fi[ip] = P->mx[ip][abc->Kp-3];
+    fi[abc->Kp-2] = 0.0;
+    fi[abc->Kp-1] = 0.0;
+  }
+
+  if (fj != NULL) { /* fj[j'] = p(X,j')*/
+    fj[abc->K] = 0.0;
+    for (jp = abc->K+1; jp < abc->Kp-2; jp++) fj[jp] = P->mx[abc->Kp-3][jp];
+    fj[abc->Kp-2] = 0.0;
+    fj[abc->Kp-1] = 0.0;
+  }
+
+  return eslOK;
+}
+/*------------- end, implicit prob basis, bg known --------------*/
+
+
+/*****************************************************************
+ *# 6. Implicit probabilistic basis, II: bg unknown 
+ *****************************************************************/
+
+/* This section implements one of the key ideas in Yu and Altschul,
+ * PNAS 100:15688, 2003 [YuAltschul03], and Yu and Altschul,
+ * Bioinformatics 21:902-911, 2005 [YuAltschul05]:
+ * 
  * Given a valid score matrix, calculate its probabilistic
  * basis (P_ij, f_i, f_j, and lambda), on the assumption that
  * the background probabilities are the marginals of P_ij.
+ * 
+ * However, this procedure appears to be unreliable.
+ * There are often numerous invalid solutions with negative
+ * probabilities, and the Yu/Altschul Y function (that we've solving
+ * for its root) is often discontinuous. Although Yu and Altschul say
+ * they can just keep searching for solutions until a valid one is
+ * found, and "this procedure presents no difficulties in practice", I
+ * don't see how.
+ * 
+ * For example, run the procedure on PAM190 and PAM200. For PAM190
+ * you will obtain a valid solution with lambda = 0.2301. For PAM200
+ * you will obtain an *invalid* solution with lambda = 0.2321, and
+ * negative probabilities f_{ENT} (and all p_ij involving ENT and 
+ * the other 17 aa). There is a discontinuity in the function, but 
+ * it's not near these lambdas, it's at about lambda=0.040, so it's 
+ * not that we fell into a discontinuity: the bisection procedure on
+ * lambda is working smoothly. And if you calculate a score matrix again
+ * from the invalid PAM200 solution, you get PAM200 back, so it's not
+ * that there's an obvious bug -- we do obtain a "solution" to PAM200,
+ * just not one with positive probabilities. It's not obvious how
+ * we could find a different solution to PAM200 than the invalid one!
+ *
+ * What we're going to do [xref J7/126, Apr 2011] is to deprecate 
+ * the Yu/Altschul procedure altogether.
  */
 struct yualtschul_params {
   ESL_DMATRIX *S;   /* pointer to the KxK score matrix w/ values cast to doubles */		
   ESL_DMATRIX *M;   /* not a param per se: alloc'ed storage for M matrix provided to the objective function */
   ESL_DMATRIX *Y;   /* likewise, alloc'ed storage for Y (M^-1) matrix provided to obj function */
 };
+
+/* yualtschul_scorematrix_validate
+ * See start of section 3, p. 903, YuAltschul05
+ * (Implementation could be more efficient here; don't really have
+ *  to sweep the entire matrix twice to do this.)
+ */
+static int
+yualtschul_scorematrix_validate(const ESL_SCOREMATRIX *S)
+{
+  int i, j;
+  int has_neg, has_pos;
+
+  /* each row must have at least one positive and one negative score */
+  for (i = 0; i < S->K; i++)
+    {
+      has_neg = has_pos = FALSE;
+      for (j = 0; j < S->K; j++)
+	{
+	  if (S->s[i][j] > 0) has_pos = TRUE;
+	  if (S->s[i][j] < 0) has_neg = TRUE;
+	}
+      if (! has_pos || ! has_neg) return eslFAIL;
+    }
+  
+  /* ditto for columns */
+  for (j = 0; j < S->K; j++)
+    {
+      has_neg = has_pos = FALSE;
+      for (i = 0; i < S->K; i++)
+	{
+	  if (S->s[i][j] > 0) has_pos = TRUE;
+	  if (S->s[i][j] < 0) has_neg = TRUE;
+	}
+      if (! has_pos || ! has_neg) return eslFAIL;
+    }
+      
+  return eslOK;
+}
+
+/* upper bound bracketing lambda solution: eqn (12) in [YuAltschul05] */
+static double
+yualtschul_upper_bound(const ESL_DMATRIX *Sd)
+{
+  int    i;
+  double minimax;
+  double maxlambda;
+  
+  /* minimax = c in YuAltschul05 p.903 = smallest of the max scores in each row/col */
+  minimax = esl_vec_DMax(Sd->mx[0], Sd->n); 
+  for (i = 1; i < Sd->n; i++)
+    minimax = ESL_MIN(minimax, esl_vec_DMax(Sd->mx[i], Sd->n));
+  
+  maxlambda = log((double) Sd->n) / minimax; /* eqn (12), YuAltschul05 */
+  return maxlambda;
+}
+
+static int
+yualtschul_solution_validate(const ESL_DMATRIX *P, const double *fi, const double *fj)
+{
+  
+  if ( esl_dmx_Min(P)         < 0.0)  return eslFAIL;
+  if ( esl_vec_DMin(fi, P->n) < 0.0)  return eslFAIL;
+  if ( esl_vec_DMin(fj, P->n) < 0.0)  return eslFAIL;
+
+  return eslOK;
+}
 
 /* yualtschul_func()
  *
@@ -816,7 +1520,7 @@ yualtschul_func(double lambda, void *params, double *ret_fx)
  *
  * This function backcalculates the probabilistic basis for a score
  * matrix S, when S is a double-precision matrix. Providing this
- * as a separate "engine" and writing esl_sco_Probify()
+ * as a separate "engine" and writing esl_scorematrix_Probify()
  * as a wrapper around it allows us to separately test inaccuracy
  * due to numerical performance of our linear algebra, versus 
  * inaccuracy due to integer roundoff in integer scoring matrices.
@@ -824,7 +1528,7 @@ yualtschul_func(double lambda, void *params, double *ret_fx)
  * It is not uncommon for this to fail when S is derived from
  * integer scores. Because the scores may have been provided by the
  * user, and this may be our first chance to detect the "user error"
- * of an invalid matrix, this engine returns <eslENORESULT> as a normal error
+ * of an invalid matrix, this engine returns <eslEINVAL> as a normal error
  * if it can't reach a valid solution.
  */
 static int 
@@ -844,30 +1548,24 @@ yualtschul_engine(ESL_DMATRIX *S, ESL_DMATRIX *P, double *fi, double *fj, double
   if ((p.M = esl_dmatrix_Create(S->n, S->n))           == NULL) { status = eslEMEM; goto ERROR; }
   if ((p.Y = esl_dmatrix_Create(S->n, S->n))           == NULL) { status = eslEMEM; goto ERROR; }
   if ((R = esl_rootfinder_Create(yualtschul_func, &p)) == NULL) { status = eslEMEM; goto ERROR; }
-
-  /* Need a reasonable initial guess for lambda; if we use extreme
-   * lambda guesses, we'll introduce numeric instability in the
-   * objective function, and may even blow up the values of e^{\lambda
-   * s_ij} in the M matrix. Appears to be safe to start with lambda on
-   * the order of 2/max(s_ij).
-   */
-  xr = 1. / esl_dmx_Max(S);
   
   /* Identify suitable brackets on lambda. */
+  xr = yualtschul_upper_bound(S);
+
   for (xl = xr; xl > 1e-10; xl /= 1.6) {
     if ((status = yualtschul_func(xl, &p, &fx))  != eslOK) goto ERROR;
     if (fx > 0.) break;
   }
-  if (fx <= 0.) { status = eslENORESULT; goto ERROR; }
+  if (fx <= 0.) { status = eslEINVAL; goto ERROR; }
 
   for (; xr < 100.; xr *= 1.6) {
     if ((status = yualtschul_func(xr, &p, &fx))  != eslOK) goto ERROR;
     if (fx < 0.) break;
   }
-  if (fx >= 0.) { status = eslENORESULT; goto ERROR; }
+  if (fx >= 0.) { status = eslEINVAL; goto ERROR; }
 
   /* Find lambda by bisection */
-  if (esl_root_Bisection(R, xl, xr, &lambda) != eslOK)     goto ERROR;
+  if (( status = esl_root_Bisection(R, xl, xr, &lambda)) != eslOK) goto ERROR;
 
   /* Find fi, fj from Y: fi are column sums, fj are row sums */
   for (i = 0; i < S->n; i++) {
@@ -897,9 +1595,9 @@ yualtschul_engine(ESL_DMATRIX *S, ESL_DMATRIX *P, double *fi, double *fj, double
   return status;
 }
 
-/* Function:  esl_sco_Probify()
+
+/* Function:  esl_scorematrix_Probify()
  * Synopsis:  Calculate the probabilistic basis of a score matrix.
- * Incept:    SRE, Wed Apr 11 07:56:44 2007 [Janelia]
  *
  * Purpose:   Reverse engineering of a score matrix: given a "valid"
  *            substitution matrix <S>, obtain implied joint
@@ -913,24 +1611,21 @@ yualtschul_engine(ESL_DMATRIX *S, ESL_DMATRIX *P, double *fi, double *fj, double
  *            $0..K-1$ in S, to calculate joint probabilities for all
  *            canonical residues. Joint and background probabilities 
  *            involving degenerate residues are then calculated by
- *            appropriate marginalizations.
+ *            appropriate marginalizations. See notes on
+ *            <esl_scorematrix_ProbifyGivenBG()> about how probabilities
+ *            involving degeneracy codes are calculated.
  *
  *            This implements an algorithm described in
- *            \citep{YuAltschul03}.
- *            
- *            This algorithm works fine in principle, but when it is
- *            applied to rounded integer scores with small dynamic
- *            range (the typical situation for score matrices) it may
- *            fail due to integer roundoff error. It works best for
- *            score matrices built using small values of $\lambda$. Yu
- *            and Altschul use $\lambda = 0.00635$ for BLOSUM62, which
- *            amounts to scaling default BLOSUM62 up 50-fold. It
- *            happens that default BLOSUM62 (which was created with
- *            lambda = 0.3466, half-bits) can be successfully reverse
- *            engineered (albeit with some loss of accuracy;
- *            calculated lambda is 0.3240) but other common matrices
- *            may fail. This failure results in a normal returned
- *            error of <eslENORESULT>. 
+ *            \citep{YuAltschul03} and \citep{YuAltschul05}.
+ *
+ *            Although this procedure may succeed in many cases,
+ *            it is unreliable and should be used with great caution.
+ *            Yu and Altschul note that it can find invalid solutions
+ *            (negative probabilities), and although they say that one
+ *            can keep searching until a valid solution is found, 
+ *            one can produce examples where this does not seem to be
+ *            the case. The caller MUST check return status, and
+ *            MUST expect <eslENORESULT>.
  *            
  * Args:      S          - score matrix 
  *            opt_P      - optRETURN: Kp X Kp matrix of implied target probs $p_{ij}$
@@ -944,14 +1639,19 @@ yualtschul_engine(ESL_DMATRIX *S, ESL_DMATRIX *P, double *fi, double *fj, double
  *            <opt_P>, <opt_fi>, and <opt_fj>, if requested, are new
  *            allocations, and must be freed by the caller.
  *            
- *            Returns <eslENORESULT> if the algorithm fails to determine a valid solution.
+ *            Returns <eslENORESULT> if the algorithm fails to determine a valid solution,
+ *            but the solution is still returned (and caller needs to free).
+ *
+ *            Returns <eslEINVAL> if input score matrix isn't valid (sensu YuAltschul05);
+ *            now <opt_P>, <opt_fi>, <opt_fj> are returned NULL and <opt_lambda> is returned
+ *            as 0.
  *
  * Throws:    <eslEMEM> on allocation failure.
  *
- * Xref:      J1/35.
+ * Xref:      SRE:J1/35; SRE:J7/126.
  */
 int
-esl_sco_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, double **opt_fj, double *opt_lambda)
+esl_scorematrix_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, double **opt_fj, double *opt_lambda)
 {
   int status;
   ESL_DMATRIX  *Sd  = NULL;
@@ -961,6 +1661,9 @@ esl_sco_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, 
   double        lambda;
   int i,j;
 
+  /* Check the input matrix for validity */
+  if ( yualtschul_scorematrix_validate(S) != eslOK) { status = eslEINVAL; goto ERROR; }
+
   if (( Sd = esl_dmatrix_Create(S->K,  S->K))  == NULL) {status = eslEMEM; goto ERROR; }
   if (( P  = esl_dmatrix_Create(S->Kp, S->Kp)) == NULL) {status = eslEMEM; goto ERROR; }
   ESL_ALLOC(fi, sizeof(double) * S->Kp);
@@ -969,7 +1672,7 @@ esl_sco_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, 
   /* Construct a double-precision dmatrix from S.
    * I've tried integrating over the rounding uncertainty by
    * averaging over trials with values jittered by +/- 0.5,
-   * but it doesn't appear to help much, if at all.
+   * but it doesn't appear to help.
    */
   for (i = 0; i < S->K; i++) 
     for (j = 0; j < S->K; j++)
@@ -977,17 +1680,18 @@ esl_sco_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, 
 
   /* Reverse engineer the doubles */
   if ((status = yualtschul_engine(Sd, P, fi, fj, &lambda)) != eslOK) goto ERROR;
-
-  /* Set the degenerate probabilities by appropriate sums */
   set_degenerate_probs(S->abc_r, P, fi, fj);
-      
+
   /* Done. */
+  if (yualtschul_solution_validate(P, fi, fj) != eslOK) status = eslENORESULT;
+  else status = eslOK;
+
   esl_dmatrix_Destroy(Sd);
   if (opt_P      != NULL) *opt_P      = P;       else esl_dmatrix_Destroy(P);
   if (opt_fi     != NULL) *opt_fi     = fi;      else free(fi);
   if (opt_fj     != NULL) *opt_fj     = fj;      else free(fj);
   if (opt_lambda != NULL) *opt_lambda = lambda;
-  return eslOK;
+  return status;
 
  ERROR:
   if (Sd  != NULL) esl_dmatrix_Destroy(Sd);
@@ -1000,142 +1704,158 @@ esl_sco_Probify(const ESL_SCOREMATRIX *S, ESL_DMATRIX **opt_P, double **opt_fi, 
   if (opt_lambda != NULL) *opt_lambda = 0.;
   return status;
 }
+/*---------- end, implicit prob basis, bg unknown ---------------*/
 
 
-
-/* Function:  esl_sco_RelEntropy()
- * Synopsis:  Calculates relative entropy of a matrix.
- * Incept:    SRE, Sat May 12 18:14:02 2007 [Janelia]
- *
- * Purpose:   Calculates the relative entropy of score matrix <S> in
- *            bits, given its background distributions <fi> and <fj> and
- *            its scale <lambda>.
- *
- * Args:      S          - score matrix
- *            fi         - background freqs for sequence i
- *            fj         - background freqs for sequence j
- *            lambda     - scale factor $\lambda$ for <S>
- *            ret_D      - RETURN: relative entropy.
- * 
- * Returns:   <eslOK> on success, and <ret_D> contains the relative
- *            entropy.
- *
- * Throws:    <eslEMEM> on allocation error. 
- *            <eslEINVAL> if the implied $p_{ij}$'s don't sum to one,
- *            probably indicating that <lambda> was not the correct
- *            <lambda> for <S>, <fi>, and <fj>.
- *            In either exception, <ret_D> is returned as 0.0.
- */
-int
-esl_sco_RelEntropy(const ESL_SCOREMATRIX *S, const double *fi, const double *fj, double lambda, double *ret_D)
-{
-  int    status;
-  double pij;
-  double sum = 0.;
-  int    i,j;
-  double D = 0;
-
-  for (i = 0; i < S->K; i++)
-    for (j = 0; j < S->K; j++)
-      {
-	pij  = fi[i] * fj[j] * exp(lambda * (double) S->s[i][j]);
-	sum += pij;
-	if (pij > 0.) D += pij * log(pij / (fi[i] * fj[j]));
-	
-      }
-  if (esl_DCompare(sum, 1.0, 1e-3) != eslOK) 
-    ESL_XEXCEPTION(eslEINVAL, "pij's don't sum to one: bad lambda?");
-
-  D /= eslCONST_LOG2;
-  *ret_D = D;
-  return eslOK;
-
- ERROR:
-  *ret_D = 0.;
-  return status;
-}
-
-
-/* Input: P->mx[i][j] are joint probabilities p_ij for the canonical alphabet 0..abc->K-1,
- *        but P matrix is allocated for Kp X Kp
- * 
- * Fill in [i][j'=K..Kp-1], [i'=K..Kp-1][j], and [i'=K..Kp-1][j'=K..Kp-1] for degeneracies i',j'
- * Any p_ij involving a gap (K), nonresidue (Kp-2), or missing data (Kp-1) character is set to 0.0 by convention.
- *
- * Don't assume symmetry. 
- * 
- * If <fi> or <fj> background probability vectors are non-<NULL>, set them too.
- * (Corresponding to the assumption of background = marginal probs, rather than
- *  background being given.)
- */
-static int
-set_degenerate_probs(const ESL_ALPHABET *abc, ESL_DMATRIX *P, double *fi, double *fj)
-{
-  int i,j,ip,jp;
-
-  for (i = 0; i < abc->K; i++)
-    {
-      P->mx[i][abc->K] = 0.0;
-      for (jp = abc->K+1; jp < abc->Kp; jp++)
-	{
-	  P->mx[i][jp] = 0.0;
-	  for (j = 0; j < abc->K; j++)
-	    if (abc->degen[jp][j]) P->mx[i][jp] += P->mx[i][j];
-	}
-      P->mx[i][abc->Kp-2] = 0.0;
-      P->mx[i][abc->Kp-1] = 0.0;
-    }
-
-  esl_vec_DSet(P->mx[abc->K],    abc->Kp, 0.0); /* gap row */
-
-  for (ip = abc->K+1; ip < abc->Kp-2; ip++)
-    {
-      for (j = 0; j < abc->K; j++)      
-	{
-	  P->mx[ip][j] = 0.0;
-	  for (i = 0; i < abc->K; i++)
-	    if (abc->degen[ip][i]) P->mx[ip][j] += P->mx[i][j];
-	}
-      P->mx[ip][abc->K] = 0.0;
-
-      for (jp = abc->K+1; jp < abc->Kp; jp++)      
-	{
-	  P->mx[ip][jp] = 0.0;
-	  for (j = 0; j < abc->K; j++)
-	    if (abc->degen[jp][j]) P->mx[ip][jp] += P->mx[ip][j];
-	}
-      P->mx[ip][abc->Kp-2] = 0.0;      
-      P->mx[ip][abc->Kp-1] = 0.0;      
-    }
-
-  esl_vec_DSet(P->mx[abc->Kp-2], abc->Kp, 0.0); /* nonresidue data ~ row   */
-  esl_vec_DSet(P->mx[abc->Kp-1], abc->Kp, 0.0); /* missing data ~ row   */
-
-  if (fi != NULL) { /* fi[i'] = p(i',X) */
-    fi[abc->K] = 0.0;
-    for (ip = abc->K+1; ip < abc->Kp-2; ip++) fi[ip] = P->mx[ip][abc->Kp-3];
-    fi[abc->Kp-2] = 0.0;
-    fi[abc->Kp-1] = 0.0;
-  }
-
-  if (fj != NULL) { /* fj[j'] = p(X,j')*/
-    fj[abc->K] = 0.0;
-    for (jp = abc->K+1; jp < abc->Kp-2; jp++) fj[jp] = P->mx[abc->Kp-3][jp];
-    fj[abc->Kp-2] = 0.0;
-    fj[abc->Kp-1] = 0.0;
-  }
-
-  return eslOK;
-}
 
 
 /*****************************************************************
- * 4. Utilities
+ * 7. Experiment driver
+ *****************************************************************/
+
+#ifdef eslSCOREMATRIX_EXPERIMENT
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "easel.h"
+#include "esl_alphabet.h"
+#include "esl_dmatrix.h"
+#include "esl_getopts.h"
+#include "esl_scorematrix.h"
+#include "esl_vectorops.h"
+
+static ESL_OPTIONS options[] = {
+   /* name  type         default  env   range togs  reqs  incomp  help                docgrp */
+  {"-h",  eslARG_NONE,    FALSE, NULL, NULL, NULL, NULL, NULL, "show help and usage",                            0},
+  {"-l",  eslARG_REAL, "0.3466", NULL, NULL, NULL, NULL, NULL, "set base lambda (units of score mx) to <x>",     0},
+  {"-s",  eslARG_REAL,    "1.0", NULL, NULL, NULL, NULL, NULL, "additional scale factor applied to lambda",      0},
+  {"-t",  eslARG_REAL,   "1.37", NULL, NULL, NULL, NULL, NULL, "set WAG time (branch length) to <x>",            0},
+  {"--yfile", eslARG_OUTFILE, NULL, NULL, NULL, NULL, NULL, NULL, "save xy file of Yu/Altschul root eqn to <f>", 0},
+  {"--mfile", eslARG_OUTFILE, NULL, NULL, NULL, NULL, NULL, NULL, "save WAG score matrix to <f>",                0},
+  { 0,0,0,0,0,0,0,0,0,0},
+};
+static char usage[]  = "[-options]";
+static char banner[] = "Yu/Altschul experiment driver for scorematrix module";
+
+/* yualtschul_graph_dump()
+ * Dump an XY plot of (\sum Y -1) vs. lambda for a score matrix.
+ * X-axis of graph starts at <lambda0>, ends at <lambda1>, stepping by <stepsize>.
+ */
+static int
+yualtschul_graph_dump(FILE *ofp, ESL_SCOREMATRIX *S, double scale, double lambda0, double lambda1, double stepsize)
+{
+  struct yualtschul_params p;
+  int    a,b;
+  double fx;
+  double lambda;
+
+  /* Set up a bisection method to find lambda */
+  p.S = esl_dmatrix_Create(S->K, S->K);
+  p.M = esl_dmatrix_Create(S->K, S->K);
+  p.Y = esl_dmatrix_Create(S->K, S->K);
+
+  for (a = 0; a < S->K; a++)
+    for (b = 0; b < S->K; b++)
+      p.S->mx[a][b] = (double) S->s[a][b];
+
+  for (lambda = lambda0; lambda <= lambda1; lambda += stepsize)
+    {
+      yualtschul_func(lambda/scale, &p, &fx);
+      fprintf(ofp, "%f %f\n", lambda, fx);
+    }
+  fprintf(ofp, "&\n");
+  fprintf(ofp, "%f 0.0\n", lambda0);
+  fprintf(ofp, "%f 0.0\n", lambda1);
+  fprintf(ofp, "&\n");
+  
+  esl_dmatrix_Destroy(p.S);
+  esl_dmatrix_Destroy(p.M);
+  esl_dmatrix_Destroy(p.Y);
+  return 0;
+}
+
+int
+main(int argc, char **argv)
+{
+  ESL_GETOPTS     *go      = esl_getopts_CreateDefaultApp(options, 0, argc, argv, banner, usage);
+  ESL_ALPHABET    *abc     = esl_alphabet_Create(eslAMINO);             /* protein matrices 20x20 */
+  ESL_DMATRIX     *Q       = esl_dmatrix_Create(abc->K, abc->K);	/* WAG rate matrix */
+  ESL_DMATRIX     *P0      = esl_dmatrix_Create(abc->K, abc->K);	/* p_ij joint probabilities calculated from WAG */
+  double          *wagpi   = malloc(sizeof(double) * abc->K);  
+  ESL_SCOREMATRIX *S0      = esl_scorematrix_Create(abc);	        /* score matrix calculated from WAG p_ij's */
+  double           lambda0 = esl_opt_GetReal(go, "-l");
+  double           t       = esl_opt_GetReal(go, "-t");
+  double           scale   = esl_opt_GetReal(go, "-s");
+  char            *yfile   = esl_opt_GetString(go, "--yfile");
+  char            *mfile   = esl_opt_GetString(go, "--mfile");
+  ESL_DMATRIX     *P       = NULL;                                      /* p_ij's from Yu/Altschul reverse eng of S0 */
+  double          *fi      = NULL;
+  double          *fj      = NULL;
+  double           lambda;
+  double           D;
+  int              status;
+  
+  /* Calculate an integer score matrix from a probabilistic rate matrix (WAG) */
+  esl_scorematrix_SetWAG(S0, lambda0/scale, t);
+  esl_composition_WAG(wagpi);
+  printf("WAG matrix calculated at t=%.3f, lambda=%.4f (/%.1f)\n", t, lambda0, scale);
+
+  /* Save the matrix, if asked */
+  if (mfile)
+    {
+      FILE *ofp = NULL;
+      if ( (ofp = fopen(mfile, "w")) == NULL) esl_fatal("failed to open %s for writing scorematrix", mfile);
+      strcpy(S0->outorder, "ARNDCQEGHILKMFPSTWYV");
+      esl_scorematrix_Write(ofp, S0);
+      fclose(ofp);
+    }
+
+  /* Because of integer roundoff, the actual probability basis is a little different */
+  esl_scorematrix_ProbifyGivenBG(S0, wagpi, wagpi, &lambda, NULL);
+  printf("Integer roundoff shifts implicit lambda (given wagpi's) to %.4f (/%.1f)\n", lambda*scale, scale);
+  printf("Scores in matrix range from %d to %d\n", esl_scorematrix_Min(S0), esl_scorematrix_Max(S0));
+
+  esl_scorematrix_RelEntropy(S0, wagpi, wagpi, lambda, &D);
+  printf("Relative entropy: %.3f bits\n", D);
+  
+  if (yfile)
+    {
+      FILE *ofp = NULL;
+      if ( (ofp = fopen(yfile, "w")) == NULL) esl_fatal("failed to open XY file %s for writing\n", yfile);
+      yualtschul_graph_dump(ofp, S0, scale, 0.01, 1.0, 0.0001);
+      fclose(ofp);
+      printf("XY plot of Yu/Altschul rootfinding saved to : %s\n", yfile);
+    }
+
+  status = esl_scorematrix_Probify(S0, &P, &fi, &fj, &lambda);
+  printf("Yu/Altschul reverse engineering gives lambda = %.4f (/%.1f)\n", lambda*scale, scale);
+
+  //printf("fi's are: \n");  esl_vec_DDump(stdout, fi, S0->K, abc->sym);
+
+  if (status != eslOK) printf("however, the solution is INVALID!\n");
+  else                 printf("and the joint and marginals are a valid probabilistic basis.\n");
+
+  free(fj);
+  free(fi);
+  esl_scorematrix_Destroy(S0);
+  esl_dmatrix_Destroy(P);
+  esl_dmatrix_Destroy(P0);
+  esl_dmatrix_Destroy(Q);
+  esl_alphabet_Destroy(abc);
+  esl_getopts_Destroy(go);
+  return 0;
+}
+#endif /* eslSCOREMATRIX_EXPERIMENT */
+/*------------------ end, experiment driver ---------------------*/
+
+
+
+/*****************************************************************
+ * 8. Utility programs
  *****************************************************************/ 
 
-/* Reformat a score matrix file, canonical residues only, into
- * Easel internal digital alphabet order, suitable for making 
- * a static data structure.
+/* Reformat a score matrix file into Easel internal digital alphabet order, suitable for making 
+ * one of the static data structures in our section of preloaded matrices.
  */
 #ifdef eslSCOREMATRIX_UTILITY1
 /* 
@@ -1161,11 +1881,16 @@ main(int argc, char **argv)
   if (esl_fileparser_Open(infile, NULL, &efp) != eslOK) esl_fatal("Failed to open %s\n", infile);
   if (esl_scorematrix_Read(efp, abc, &S)      != eslOK) esl_fatal("parse failed: %s", efp->errbuf);
 
+  printf("    /*");
+  for (y = 0; y < abc->Kp; y++)
+    printf("  %c  ", abc->sym[y]);
+  printf("         */\n");
+
   for (x = 0; x < abc->Kp; x++) {
-    printf("{ ");
+    printf("    { ");
     for (y = 0; y < abc->Kp; y++)
       printf("%3d, ", S->s[x][y]);
-    printf(" },\n");
+    printf(" }, /* %c */\n", abc->sym[x]);
   }
   
   esl_scorematrix_Destroy(S);
@@ -1201,15 +1926,11 @@ main(int argc, char **argv)
   double           slambda;
   int              a,b;
 
-  esl_scorematrix_SetBLOSUM62(S);
-  
-  esl_sco_Probify(S, &Q, &fa, &fb, &slambda);
+  esl_scorematrix_Set("BLOSUM62", S);
+  esl_scorematrix_Probify(S, &Q, &fa, &fb, &slambda);
 #if 0
-  for (a = 0; a < abc->K; a++)
-    for (b = 0; b < abc->K; b++)
-      Q->mx[a][b] /= fa[a];	/* Q->mx[a][b] is now P(b | a) */
+  esl_scorematrix_JointToConditionalOnQuery(abc, Q); /* Q->mx[a][b] is now P(b | a) */
 #endif
-  
   esl_dmatrix_Dump(stdout, Q, abc->sym, abc->sym);
   
   esl_dmatrix_Destroy(Q);
@@ -1225,7 +1946,7 @@ main(int argc, char **argv)
 
 
 /*****************************************************************
- * 5. Unit tests.
+ * 9. Unit tests.
  *****************************************************************/
 
 #ifdef eslSCOREMATRIX_TESTDRIVE
@@ -1240,11 +1961,11 @@ utest_ReadWrite(ESL_ALPHABET *abc, ESL_SCOREMATRIX *S)
   ESL_FILEPARSER  *efp = NULL;
   
   if (esl_tmpfile_named(tmpfile, &fp)          != eslOK) esl_fatal("failed to open tmp file");
-  if (esl_sco_Write(fp, S)                     != eslOK) esl_fatal("failed to write test matrix");
+  if (esl_scorematrix_Write(fp, S)                     != eslOK) esl_fatal("failed to write test matrix");
   fclose(fp);
 
   if (esl_fileparser_Open(tmpfile, NULL, &efp) != eslOK) esl_fatal("failed to open tmpfile containing BLOSUM62 matrix");
-  if (esl_sco_Read(efp, abc, &S2)              != eslOK) esl_fatal("failed to read tmpfile containing BLOSUM62 matrix");
+  if (esl_scorematrix_Read(efp, abc, &S2)              != eslOK) esl_fatal("failed to read tmpfile containing BLOSUM62 matrix");
   if (esl_scorematrix_Compare(S, S2)           != eslOK) esl_fatal("the two test matrices aren't identical");
   
   remove(tmpfile); 
@@ -1263,7 +1984,7 @@ utest_ProbifyGivenBG(ESL_SCOREMATRIX *S0, ESL_DMATRIX *P0, double *wagpi, double
   double           lambda;
   int              a,b;
 
-  if (esl_sco_ProbifyGivenBG(S0, wagpi, wagpi, &lambda, &P) != eslOK) esl_fatal(msg);
+  if (esl_scorematrix_ProbifyGivenBG(S0, wagpi, wagpi, &lambda, &P) != eslOK) esl_fatal(msg);
 
   if (esl_DCompare(lambda0, lambda, 1e-3)     != eslOK) esl_fatal("lambda is wrong");
 
@@ -1354,7 +2075,7 @@ utest_Probify(ESL_SCOREMATRIX *S0, ESL_DMATRIX *P0, double *wagpi, double lambda
   double           sum = 0.0;
   int              i,j;
 
-  if (esl_sco_Probify(S0, &P, &fi, &fj, &lambda) != eslOK) esl_fatal("reverse engineering failed");
+  if (esl_scorematrix_Probify(S0, &P, &fi, &fj, &lambda) != eslOK) esl_fatal("reverse engineering failed");
 
   /* Validate the solution, gingerly (we expect significant error due to integer roundoff) */
   if (esl_DCompare(lambda0, lambda, 0.01)       != eslOK) esl_fatal("failed to get right lambda");
@@ -1389,7 +2110,7 @@ utest_ProbifyBLOSUM(ESL_SCOREMATRIX *BL62)
   ESL_SCOREMATRIX *S2 = NULL;
 
   if (( S2 = esl_scorematrix_Clone(BL62))                  == NULL) esl_fatal(msg);
-  if (esl_sco_Probify(BL62, &P, &fi, &fj, &lambda)        != eslOK) esl_fatal(msg);
+  if (esl_scorematrix_Probify(BL62, &P, &fi, &fj, &lambda)        != eslOK) esl_fatal(msg);
   if (esl_scorematrix_SetFromProbs(S2, lambda, P, fi, fj) != eslOK) esl_fatal(msg);
   if (esl_scorematrix_CompareCanon(BL62, S2)              != eslOK) esl_fatal(msg);
   
@@ -1404,7 +2125,7 @@ utest_ProbifyBLOSUM(ESL_SCOREMATRIX *BL62)
 
 
 /*****************************************************************
- * 6. Test driver.
+ * 10. Test driver.
  *****************************************************************/
 /* 
     gcc -g -Wall -I. -L. -o test -DeslSCOREMATRIX_TESTDRIVE esl_scorematrix.c -leasel -lm
@@ -1435,7 +2156,7 @@ main(int argc, char **argv)
   if ((Q   = esl_dmatrix_Create(abc->K, abc->K)) == NULL)  esl_fatal("Q allocation failed");
 
   /* Make a BLOSUM matrix */
-  if ( esl_scorematrix_SetBLOSUM62(BL62) != eslOK) esl_fatal("failed to set a BLOSUM matrix");
+  if ( esl_scorematrix_Set("BLOSUM62", BL62) != eslOK) esl_fatal("failed to set a BLOSUM matrix");
 
   /* Make a WAG-based score matrix with small lambda. */
   lambda0 = 0.00635;
@@ -1470,13 +2191,11 @@ main(int argc, char **argv)
 #endif /*eslSCOREMATRIX_TESTDRIVE*/
 
 /*****************************************************************
- * 7. Example program
+ * 11. Example program
  *****************************************************************/
+
 #ifdef eslSCOREMATRIX_EXAMPLE
 /*::cexcerpt::scorematrix_example::begin::*/
-/*  gcc -g -Wall -I. -L. -o example -DeslSCOREMATRIX_EXAMPLE esl_scorematrix.c -leasel -lm
-    ./example <score matrix file>
-*/
 #include "easel.h"
 #include "esl_alphabet.h"
 #include "esl_fileparser.h"
@@ -1490,42 +2209,74 @@ int main(int argc, char **argv)
   ESL_ALPHABET    *abc       = esl_alphabet_Create(eslAMINO);
   ESL_FILEPARSER  *efp       = NULL;
   ESL_SCOREMATRIX *S         = NULL;
-  ESL_DMATRIX     *P         = NULL;
+  ESL_DMATRIX     *P1        = NULL; /* implicit probability basis, bg unknown */
+  ESL_DMATRIX     *P2        = NULL; /* implicit probability basis, bg known   */
   double          *fi        = NULL;
   double          *fj        = NULL;
-  double           lambda, D;
-  
+  double           lambda, D, E;
+  int              vstatus;
+
   /* Input an amino acid score matrix from a file. */
   if ( esl_fileparser_Open(scorefile, NULL, &efp) != eslOK) esl_fatal("failed to open score file %s", scorefile);
-  if ( esl_sco_Read(efp, abc, &S)                 != eslOK) esl_fatal("failed to read matrix from %s", scorefile);
+  if ( esl_scorematrix_Read(efp, abc, &S)         != eslOK) esl_fatal("failed to read matrix from %s", scorefile);
   esl_fileparser_Close(efp);
 
-  /* Reverse engineer it to get implicit probabilistic model. */
-  if ( esl_sco_Probify(S, &P, &fi, &fj, &lambda) != eslOK) esl_fatal("reverse engineering failed");
+  /* Try to reverse engineer it to get implicit probabilistic model. This may fail! */
+  vstatus = esl_scorematrix_Probify(S, &P1, &fi, &fj, &lambda);
 
-  /* Print some info, and the joint probabilities. */
-  if (esl_scorematrix_IsSymmetric(S)) printf("Matrix is a standard symmetric matrix\n");
-  else                                printf("Matrix is a nonstandard asymmetric matrix\n"); 
-  printf("Lambda is %g\n\n", lambda);
+  if (vstatus == eslOK) 
+    { /* Print some info, and the joint probabilities. */
 
-  esl_sco_RelEntropy(S, fi, fj, lambda, &D);
-  printf("Relative entropy = %.4f bits\n\n", D); 
+      esl_scorematrix_RelEntropy   (S, fi, fj, lambda, &D);
+      esl_scorematrix_ExpectedScore(S, fi, fj,         &E);
 
-  printf("Implicit joint probabilities are:\n");
-  esl_dmatrix_Dump(stdout, P, abc->sym, abc->sym);
-  printf("fi's are:\n");
-  esl_vec_DDump(stdout, fi, S->K, abc->sym);
-  printf("fj's are:\n");
-  esl_vec_DDump(stdout, fj, S->K, abc->sym);
+      printf("By Yu/Altschul (2003,2005) procedure:\n");
+      printf("Lambda           = %.4f\n",      lambda);
+      printf("Relative entropy = %.4f bits\n", D); 
+      printf("Expected score   = %.4f bits\n", E * lambda * eslCONST_LOG2R);
 
-  esl_composition_BL62(fi);
-  esl_sco_ProbifyGivenBG(S, fi, fi, &lambda, &P);
-  esl_sco_RelEntropy(S, fi, fi, lambda, &D);
-  printf("Using blosum62 background, lambda = %.4f, rel entropy = %.4f\n", lambda, D);
+      printf("p_ij's are:\n");  esl_dmatrix_Dump(stdout, P1, abc->sym, abc->sym);
+      printf("fi's are:\n");    esl_vec_DDump(stdout, fi, S->K, abc->sym);
+      printf("fj's are:\n");    esl_vec_DDump(stdout, fj, S->K, abc->sym);
+      printf("============================================================\n\n");
+      }
+  else
+    {
+      printf("Yu/Altschul procedure FAILS to find a valid implicit probability basis!\n");
+      printf("Lambda  = %.4f\n",      lambda);
+      printf("p_ij's are:\n");  esl_dmatrix_Dump(stdout, P1, abc->sym, abc->sym);
+      printf("fi's are:\n");    esl_vec_DDump(stdout, fi, S->K, abc->sym);
+      printf("fj's are:\n");    esl_vec_DDump(stdout, fj, S->K, abc->sym);
+      printf("============================================================\n\n");
 
-  free(fi);
-  free(fj);
-  esl_dmatrix_Destroy(P);
+      esl_composition_BL62(fi); esl_composition_BL62(fj);
+    }
+
+  /* Now reverse engineer it again, this time using "known" background probs */
+  esl_scorematrix_ProbifyGivenBG(S, fi, fj, &lambda, &P2);
+  esl_scorematrix_RelEntropy   (S, fi, fj, lambda,   &D);
+  esl_scorematrix_ExpectedScore(S, fi, fj,           &E);
+
+  printf("By solving for lambda from given background frequencies:\n");
+  printf("Lambda           = %.4f\n",      lambda);
+  printf("Relative entropy = %.4f bits\n", D); 
+  printf("Expected score   = %.4f bits\n", E * lambda * eslCONST_LOG2R);
+
+  printf("p_ij's are:\n");   esl_dmatrix_Dump(stdout, P2, abc->sym, abc->sym);
+  printf("fi's are:\n");     esl_vec_DDump(stdout, fi, S->K, abc->sym);
+  printf("fj's are:\n");     esl_vec_DDump(stdout, fj, S->K, abc->sym);
+  printf("============================================================\n\n");
+
+
+  /* Now recalculate a score matrix from the probabilistic basis */
+  printf("Before:\n");
+  esl_scorematrix_Write(stdout, S);
+  printf("After:\n");
+  esl_scorematrix_SetFromProbs(S, lambda, P2, fi, fj);
+  esl_scorematrix_Write(stdout, S);
+
+  free(fi); free(fj);
+  esl_dmatrix_Destroy(P1);  esl_dmatrix_Destroy(P2);
   esl_scorematrix_Destroy(S);
   esl_alphabet_Destroy(abc);
   return 0;
@@ -1536,10 +2287,13 @@ int main(int argc, char **argv)
 
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_scorematrix.c 860 2013-04-05 01:43:50Z wheelert $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_scorematrix.c $
  *****************************************************************/ 

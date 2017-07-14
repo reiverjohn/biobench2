@@ -1,10 +1,11 @@
-/* dmatrix.h
+/* Double-precision two-dimensional matrices, and some linear algebra
  * 
  * SRE, Tue Jul 13 14:41:07 2004 [St. Louis]
- * SVN $Id: esl_dmatrix.h 159 2007-03-22 18:07:24Z eddys $
+ * SVN $Id: esl_dmatrix.h 755 2012-03-21 11:30:23Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_dmatrix.h $
  */
-#ifndef ESL_DMATRIX_INCLUDED
-#define ESL_DMATRIX_INCLUDED
+#ifndef eslDMATRIX_INCLUDED
+#define eslDMATRIX_INCLUDED
 
 #include <stdio.h>
 
@@ -28,11 +29,12 @@ typedef struct {
 extern ESL_DMATRIX *esl_dmatrix_Create(int n, int m);
 extern ESL_DMATRIX *esl_dmatrix_CreateUpper(int n);
 extern int          esl_dmatrix_Destroy(ESL_DMATRIX *A);
-extern int          esl_dmatrix_Copy   (const ESL_DMATRIX *src, ESL_DMATRIX *dest);
-extern ESL_DMATRIX *esl_dmatrix_Clone  (const ESL_DMATRIX *old);
-extern int          esl_dmatrix_Compare(const ESL_DMATRIX *A, const ESL_DMATRIX *B, double tol);
-extern int          esl_dmatrix_Set    (ESL_DMATRIX *A, double x);
-extern int          esl_dmatrix_SetZero(ESL_DMATRIX *A);
+extern int          esl_dmatrix_Copy       (const ESL_DMATRIX *src, ESL_DMATRIX *dest);
+extern ESL_DMATRIX *esl_dmatrix_Clone      (const ESL_DMATRIX *old);
+extern int          esl_dmatrix_Compare    (const ESL_DMATRIX *A, const ESL_DMATRIX *B, double tol);
+extern int          esl_dmatrix_CompareAbs (const ESL_DMATRIX *A, const ESL_DMATRIX *B, double tol);
+extern int          esl_dmatrix_Set        (ESL_DMATRIX *A, double x);
+extern int          esl_dmatrix_SetZero    (ESL_DMATRIX *A);
 extern int          esl_dmatrix_SetIdentity(ESL_DMATRIX *A);
 
 /* 2. Debugging/validation for ESL_DMATRIX. */
@@ -77,12 +79,11 @@ extern int          esl_dmx_UnmorphGSL(const gsl_matrix *G, ESL_DMATRIX **ret_E)
 extern int esl_dmx_Diagonalize(const ESL_DMATRIX *A, double **ret_Er, double **ret_Ei, ESL_DMATRIX **ret_UL, ESL_DMATRIX **ret_UR);
 #endif
 
-#endif /*ESL_DMATRIX_INCLUDED*/
-
+#endif /*eslDMATRIX_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

@@ -7,9 +7,6 @@
  *    5. Test driver.
  *    6. Examples.
  *    7. Copyright notice and license.
- * 
- * SVN $Id: esl_alphabet.c 509 2010-02-07 22:56:55Z eddys $
- * SRE, Tue Dec  7 13:49:43 2004
  */
 #include "esl_config.h"
 
@@ -17,9 +14,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#ifdef HAVE_STRINGS_H
+#include <strings.h>		/* POSIX strcasecmp() */
+#endif
 
 #include "easel.h"
 #include "esl_alphabet.h"
+
 
 
 /*****************************************************************
@@ -32,9 +33,10 @@ static ESL_ALPHABET *create_amino(void);
 static ESL_ALPHABET *create_coins(void);
 static ESL_ALPHABET *create_dice(void);
 
+static int set_complementarity(ESL_ALPHABET *a);
+
 /* Function:  esl_alphabet_Create()
  * Synopsis:  Create alphabet of a standard type.
- * Incept:    SRE, Mon Dec 20 10:21:54 2004 [Zaragoza]
  *
  * Purpose:   Creates one of the three standard bio alphabets:
  *            <eslDNA>, <eslRNA>, or <eslAMINO>, and returns
@@ -57,7 +59,7 @@ esl_alphabet_Create(int type)
   case eslDNA:    a = create_dna();   break;
   case eslAMINO:  a = create_amino(); break;
   case eslCOINS:  a = create_coins(); break;
-  case eslDICE:   a = create_dice(); break;
+  case eslDICE:   a = create_dice();  break;
   default:    
     ESL_XEXCEPTION(eslEINVAL, "bad alphabet type: unrecognized");
   }
@@ -69,7 +71,6 @@ esl_alphabet_Create(int type)
 
 /* Function:  esl_alphabet_CreateCustom()
  * Synopsis:  Create a custom alphabet.
- * Incept:    SRE, Mon Dec 20 09:18:28 2004 [Zaragoza]
  *
  * Purpose:   Creates a customized biosequence alphabet,
  *            and returns a ptr to it. The alphabet type is set 
@@ -113,9 +114,10 @@ esl_alphabet_CreateCustom(const char *alphabet, int K, int Kp)
   /* Allocation/init, level 1.
    */
   ESL_ALLOC(a, sizeof(ESL_ALPHABET));
-  a->sym    = NULL;
-  a->degen  = NULL;
-  a->ndegen = NULL;
+  a->sym        = NULL;
+  a->degen      = NULL;
+  a->ndegen     = NULL;
+  a->complement = NULL;
   
   /* Allocation/init, level 2.
    */
@@ -163,7 +165,6 @@ esl_alphabet_CreateCustom(const char *alphabet, int K, int Kp)
   a->ndegen[Kp-3]  = K;
   for (x = 0; x < a->K; x++) a->degen[Kp-3][x] = 1;
 
-  a->complement = NULL;
   return a;
 
  ERROR:
@@ -172,38 +173,6 @@ esl_alphabet_CreateCustom(const char *alphabet, int K, int Kp)
 }
 
 
-/* define_complementarity()
- * Builds the "complement" lookup table for DNA, RNA alphabets.
- */
-static int
-define_complementarity(ESL_ALPHABET *a)
-{
-  int  status;
-  
-  ESL_ALLOC(a->complement, sizeof(ESL_DSQ) * a->Kp);
-  a->complement[0] = 3;	   /* A->T */
-  a->complement[1] = 2;    /* C->G */
-  a->complement[2] = 1;    /* G->C */
-  a->complement[3] = 0;    /* T->A */
-  a->complement[4] = 4;    /* -  - */
-  a->complement[5] = 6;	   /* R->Y */
-  a->complement[6] = 5;    /* Y->R */
-  a->complement[7] = 8;    /* M->K */
-  a->complement[8] = 7;    /* K->M */
-  a->complement[9] = 9;    /* S  S */
-  a->complement[10]= 10;   /* W  W */
-  a->complement[11]= 14;   /* H->D */
-  a->complement[12]= 13;   /* B->V */
-  a->complement[13]= 12;   /* V->B */
-  a->complement[14]= 11;   /* D->H */
-  a->complement[15]= 15;   /* N  N */
-  a->complement[16]= 16;   /* ~  ~ */
-  return eslOK;
-
- ERROR:
-  return status;
-}
-
 /* create_rna(): 
  * Creates a standard RNA alphabet.
  */
@@ -211,6 +180,7 @@ static ESL_ALPHABET *
 create_rna(void)
 {
   ESL_ALPHABET *a = NULL;
+  int           status;
 
   /* Create the fundamental alphabet
    */
@@ -238,9 +208,13 @@ create_rna(void)
   esl_alphabet_SetDegeneracy(a, 'V', "ACG");
   esl_alphabet_SetDegeneracy(a, 'D', "AGU");  
 
-  if (define_complementarity(a) != eslOK) return NULL;
+  if ( (status = set_complementarity(a)) != eslOK) goto ERROR;
 
   return a;
+
+ ERROR:
+  esl_alphabet_Destroy(a);
+  return NULL;
 }
 
 
@@ -251,6 +225,7 @@ static ESL_ALPHABET *
 create_dna(void)
 {
   ESL_ALPHABET *a = NULL;
+  int           status;
 
   /* Create the fundamental alphabet.
    */
@@ -278,8 +253,12 @@ create_dna(void)
   esl_alphabet_SetDegeneracy(a, 'V', "ACG");
   esl_alphabet_SetDegeneracy(a, 'D', "AGT");  
 
-  if (define_complementarity(a) != eslOK) return NULL;
+  if ( (status = set_complementarity(a)) != eslOK) goto ERROR;
   return a;
+
+ ERROR:
+  esl_alphabet_Destroy(a);
+  return NULL;
 }
 
 
@@ -365,11 +344,46 @@ create_dice(void)
   return a;
 }
   
+/* set_complementarity()
+ * Builds the "complement" lookup table for DNA, RNA alphabets.
+ * 
+ * Throws <eslEINVAL> if the alphabet isn't <eslDNA> or <eslRNA>.
+ */
+static int
+set_complementarity(ESL_ALPHABET *a)
+{
+  int  status;
+
+  if (a->type != eslRNA && a->type != eslDNA)
+    ESL_EXCEPTION(eslEINVAL, "alphabet isn't nucleic: no complementarity to set");
+  
+  ESL_ALLOC(a->complement, sizeof(ESL_DSQ) * a->Kp);
+  a->complement[0] = 3;	   /* A->T */
+  a->complement[1] = 2;    /* C->G */
+  a->complement[2] = 1;    /* G->C */
+  a->complement[3] = 0;    /* T->A */
+  a->complement[4] = 4;    /* -  - */
+  a->complement[5] = 6;	   /* R->Y */
+  a->complement[6] = 5;    /* Y->R */
+  a->complement[7] = 8;    /* M->K */
+  a->complement[8] = 7;    /* K->M */
+  a->complement[9] = 9;    /* S  S */
+  a->complement[10]= 10;   /* W  W */
+  a->complement[11]= 14;   /* H->D */
+  a->complement[12]= 13;   /* B->V */
+  a->complement[13]= 12;   /* V->B */
+  a->complement[14]= 11;   /* D->H */
+  a->complement[15]= 15;   /* N  N */
+  a->complement[16]= 16;   /* ~  ~ */
+  return eslOK;
+
+ ERROR:
+  return status;
+}
 
 
 /* Function:  esl_alphabet_SetEquiv()
  * Synopsis:  Define an equivalent symbol.
- * Incept:    SRE, Mon Dec 20 10:40:33 2004 [Zaragoza]
  *
  * Purpose:   Maps an additional input alphabetic symbol <sym> to 
  *            an internal alphabet symbol <c>; for example,
@@ -402,7 +416,6 @@ esl_alphabet_SetEquiv(ESL_ALPHABET *a, char sym, char c)
 
 /* Function:  esl_alphabet_SetCaseInsensitive()
  * Synopsis:  Make an alphabet's input map case-insensitive.
- * Incept:    SRE, Mon Dec 20 15:31:12 2004 [Zaragoza]
  *
  * Purpose:   Given a custom alphabet <a>, with all equivalences set,
  *            make the input map case-insensitive: for every
@@ -439,7 +452,6 @@ esl_alphabet_SetCaseInsensitive(ESL_ALPHABET *a)
 
 /* Function:  esl_alphabet_SetDegeneracy()
  * Synopsis:  Define degenerate symbol in custom alphabet.
- * Incept:    SRE, Mon Dec 20 15:42:23 2004 [Zaragoza]
  *
  * Purpose:   Given an alphabet under construction, 
  *            define the degenerate character <c> to mean
@@ -496,7 +508,6 @@ esl_alphabet_SetDegeneracy(ESL_ALPHABET *a, char c, char *ds)
 
 /* Function:  esl_alphabet_SetIgnored()
  * Synopsis:  Define a set of characters to be ignored in input.
- * Incept:    SRE, Tue Sep 19 15:08:27 2006 [Janelia]
  *
  * Purpose:   Given an alphabet <a> (either standard or custom), define
  *            all the characters in string <ignoredchars> to be
@@ -524,9 +535,26 @@ esl_alphabet_SetIgnored(ESL_ALPHABET *a, const char *ignoredchars)
 }
 
 
+/* Function:  esl_alphabet_Sizeof()
+ * Synopsis:  Returns size of an alphabet object, in bytes.
+ *
+ * Purpose:   Returns the size of alphabet <a> object, in bytes.
+ */
+size_t
+esl_alphabet_Sizeof(ESL_ALPHABET *a)
+{
+  size_t n = 0;
+  n += sizeof(ESL_ALPHABET);
+  n += sizeof(char) * a->Kp;	                   /* a->sym        */
+  n += sizeof(char *) * a->Kp;	                   /* a->degen      */
+  n += sizeof(char) * (a->Kp * a->K);              /* a->degen[][]  */ 
+  n += sizeof(int)  * a->Kp;	                   /* a->ndegen     */
+  if (a->complement) n += sizeof(ESL_DSQ) * a->Kp; /* a->complement */
+  return n;
+}
+
 /* Function:  esl_alphabet_Destroy()
  * Synopsis:  Frees an alphabet object.
- * Incept:    SRE, Mon Dec 20 10:27:23 2004 [Zaragoza]
  *
  * Purpose:   Free's an <ESL_ALPHABET> structure.
  *
@@ -574,7 +602,6 @@ esl_alphabet_Destroy(ESL_ALPHABET *a)
 
 /* Function:  esl_abc_CreateDsq()
  * Synopsis:  Digitizes a sequence into new space.
- * Incept:    SRE, Mon Sep 18 09:15:02 2006 [Janelia]
  *
  * Purpose:   Given an alphabet <a> and an ASCII sequence <seq>,
  *            digitize the sequence into newly allocated space, and 
@@ -619,7 +646,6 @@ esl_abc_CreateDsq(const ESL_ALPHABET *a, const char *seq, ESL_DSQ **ret_dsq)
 
 /* Function: esl_abc_Digitize()
  * Synopsis: Digitizes a sequence into existing space.
- * Incept:   SRE, Sun Aug 27 11:18:56 2006 [Leesburg]
  * 
  * Purpose:  Given an alphabet <a> and a nul-terminated ASCII sequence
  *           <seq>, digitize the sequence and put it in <dsq>. Caller
@@ -652,15 +678,12 @@ esl_abc_Digitize(const ESL_ALPHABET *a, const char *seq, ESL_DSQ *dsq)
   for (i = 0, j = 1; seq[i] != '\0'; i++) 
     { 
       x = a->inmap[(int) seq[i]];
-      if (x == eslDSQ_IGNORED) continue; 
-
-      if (esl_abc_XIsValid(a, x))
-	dsq[j] = x;
-      else
-	{
-	  status   = eslEINVAL;
-	  dsq[j] = esl_abc_XGetUnknown(a);
-	}
+      if      (esl_abc_XIsValid(a, x)) dsq[j] = x;
+      else if (x == eslDSQ_IGNORED) continue; 
+      else {
+	status   = eslEINVAL;
+	dsq[j] = esl_abc_XGetUnknown(a);
+      }
       j++;
     }
   dsq[j] = eslDSQ_SENTINEL;
@@ -669,7 +692,6 @@ esl_abc_Digitize(const ESL_ALPHABET *a, const char *seq, ESL_DSQ *dsq)
 
 /* Function:  esl_abc_Textize()
  * Synopsis:  Convert digital sequence to text.
- * Incept:    SRE, Sun Aug 27 11:14:58 2006 [Leesburg]
  *
  * Purpose:   Make an ASCII sequence <seq> by converting a digital
  *            sequence <dsq> of length <L> back to text, according to
@@ -700,7 +722,6 @@ esl_abc_Textize(const ESL_ALPHABET *a, const ESL_DSQ *dsq, int64_t L, char *seq)
 
 /* Function:  esl_abc_TextizeN()
  * Synopsis:  Convert subsequence from digital to text.
- * Incept:    SRE, Tue Sep  5 09:28:38 2006 [Janelia] STL11/54.
  *
  * Purpose:   Similar in semantics to <strncpy()>, this procedure takes
  *            a window of <L> residues in a digitized sequence
@@ -749,7 +770,6 @@ esl_abc_TextizeN(const ESL_ALPHABET *a, const ESL_DSQ *dptr, int64_t L, char *bu
 
 
 /* Function:  esl_abc_dsqcpy()
- * Incept:    SRE, Fri Feb 23 08:45:10 2007 [Casa de Gatos]
  *
  * Purpose:   Given a digital sequence <dsq> of length <L>,
  *            make a copy of it in <dcopy>. Caller provides
@@ -768,7 +788,6 @@ esl_abc_dsqcpy(const ESL_DSQ *dsq, int64_t L, ESL_DSQ *dcopy)
 
 /* Function:  esl_abc_dsqdup()
  * Synopsis:  Duplicate a digital sequence.
- * Incept:    SRE, Tue Aug 29 13:51:05 2006 [Janelia]
  *
  * Purpose:   Like <esl_strdup()>, but for digitized sequences:
  *            make a duplicate of <dsq> and leave it in <ret_dup>.
@@ -816,123 +835,155 @@ esl_abc_dsqdup(const ESL_DSQ *dsq, int64_t L, ESL_DSQ **ret_dup)
 
 
 /* Function:  esl_abc_dsqcat()
- * Synopsis:  Concatenate digital sequences.
- * Incept:    SRE, Tue Aug 29 14:01:59 2006 [Janelia]
+ * Synopsis:  Concatenate and map input chars to a digital sequence.
  *
- * Purpose:   Like <esl_strcat()>, except specialized for digitizing a
- *            biosequence text string and appending it to a growing
- *            digital sequence. The growing digital sequence is <dsq>,
- *            currently of length <L> residues; we append <s> to it,
- *            of length <n> symbols, after digitization.  Upon return,
- *            <dsq> has been reallocated and <L> is set to the new
- *            length (which is why both must be passed by reference).
+ * Purpose:   Append the contents of string or memory line <s> of
+ *            length <n> to a digital sequence, after digitizing  
+ *            each input character in <s> according to an Easel
+ *            <inmap>. The destination sequence and its length
+ *            are passed by reference, <*dsq> and <*L>, so that
+ *            the sequence may be reallocated and the length updated
+ *            upon return.
  *            
- *            Note that the final <L> is not necessarily the initial
- *            <L> plus <n>, because the text string <s> may contain
- *            symbols that are defined to be ignored
- *            (<eslDSQ_IGNORED>) in the input map of this alphabet.
- *            (The final <L> is guaranteed to be $\leq$ <L+n> though.>
+ *            The input map <inmap> may map characters to
+ *            <eslDSQ_IGNORED> or <eslDSQ_ILLEGAL>, but not to <eslDSQ_EOL>,
+ *            <eslDSQ_EOD>, or <eslDSQ_SENTINEL> codes. <inmap[0]> is
+ *            special, and must be set to the code for the 'unknown'
+ *            residue (such as 'X' for proteins, 'N' for DNA) that
+ *            will be used to replace any invalid <eslDSQ_ILLEGAL>
+ *            characters.
+ * 
+ *            If <*dsq> is properly terminated digital sequence and
+ *            the caller doesn't know its length, <*L> may be passed
+ *            as -1. Providing the length when it's known saves an
+ *            <esl_abc_dsqlen()> call. If <*dsq> is unterminated, <*L>
+ *            is mandatory. Essentially the same goes for <*s>, which
+ *            may be a NUL-terminated string (pass <n=-1> if length unknown),
+ *            or a memory line (<n> is mandatory). 
  *            
- *            If the initial <L> is unknown, pass <-1>, and it will be
- *            determined by counting the residues in <dsq>.
+ *            <*dsq> may also be <NULL>, in which case it is allocated
+ *            and initialized here.
  *            
- *            Similarly, if <n> is unknown, pass <-1> and it will be
- *            determined by counting the symbols in <s>
+ *            Caller should provide an <s> that is expected to be
+ *            essentially all appendable to <*dsq> except for a small
+ *            number of chars that map to <eslDSQ_IGNORE>, like an
+ *            input sequence data line from a file, for example. We're
+ *            going to reallocate <*dsq> to size <*L+n>; if <n> is an
+ *            entire large buffer or file, this reallocation will be
+ *            inefficient.
  *            
- *            <dsq> may be <NULL>, in which case this call is
- *            equivalent to an allocation and digitization just of
- *            <s>.
- *            
- *            <s> may also be <NULL>, in which case <dsq> is
- *            unmodified; <L> would be set to the correct length of
- *            <dsq> if it was passed as <-1> (unknown).
- *            
- * Args:      abc  - digital alphabet to use
- *            dsq  - reference to the current digital seq to append to 
- *                   (with sentinel bytes at 0,L+1); may be <NULL>. 
- *                   Upon return, this will probably have 
- *                   been reallocated, and it will contain the original
- *                   <dsq> with <s> digitized and appended.
- *            L    - reference to the current length of <dsq> in residues;
- *                   may be <-1> if unknown. Upon return, <L> is set to
- *                   the new length of <dsq>, after <s> is appended.
- *            s    - NUL-terminated ASCII text sequence to append. May
- *                   contain ignored text characters (flagged with
- *                   <eslDSQ_IGNORED> in the input map of alphabet <abc>).  
- *            n    - Length of <s> in characters, if known; or <-1> if 
- *                   unknown.
+ * Args:      inmap - an Easel input map, inmap[0..127];
+ *                    inmap[0] is special, set to the 'unknown' character
+ *                    to replace invalid input chars.
+ *            dsq   - reference to the current digital seq to append to 
+ *                    (with sentinel bytes at 0,L+1); may be <NULL>. 
+ *                    Upon return, this will probably have 
+ *                    been reallocated, and it will contain the original
+ *                    <dsq> with <s> digitized and appended.
+ *            L    -  reference to the current length of <dsq> in residues;
+ *                    may be <-1> if unknown and if <*dsq> is a properly
+ *                    terminated digital sequence. Upon return, <L> is set to
+ *                    the new length of <dsq>, after <s> is appended.
+ *            s    -  ASCII text sequence to append. May
+ *                    contain ignored text characters (flagged with
+ *                    <eslDSQ_IGNORED> in the input map of alphabet <abc>).  
+ *            n    -  Length of <s> in characters, if known; or <-1> if 
+ *                    unknown and if <s> is a NUL-terminated string.
  *
- * Returns:   <eslOK> on success; <dsq> contains the result of digitizing
- *            and appending <s> to the original <dsq>; and <L> contains
+ * Returns:   <eslOK> on success; <*dsq> contains the result of digitizing
+ *            and appending <s> to the original <*dsq>; and <*L> contains
  *            the new length of the <dsq> result in residues.
  *            
- *            If any of the characters in <s> are illegal in the alphabet
- *            <abc>, these characters are digitized as unknown residues, 
- *            and the function returns <eslEINVAL>. The caller might want
- *            to call <esl_abc_ValidateSeq()> on <s> if it wants to figure
- *            out where digitization goes awry and get a more informative
- *            error report. This is a normal error, because the string <s>
- *            might be user input.
+ *            If any of the characters in <s> are illegal in the
+ *            alphabet <abc>, these characters are digitized as
+ *            unknown residues (using <inmap[0]>) and
+ *            concatenation/digitization proceeds to completion, but
+ *            the function returns <eslEINVAL>. The caller might then
+ *            want to call <esl_abc_ValidateSeq()> on <s> if it wants
+ *            to figure out where digitization goes awry and get a
+ *            more informative error report. This is a normal error,
+ *            because the string <s> might be user input.
  *
  * Throws:    <eslEMEM> on allocation or reallocation failure;
+ *            <eslEINCONCEIVABLE> on coding error.
+ *            
+ * Xref:      SRE:STL11/48; SRE:J7/145.
  *
- * Xref:      STL11/48.
+ * Note:      This closely parallels a text mode version, <esl_strmapcat()>.
  */
 int
-esl_abc_dsqcat(const ESL_ALPHABET *a, ESL_DSQ **dsq, int64_t *L, const char *s, int64_t n)
+esl_abc_dsqcat(const ESL_DSQ *inmap, ESL_DSQ **dsq, int64_t *L, const char *s, esl_pos_t n)
 {
-  int     status;
-  void   *p;
-  int64_t newL;
-  int64_t xpos, cpos;
-  ESL_DSQ x;
+  int       status = eslOK;
 
-  if (*L < 0) newL = ((*dsq == NULL) ? 0 : esl_abc_dsqlen(*dsq));
-  else        newL = *L;
+  if (*L < 0) *L = ((*dsq) ? esl_abc_dsqlen(*dsq) : 0);
+  if ( n < 0)  n = (   (s) ? strlen(s)            : 0);
 
-  if (n < 0)  n = ((s == NULL) ? 0 : strlen(s));
+  if (n == 0) { goto ERROR; } 	/* that'll return eslOK, leaving *dest untouched, and *ldest its length */
 
-  /* below handles weird case of empty s (including empty dsq and empty s):
-   * just hand dsq and its length right back to the caller.
-   */
-  if (n == 0) { *L = newL; return eslOK; } 
-
-  if (*dsq == NULL) {		/* an entirely new dsq must be allocated *and* initialized with left sentinel. */
+  if (*dsq == NULL) {		/* an entirely new dsq is allocated *and* initialized with left sentinel. */
     ESL_ALLOC(*dsq, sizeof(ESL_DSQ)     * (n+2));
     (*dsq)[0] = eslDSQ_SENTINEL;
-  } else			/* else, existing dsq is just reallocated; left sentinel already in place. */
-    ESL_RALLOC(*dsq, p, sizeof(ESL_DSQ) * (newL+n+2)); /* most we'll need */
+  } else			/* else, existing dsq is just reallocated; leftmost sentinel already in place. */
+    ESL_REALLOC(*dsq, sizeof(ESL_DSQ) * (*L+n+2)); /* most we'll need */
+
+  return esl_abc_dsqcat_noalloc(inmap, *dsq, L, s, n);
+
+ ERROR:
+  return status;
+}
+
+/* Function:  esl_abc_dsqcat_noalloc()
+ * Synopsis:  Version of esl_abc_dsqcat() that does no reallocation.
+ *
+ * Purpose:   Same as <esl_abc_dsqcat()>, but with no reallocation of
+ *            <dsq>. The pointer to the destination string <dsq> is 
+ *            passed by value not by reference, because it will not
+ *            be reallocated or moved. Caller has already allocated 
+ *            at least <*L + n + 2> bytes in <dsq>. <*L> and <n> are
+ *            not optional; caller must know (and provide) the lengths
+ *            of both the old string and the new source.
+ *
+ * Note:      This version was needed in selex format parsing, where
+ *            we need to prepend and append some number of gaps on
+ *            each new line of each block of input; allocating once
+ *            then adding the gaps and the sequence seemed most efficient.
+ */
+int
+esl_abc_dsqcat_noalloc(const ESL_DSQ *inmap, ESL_DSQ *dsq, int64_t *L, const char *s, esl_pos_t n)
+{
+  int64_t   xpos;
+  esl_pos_t cpos;
+  ESL_DSQ   x;
+  int       status = eslOK;
 
   /* Watch these coords. Start in the 0..n-1 text string at 0;
    * start in the 1..L dsq at L+1, overwriting its terminal 
    * sentinel byte.
    */
-  status = eslOK;
-  for (xpos = newL+1, cpos = 0; s[cpos] != '\0'; cpos++)
+  for (xpos = *L+1, cpos = 0; cpos < n; cpos++)
     {
-      x = a->inmap[(int) s[cpos]];
-      if (esl_abc_XIsValid(a, x))
-	(*dsq)[xpos++] = x;
-      else if (x == eslDSQ_IGNORED)
-	;
-      else 
-	{
-	  (*dsq)[xpos++] = esl_abc_XGetUnknown(a);
-	  status = eslEINVAL;
+      if (! isascii(s[cpos])) { dsq[xpos++] = inmap[0]; status = eslEINVAL; continue; }
+
+      x = inmap[(int) s[cpos]];
+
+      if       (x <= 127)      dsq[xpos++] = x;
+      else switch (x) {
+	case eslDSQ_SENTINEL:  ESL_EXCEPTION(eslEINCONCEIVABLE, "input char mapped to eslDSQ_SENTINEL"); break;
+	case eslDSQ_ILLEGAL:   dsq[xpos++] = inmap[0]; status = eslEINVAL;                               break;
+	case eslDSQ_IGNORED:   break;
+	case eslDSQ_EOL:       ESL_EXCEPTION(eslEINCONCEIVABLE, "input char mapped to eslDSQ_EOL");      break;
+	case eslDSQ_EOD:       ESL_EXCEPTION(eslEINCONCEIVABLE, "input char mapped to eslDSQ_EOD");      break;
+	default:               ESL_EXCEPTION(eslEINCONCEIVABLE, "bad inmap, no such ESL_DSQ code");      break;
 	}
     }
-  (*dsq)[xpos] = eslDSQ_SENTINEL;
+  dsq[xpos] = eslDSQ_SENTINEL;
   *L = xpos-1;
-  return status;
-
- ERROR:
-  *L = newL;
   return status;
 }
 
 /* Function:  esl_abc_dsqlen()
  * Synopsis:  Returns the length of a digital sequence.
- * Incept:    SRE, Tue Aug 29 13:49:02 2006 [Janelia]
  *
  * Purpose:   Returns the length of digitized sequence <dsq> in
  *            positions (including gaps, if any). The <dsq> must be
@@ -949,7 +1000,6 @@ esl_abc_dsqlen(const ESL_DSQ *dsq)
 
 /* Function:  esl_abc_dsqrlen()
  * Synopsis:  Returns the number of residues in a digital seq.
- * Incept:    SRE, Sat Nov  4 09:41:40 2006 [Janelia]
  *
  * Purpose:   Returns the unaligned length of digitized sequence
  *            <dsq>, in residues, not counting any gaps or
@@ -968,7 +1018,6 @@ esl_abc_dsqrlen(const ESL_ALPHABET *abc, const ESL_DSQ *dsq)
 
 /* Function:  esl_abc_CDealign()
  * Synopsis:  Dealigns a text string, using a reference digital aseq.
- * Incept:    SRE, Sun Mar 30 13:14:05 2008 [Casa de Gatos]
  *
  * Purpose:   Dealigns <s> in place by removing characters aligned to
  *            gaps (or missing data symbols) in the reference digital
@@ -1011,7 +1060,6 @@ esl_abc_CDealign(const ESL_ALPHABET *abc, char *s, const ESL_DSQ *ref_ax, int64_
 
 /* Function:  esl_abc_XDealign()
  * Synopsis:  Dealigns a digital string, using a reference digital aseq.
- * Incept:    SRE, Sun Mar 30 13:19:16 2008 [Casa de Gatos]
  *
  * Purpose:   Dealigns <x> in place by removing characters aligned to
  *            gaps (or missing data) in the reference digital aligned
@@ -1041,6 +1089,35 @@ esl_abc_XDealign(const ESL_ALPHABET *abc, ESL_DSQ *x, const ESL_DSQ *ref_ax, int
   return eslOK;
 }
 
+/* Function:  esl_abc_ConvertDegen2X()
+ * Synopsis:  Convert all degenerate residues to X or N.
+ *
+ * Purpose:   Convert all the degenerate residue codes in digital
+ *            sequence <dsq> to the code for the maximally degenerate 
+ *            "unknown residue" code, as specified in digital alphabet
+ *            <abc>. (For example, X for protein, N for nucleic acid.)
+ *            
+ *            This comes in handy when you're dealing with some piece
+ *            of software that can't deal with standard residue codes,
+ *            and you want to massage your sequences into a form that
+ *            can be accepted. For example, WU-BLAST can't deal with O
+ *            (pyrrolysine) residues, but UniProt has O codes.
+ *            
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    (no abnormal error conditions)
+ */
+int
+esl_abc_ConvertDegen2X(const ESL_ALPHABET *abc, ESL_DSQ *dsq)
+{
+  int64_t i;
+
+  for (i = 1; dsq[i] != eslDSQ_SENTINEL; i++)  
+    if (esl_abc_XIsDegenerate(abc, dsq[i]))
+      dsq[i] = esl_abc_XGetUnknown(abc);
+  return eslOK;
+}
+
 /*-------------- end, digital sequences (ESL_DSQ) ---------------*/
 
 
@@ -1050,28 +1127,53 @@ esl_abc_XDealign(const ESL_ALPHABET *abc, ESL_DSQ *x, const ESL_DSQ *ref_ax, int
 
 /* Function:  esl_abc_GuessAlphabet()
  * Synopsis:  Guess alphabet type from residue composition.
- * Incept:    SRE, Wed May 16 11:08:29 2007 [Janelia]
  *
  * Purpose:   Guess the alphabet type from a residue composition.
  *            The input <ct[0..25]> array contains observed counts of 
  *            the letters A..Z, case-insensitive. 
  *            
- *            Provided that the compositions contains more than 10
- *            residues, the composition is called <eslDNA> if it
- *            consists only of the residues ACGTN and all four of ACGT
- *            occur (and analogously for <eslRNA>, ACGU$+$N); and it
- *            calls the sequence <eslAMINO> either if it contains an
- *            amino-specific letter (EFIJLOPQZ), or if it contains at
- *            least 15 of the 20 canonical amino acids and consists
- *            only of canonical amino acids or X.
+ *            The composition <ct> must contain more than 10 residues.
+ *
+ *            If it contains $\geq$98\% ACGTN and all four of the
+ *            residues ACGT occur, call it <eslDNA>. (Analogously for
+ *            ACGUN, ACGU: call <eslRNA>.)
  *            
+ *            If it contains any amino-specific residue (EFIJLPQZ),
+ *            call it <eslAMINO>.  
+ *            
+ *            If it consists of $\geq$98\% canonical aa residues or X,
+ *            and at least 15 of the different 20 aa residues occur,
+ *            and the number of residues that are canonical aa/degenerate
+ *            nucleic (DHKMRSVWY) is greater than the number of canonicals
+ *            for both amino and nucleic (ACG); then call it <eslAMINO>.
+ *            
+ *            We aim to be very conservative, essentially never making
+ *            a false call; we err towards calling <eslUNKNOWN> if
+ *            unsure. Our test is to classify every individual
+ *            sequence in NCBI NR and NT (or equiv large messy
+ *            sequence database) with no false positives, only correct
+ *            calls or <eslUNKNOWN>.
  *
  * Returns:   <eslOK> on success, and <*ret_type> is set to
  *            <eslAMINO>, <eslRNA>, or <eslDNA>.
  *
- *            Returns <eslEAMBIGUOUS> if unable to determine the
+ *            Returns <eslENOALPHABET> if unable to determine the
  *            alphabet type; in this case, <*ret_type> is set to 
  *            <eslUNKNOWN>.
+ *            
+ * Notes:     As of Jan 2011:
+ *               nr         10M seqs :  6999 unknown,  0 misclassified 
+ *               Pfam full  13M seqs :  7930 unknown,  0 misclassified
+ *               Pfam seed  500K seqs:   366 unknown,  0 misclassified
+ *               trembl     14M seqs :  7748 unknown,  0 misclassified
+ *               
+ *               nt         10M seqs : 35620 unknown,  0 misclassified
+ *               Rfam full   3M seqs :  8146 unknown,  0 misclassified
+ *               Rfam seed  27K seqs :    49 unknown,  0 misclassified
+ *               
+ * xref:      esl_alphabet_example3 collects per-sequence classification
+ *            2012/0201-easel-guess-alphabet
+ *            J1/62; 2007-0517-easel-guess-alphabet
  */
 int
 esl_abc_GuessAlphabet(const int64_t *ct, int *ret_type)
@@ -1081,7 +1183,7 @@ esl_abc_GuessAlphabet(const int64_t *ct, int *ret_type)
   char     allcanon[]  = "ACG";
   char     aacanon[]   = "DHKMRSVWY";
   int64_t  n1, n2, n3, nn, nt, nu, nx, n; /* n's are counts */
-  int      x1, x2, x3, xn, xt, xu;	      /* x's are how many different residues are represented */
+  int      x1, x2, x3, xn, xt, xu;	  /* x's are how many different residues are represented */
   int      i, x;
 
   x1 = x2 = x3 = xn = xt = xu = 0;
@@ -1090,19 +1192,19 @@ esl_abc_GuessAlphabet(const int64_t *ct, int *ret_type)
   for (i = 0; aaonly[i]   != '\0'; i++) { x = ct[aaonly[i]   - 'A']; if (x > 0) { n1 += x; x1++; } }
   for (i = 0; allcanon[i] != '\0'; i++) { x = ct[allcanon[i] - 'A']; if (x > 0) { n2 += x; x2++; } }
   for (i = 0; aacanon[i]  != '\0'; i++) { x = ct[aacanon[i]  - 'A']; if (x > 0) { n3 += x; x3++; } }
-  nt = ct['T' - 'A']; xt = (nt > 0) ? 1 : 0;
-  nu = ct['U' - 'A']; xu = (nu > 0) ? 1 : 0;
+  nt = ct['T' - 'A']; xt = (nt ? 1 : 0);
+  nu = ct['U' - 'A']; xu = (nu ? 1 : 0);
   nx = ct['X' - 'A']; 
-  nn = ct['N' - 'A']; 
+  nn = ct['N' - 'A']; xn = (nn ? 1 : 0);
 
   if      (n  <= 10)                                                type = eslUNKNOWN;
   else if (n1 > 0)                                                  type = eslAMINO; /* contains giveaway, aa-only chars */
-  else if (n2+nt+nn == n && x2+xt == 4)                             type = eslDNA;   /* all DNA canon (or N), all four seen */
-  else if (n2+nu+nn == n && x2+xu == 4)                             type = eslRNA;   /* all RNA canon (or N), all four seen */
-  else if (n1+n2+n3+nn+nt+nx == n && n3>n2 && x1+x2+x3+xn+xt >= 15) type = eslAMINO; /* all aa canon (or X); more aa canon than ambig; all 20 seen */
+  else if (n-(n2+nt+nn) <= 0.02*n && x2+xt == 4)                    type = eslDNA;   /* nearly all DNA canon (or N), all four seen */
+  else if (n-(n2+nu+nn) <= 0.02*n && x2+xu == 4)                    type = eslRNA;   /* nearly all RNA canon (or N), all four seen */
+  else if (n-(n1+n2+n3+nn+nt+nx) <= 0.02*n && n3>n2 && x1+x2+x3+xn+xt >= 15) type = eslAMINO; /* nearly all aa canon (or X); more aa canon than ambig; all 20 seen */
   
   *ret_type = type;
-  if (type == eslUNKNOWN) return eslEAMBIGUOUS;
+  if (type == eslUNKNOWN) return eslENOALPHABET;
   else                    return eslOK;
 }
 
@@ -1110,7 +1212,6 @@ esl_abc_GuessAlphabet(const int64_t *ct, int *ret_type)
 
 /* Function:  esl_abc_Match()
  * Synopsis:  Returns the probability that two symbols match.
- * Incept:    SRE, Sun Sep 17 11:46:32 2006 [Janelia]
  *
  * Purpose:   Given two digital symbols <x> and <y> in alphabet
  *            <abc>, calculate and return the probability that
@@ -1191,7 +1292,6 @@ esl_abc_Match(const ESL_ALPHABET *abc, ESL_DSQ x, ESL_DSQ y, double *p)
 
 /* Function:  esl_abc_IAvgScore()
  * Synopsis:  Returns average score for degenerate residue.
- * Incept:    SRE, Tue Dec 21 10:53:57 2004 [Zaragoza]
  *
  * Purpose:  Given a residue code <x> in alphabet <a>, and an array of
  *           integer scores <sc> for the residues in the base
@@ -1255,7 +1355,6 @@ esl_abc_DAvgScore(const ESL_ALPHABET *a, ESL_DSQ x, const double *sc)
 
 /* Function:  esl_abc_IExpectScore()
  * Synopsis:  Returns expected score for degenerate residue.
- * Incept:    SRE, Tue Dec 21 11:02:46 2004 [Zaragoza]
  *
  * Purpose:   Given a residue code <x> in alphabet <a>, an
  *            array of integer scores <sc> for the residues in the base
@@ -1333,7 +1432,6 @@ esl_abc_DExpectScore(const ESL_ALPHABET *a, ESL_DSQ x, const double *sc, const d
 
 /* Function:  esl_abc_IAvgScVec()
  * Synopsis:  Fill out score vector with average degenerate scores.
- * Incept:    SRE, Thu Apr  6 12:12:25 2006 [AA890 enroute to Boston]
  *
  * Purpose:   Given an alphabet <a> and a score vector <sc> of length
  *            <a->Kp> that contains integer scores for the base
@@ -1379,7 +1477,6 @@ esl_abc_DAvgScVec(const ESL_ALPHABET *a, double *sc)
 
 /* Function:  esl_abc_IExpectScVec()
  * Synopsis:  Fill out score vector with average expected scores.
- * Incept:    SRE, Thu Apr  6 12:23:52 2006 [AA 890 enroute to Boston]
  *
  * Purpose:   Given an alphabet <a>, a score vector <sc> of length
  *            <a->Kp> that contains integer scores for the base
@@ -1428,7 +1525,6 @@ esl_abc_DExpectScVec(const ESL_ALPHABET *a, double *sc, const double *p)
 
 /* Function:  esl_abc_FCount()
  * Synopsis:  Count a degenerate symbol into a count vector.
- * Incept:    SRE, Wed Apr 12 17:16:35 2006 [St. Louis]
  *
  * Purpose:   Count a possibly degenerate digital symbol <x> (0..Kp-1)
  *            into a counts array <ct> for base symbols (0..K-1).
@@ -1480,7 +1576,6 @@ esl_abc_DCount(const ESL_ALPHABET *abc, double *ct, ESL_DSQ x, double wt)
 
 /* Function:  esl_abc_EncodeType()
  * Synopsis:  Convert descriptive string to alphabet type code.
- * Incept:    SRE, Mon Oct 13 14:52:18 2008 [Janelia]
  *
  * Purpose:   Convert a string like "amino" or "DNA" to the
  *            corresponding Easel internal alphabet type code
@@ -1503,7 +1598,6 @@ esl_abc_EncodeType(char *type)
 
 /* Function:  esl_abc_DecodeType()
  * Synopsis:  Returns descriptive string for alphabet type code.
- * Incept:    SRE, Wed Apr 12 12:23:24 2006 [St. Louis]
  *
  * Purpose:   For diagnostics and other output: given an internal
  *            alphabet code <type> (<eslRNA>, for example), return
@@ -1522,18 +1616,20 @@ esl_abc_DecodeType(int type)
   case eslNONSTANDARD: return "custom";
   default:             break;
   }
-  esl_exception(eslEINVAL, __FILE__, __LINE__, "no such alphabet type code %d\n", type);
+  esl_exception(eslEINVAL, FALSE, __FILE__, __LINE__, "no such alphabet type code %d\n", type);
   return NULL;
 }
 
 
 /* Function:  esl_abc_ValidateSeq()
  * Synopsis:  Assure that a text sequence can be digitized.
- * Incept:    SRE, Sat Aug 26 17:40:00 2006 [St. Louis]
  *
  * Purpose:   Check that sequence <seq> of length <L> can be digitized
  *            without error; all its symbols are valid in alphabet
  *            <a>. If so, return <eslOK>. If not, return <eslEINVAL>.
+ *            
+ *            If <a> is <NULL>, we still validate that at least the
+ *            <seq> consists only of ASCII characters.
  *            
  *            <errbuf> is either passed as <NULL>, or a pointer to an
  *            error string buffer allocated by the caller for
@@ -1541,7 +1637,7 @@ esl_abc_DecodeType(int type)
  *            the sequence is invalid, an error message is placed in
  *            <errbuf>.
  *
- * Args:      a      - digital alphabet
+ * Args:      a      - digital alphabet (or NULL, if unavailable)
  *            seq    - sequence to validate [0..L-1]; NUL-termination unnecessary
  *            L      - length of <seq>
  *            errbuf - NULL, or ptr to <eslERRBUFSIZE> chars of allocated space 
@@ -1560,14 +1656,29 @@ esl_abc_ValidateSeq(const ESL_ALPHABET *a, const char *seq, int64_t L, char *err
   int64_t nbad     = 0;
 
   if (errbuf) *errbuf = 0;
-  for (i = 0; i < L; i++) {
-    if (! esl_abc_CIsValid(a, seq[i])) {
-      if (firstpos == -1) firstpos = i;
-      nbad++;
+
+  
+  if (a)  // If we have digital alphabet <a>, it has an <inmap> we can check against 
+    {
+      for (i = 0; i < L; i++) {
+	if (! esl_abc_CIsValid(a, seq[i])) {
+	  if (firstpos == -1) firstpos = i;
+	  nbad++;
+	}
+      }
     }
-  }
-  if (nbad > 0) ESL_XFAIL(eslEINVAL, errbuf, "%" PRId64 " invalid chars (including %c at pos %" PRId64 ")", 
-			  nbad, seq[firstpos], firstpos);
+  else  // Else, at least validate that the text string is an ASCII text string
+    {
+      for (i = 0; i < L; i++) {
+	if (! isascii(seq[i])) {
+	  if (firstpos == -1) firstpos = i;
+	  nbad++;
+	}
+      }
+    }
+
+  if      (nbad == 1) ESL_XFAIL(eslEINVAL, errbuf, "invalid char %c at pos %" PRId64,                                   seq[firstpos], firstpos+1);
+  else if (nbad >  1) ESL_XFAIL(eslEINVAL, errbuf, "%" PRId64 " invalid chars (including %c at pos %" PRId64 ")", nbad, seq[firstpos], firstpos+1);
   return eslOK;
 
  ERROR:
@@ -1670,16 +1781,16 @@ utest_SetEquiv(void)
   ESL_DSQ      *dsq;
 
   if ((a = esl_alphabet_CreateCustom("ACGT-N*~", 4, 8)) == NULL) esl_fatal(msg);
-  if (esl_alphabet_SetEquiv(a, 'a', 'A') != eslOK)              esl_fatal(msg);
-  if (esl_alphabet_SetEquiv(a, '1', '-') != eslOK)              esl_fatal(msg);
-  if (esl_alphabet_SetEquiv(a, '&', '~') != eslOK)              esl_fatal(msg);
+  if (esl_alphabet_SetEquiv(a, 'a', 'A') != eslOK)               esl_fatal(msg);
+  if (esl_alphabet_SetEquiv(a, '1', '-') != eslOK)               esl_fatal(msg);
+  if (esl_alphabet_SetEquiv(a, '&', '~') != eslOK)               esl_fatal(msg);
   
 #ifdef eslTEST_THROWING
-  if (esl_alphabet_SetEquiv(a, 'G', 'C') != eslEINVAL)          esl_fatal(msg); /* sym is already in internal alphabet */
-  if (esl_alphabet_SetEquiv(a, '2', 'V') != eslEINVAL)          esl_fatal(msg); /* c is not in internal alphabet */
+  if (esl_alphabet_SetEquiv(a, 'G', 'C') != eslEINVAL)           esl_fatal(msg); /* sym is already in internal alphabet */
+  if (esl_alphabet_SetEquiv(a, '2', 'V') != eslEINVAL)           esl_fatal(msg); /* c is not in internal alphabet */
 #endif
 
-  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)   esl_fatal(msg);
+  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)                    esl_fatal(msg);
   if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (strlen(testseq)+2)) != 0) esl_fatal(msg);
   free(dsq);
   esl_alphabet_Destroy(a);
@@ -1695,9 +1806,9 @@ utest_SetCaseInsensitive(void)
   ESL_DSQ       expect[] = { eslDSQ_SENTINEL, 0, 1, 2, 3, eslDSQ_SENTINEL };
   ESL_DSQ      *dsq;
 
-  if ((a = esl_alphabet_CreateCustom("acgt-n*~", 4, 8)) == NULL) esl_fatal(msg);
-  if (esl_alphabet_SetCaseInsensitive(a) != eslOK)              esl_fatal(msg);
-  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)   esl_fatal(msg);
+  if ((a = esl_alphabet_CreateCustom("acgt-n*~", 4, 8)) == NULL)       esl_fatal(msg);
+  if (esl_alphabet_SetCaseInsensitive(a)  != eslOK)                    esl_fatal(msg);
+  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)                    esl_fatal(msg);
   if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (strlen(testseq)+2)) != 0) esl_fatal(msg);
   free(dsq);
   esl_alphabet_Destroy(a);
@@ -1727,7 +1838,7 @@ utest_SetDegeneracy(void)
   if (esl_alphabet_SetDegeneracy(a, 'Y', "CT") != eslOK)            esl_fatal(msg);
   if (esl_alphabet_SetCaseInsensitive(a)       != eslOK)            esl_fatal(msg);
 
-  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)   esl_fatal(msg);
+  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)                    esl_fatal(msg);
   if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (strlen(testseq)+2)) != 0) esl_fatal(msg);
 
   x = esl_abc_DigitizeSymbol(a, 'a');  if (a->ndegen[x] != 1) esl_fatal(msg);
@@ -1763,10 +1874,10 @@ utest_SetIgnored(void)
   int           L = 5;
   ESL_DSQ      *dsq;
 
-  if ((a = esl_alphabet_Create(eslRNA)) == NULL) esl_fatal(msg);
+  if ((a = esl_alphabet_Create(eslRNA)) == NULL)  esl_fatal(msg);
   if (esl_alphabet_SetIgnored(a, " \t") != eslOK) esl_fatal(msg);
 
-  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)   esl_fatal(msg);
+  if (esl_abc_CreateDsq(a, testseq, &dsq) != eslOK)  esl_fatal(msg);
   if (memcmp(dsq, expect, sizeof(ESL_DSQ) * L) != 0) esl_fatal(msg);
   free(dsq);
   esl_alphabet_Destroy(a);
@@ -1856,7 +1967,7 @@ utest_Textize(void)
 
   L = strlen(goodseq);
   ESL_ALLOC(newseq, sizeof(char) * (L+1));
-  if ((a = esl_alphabet_Create(eslAMINO))    == NULL)  esl_fatal(msg);
+  if ((a = esl_alphabet_Create(eslAMINO))    == NULL) esl_fatal(msg);
   if (esl_abc_CreateDsq(a, goodseq, &dsq)   != eslOK) esl_fatal(msg);
   if (esl_abc_Textize(a, dsq, L, newseq )   != eslOK) esl_fatal(msg);
   if (strcmp(newseq, "ACDEF")               != 0)     esl_fatal(msg);
@@ -1882,7 +1993,7 @@ utest_TextizeN(void)
   int           W;
 
   L = strlen(goodseq);
-  if ((a = esl_alphabet_Create(eslAMINO))    == NULL)  esl_fatal(msg);
+  if ((a = esl_alphabet_Create(eslAMINO)) == NULL)  esl_fatal(msg);
   if (esl_abc_CreateDsq(a, goodseq, &dsq) != eslOK) esl_fatal(msg);
 
   dptr = dsq+6; 		/* points to "r", residue 6         */
@@ -1934,35 +2045,47 @@ utest_dsqcat(void)
   char msg[]  = "esl_abc_dsqcat() unit test failed";
   ESL_ALPHABET *a;
   char          goodseq[] = "ACGt";
-  char          addseq[]  = "RYMK";
-  ESL_DSQ       expect[] = { eslDSQ_SENTINEL, 0, 1, 2, 3, 5, 6, 7, 8, eslDSQ_SENTINEL };
+  char          addseq[]  = "RYM KN";
+  char          badseq[]  = "RYM K&";
+  ESL_DSQ       expect[] = { eslDSQ_SENTINEL, 0, 1, 2, 3, 5, 6, 7, 8, 15, eslDSQ_SENTINEL };
   ESL_DSQ      *dsq;
-  int64_t       L1, L2;
+  int64_t       L1;
+  esl_pos_t     L2;
+
+
+  if ((a = esl_alphabet_Create(eslRNA))             == NULL)  esl_fatal(msg);
+  a->inmap[0]   = esl_abc_XGetUnknown(a);
+  a->inmap[' '] = eslDSQ_IGNORED;
 
   L1 = strlen(goodseq);
   L2 = strlen(addseq);
-  if ((a = esl_alphabet_Create(eslRNA))           == NULL)  esl_fatal(msg);
-
-  if (esl_abc_CreateDsq(a, goodseq, &dsq)           != eslOK) esl_fatal(msg);
-  if (esl_abc_dsqcat(a, &dsq, &L1, addseq, L2)      != eslOK) esl_fatal(msg);
-  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2)) != 0)     esl_fatal(msg);
+  if (esl_abc_CreateDsq(a, goodseq, &dsq)              != eslOK) esl_fatal(msg);
+  if (esl_abc_dsqcat(a->inmap, &dsq, &L1, addseq, L2)  != eslOK) esl_fatal(msg);
+  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2))    != 0)     esl_fatal(msg);
   free(dsq);
 
   L1 = -1;
-  if (esl_abc_CreateDsq(a, goodseq, &dsq)         != eslOK) esl_fatal(msg);
-  if (esl_abc_dsqcat(a, &dsq, &L1, addseq, -1)    != eslOK) esl_fatal(msg);
-  if (L1 != esl_abc_dsqlen(dsq))                            esl_fatal(msg);
-  if (L1 != strlen(goodseq) + strlen(addseq))               esl_fatal(msg);
-  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2)) != 0)   esl_fatal(msg);
+  L2 = -1;
+  if (esl_abc_CreateDsq(a, goodseq, &dsq)              != eslOK) esl_fatal(msg);
+  if (esl_abc_dsqcat(a->inmap, &dsq, &L1, addseq, L2)  != eslOK) esl_fatal(msg);
+  if (L1 != esl_abc_dsqlen(dsq))                                 esl_fatal(msg);
+  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2))    != 0)     esl_fatal(msg);
   free(dsq);
 
-  dsq = NULL;
   L1  = 0;
-  if (esl_abc_dsqcat(a, &dsq, &L1, goodseq, -1)    != eslOK) esl_fatal(msg);
-  if (esl_abc_dsqcat(a, &dsq, &L1, addseq,  -1)    != eslOK) esl_fatal(msg);
-  if (L1 != esl_abc_dsqlen(dsq))                             esl_fatal(msg);
-  if (L1 != strlen(goodseq) + strlen(addseq))                esl_fatal(msg);
-  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2)) != 0)    esl_fatal(msg);
+  dsq = NULL;
+  if (esl_abc_dsqcat(a->inmap, &dsq, &L1, goodseq, -1)    != eslOK) esl_fatal(msg);
+  if (esl_abc_dsqcat(a->inmap, &dsq, &L1, addseq,  -1)    != eslOK) esl_fatal(msg);
+  if (L1 != esl_abc_dsqlen(dsq))                                    esl_fatal(msg);
+  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2))       != 0)    esl_fatal(msg);
+  free(dsq);
+
+  L1 = -1;
+  L2 = strlen(badseq);
+  if (esl_abc_CreateDsq(a, goodseq, &dsq)                != eslOK)     esl_fatal(msg);
+  if (esl_abc_dsqcat(a->inmap, &dsq, &L1, badseq,  L2)   != eslEINVAL) esl_fatal(msg);
+  if (L1 != esl_abc_dsqlen(dsq))                                       esl_fatal(msg);
+  if (memcmp(dsq, expect, sizeof(ESL_DSQ) * (L1+2))      != 0)         esl_fatal(msg);
   free(dsq);
   
   esl_alphabet_Destroy(a);
@@ -2205,7 +2328,7 @@ basic_examples(void)
   if ((a1 = esl_alphabet_Create(eslDNA)) == NULL)      esl_fatal(msg);
   L  = strlen(dnaseq);
   if ((dsq = malloc(sizeof(ESL_DSQ) * (L+2))) == NULL) esl_fatal(msg);
-  if (esl_abc_Digitize(a1, dnaseq, dsq) != eslOK)   esl_fatal(msg);
+  if (esl_abc_Digitize(a1, dnaseq, dsq) != eslOK)      esl_fatal(msg);
   if (esl_abc_dsqlen(dsq) != L)                        esl_fatal(msg);
   esl_alphabet_Destroy(a1);
 
@@ -2216,7 +2339,7 @@ basic_examples(void)
    */
   if ((a2 = esl_alphabet_Create(eslRNA)) == NULL)       esl_fatal(msg);
   if ((dsq2 = malloc(sizeof(ESL_DSQ) * (L+2))) == NULL) esl_fatal(msg);
-  if (esl_abc_Digitize(a2, dnaseq, dsq2) != eslOK)   esl_fatal(msg);
+  if (esl_abc_Digitize(a2, dnaseq, dsq2) != eslOK)      esl_fatal(msg);
   for (i = 1; i <= L; i++)
     if (dsq[i] != dsq2[i]) esl_fatal(msg);
   esl_alphabet_Destroy(a2);
@@ -2225,7 +2348,7 @@ basic_examples(void)
    * Create an amino alphabet; digitize a protein sequence, 
    * while reusing memory already allocated in dsq.
    */
-  if ((a1 = esl_alphabet_Create(eslAMINO)) == NULL)     esl_fatal(msg);
+  if ((a1 = esl_alphabet_Create(eslAMINO)) == NULL)  esl_fatal(msg);
   if (esl_abc_Digitize(a1, aaseq, dsq) != eslOK)     esl_fatal(msg);
   
   /* Example 4.
@@ -2272,11 +2395,8 @@ int main(void)
   
   a = esl_alphabet_Create(eslDNA);
 
-  if ((dsq = malloc(sizeof(ESL_DSQ) * (L+2))) == NULL)
-    esl_fatal("malloc failed");
-    
-  if (esl_abc_Digitize(a, dnaseq, dsq) != eslOK) 
-    esl_fatal("failed to digitize the sequence");
+  if ((dsq = malloc(sizeof(ESL_DSQ) * (L+2))) == NULL)  esl_fatal("malloc failed");
+  if (esl_abc_Digitize(a, dnaseq, dsq)       != eslOK)  esl_fatal("failed to digitize the sequence");
 
   free(dsq);
   esl_alphabet_Destroy(a);
@@ -2321,13 +2441,54 @@ int main(void)
 #endif /*eslALPHABET_EXAMPLE2*/
 
 
+
+#ifdef eslALPHABET_EXAMPLE3
+#include "easel.h"
+#include "esl_alphabet.h"
+#include "esl_sq.h"
+#include "esl_sqio.h"
+
+int 
+main(int argc, char **argv)
+{
+  ESL_SQ     *sq      = esl_sq_Create();
+  ESL_SQFILE *sqfp;
+  int         format  = eslSQFILE_UNKNOWN;
+  char       *seqfile = argv[1];
+  int         type;
+  int         status;
+
+  status = esl_sqfile_Open(seqfile, format, NULL, &sqfp);
+  if      (status == eslENOTFOUND) esl_fatal("No such file.");
+  else if (status == eslEFORMAT)   esl_fatal("Format unrecognized.");
+  else if (status != eslOK)        esl_fatal("Open failed, code %d.", status);
+
+  while ((status = esl_sqio_Read(sqfp, sq)) == eslOK)
+  {
+    esl_sq_GuessAlphabet(sq, &type);
+    printf("%-25s %s\n", sq->name, esl_abc_DecodeType(type));
+    esl_sq_Reuse(sq);
+  }
+  if      (status == eslEFORMAT) esl_fatal("Parse failed (sequence file %s - %s\n", sqfp->filename, sqfp->get_error(sqfp));     
+  else if (status != eslEOF)     esl_fatal("Unexpected error %d reading sequence file %s", status, sqfp->filename);
+  
+  esl_sq_Destroy(sq);
+  esl_sqfile_Close(sqfp);
+  return 0;
+}
+#endif /*eslALPHABET_EXAMPLE3*/
+
+
 /*****************************************************************  
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_alphabet.c 940 2015-01-22 19:34:21Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_alphabet.c $
  *****************************************************************/
 

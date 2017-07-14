@@ -2,7 +2,7 @@
  * 
  * From squid's sfetch and ffetch
  * SRE, Mon Mar 31 16:12:50 2008 [Janelia] 
- * SVN $Id: esl-sfetch.c 509 2010-02-07 22:56:55Z eddys $
+ * SVN $Id: esl-sfetch.c 862 2013-04-12 18:56:42Z wheelert $
  */
 #include "esl_config.h"
 
@@ -51,7 +51,8 @@ cmdline_help(char *argv0, ESL_GETOPTS *go)
   esl_opt_DisplayHelp(stdout, go, 2, 2, 80);
   puts("\n  On command line, subseq coords are separated by any nonnumeric, nonspace character(s).");
   puts("  for example, -c 23..100 or -c 23/100 or -c 23-100 all work.\n");
-  puts("  Additionally, to retrieve a suffix to the end, omit the end coord; -c 23: will work.");
+  puts("  Additionally, to retrieve a suffix to the end, omit the end coord or set it to zero; -c 23.. ");
+  puts("  will work, as will -c 23..0\n");
   puts("  By default, the subseq will be named <source name>/<from>-<to>. To assign a name of");
   puts("  your choice, use -n <newname>.\n");
   puts("  In retrieving subsequences listed in a file (-C -f, or just -Cf), each line of the file");
@@ -60,8 +61,6 @@ cmdline_help(char *argv0, ESL_GETOPTS *go)
   puts("  retrieved; in protein sequence, this is an error. The -r option is another way to revcomp.");
   puts("\n other options:");
   esl_opt_DisplayHelp(stdout, go, 3, 2, 80);
-  puts("\n options for retreiving subsequences from cmsearch tab file (require -C and -f):");
-  esl_opt_DisplayHelp(stdout, go, 4, 2, 80);
   exit(0);
 }
 
@@ -73,14 +72,11 @@ static ESL_OPTIONS options[] = {
   { "-n",          eslARG_STRING, FALSE,  NULL, NULL, NULL, NULL,              "-f,--index",         "rename the sequence <s>",                           1 },
   { "-r",          eslARG_NONE,   FALSE,  NULL, NULL, NULL, NULL,              "--index",            "reverse complement the seq(s)",                     1 },
 
+
   { "-c",          eslARG_STRING, FALSE,  NULL, NULL, NULL, NULL,              "-f,--index",         "retrieve subsequence coords <from>..<to>",          2 },
   { "-C",          eslARG_NONE,   FALSE,  NULL, NULL, NULL, "-f",              "--index",            "<namefile> in <f> contains subseq coords too",      2 },
 
   { "--informat",  eslARG_STRING, FALSE,  NULL, NULL, NULL, NULL,              NULL,                 "specify that input file is in format <s>",          3 },
-  { "--tabfile",   eslARG_NONE,   FALSE,  NULL, NULL, NULL, "-C,-f",           "--index",            "<namefile> in <f> is Infernal cmsearch tab file",   4 },
-  { "--shortname", eslARG_NONE,   FALSE,  NULL, NULL, NULL, "-C,-f,--tabfile", "--index",            "w/--tabfile, do not add bit score, E value, GC to name", 4 },
-  { "--Tmin",      eslARG_REAL,   NULL,   NULL, NULL, NULL, "-C,-f,--tabfile", "--index",            "w/--tabfile, only fetch sequences with bit scores above <x>", 4},
-  { "--Emax",      eslARG_REAL,   NULL,   NULL, "x>0.",NULL,"-C,-f,--tabfile", "--index",            "w/--tabfile, only fetch sequences with E-values below <x>", 4},
 
   /* undocumented as options, because they're documented as alternative invocations: */
   { "-f",          eslARG_NONE,  FALSE,   NULL, NULL, NULL, NULL,              "--index",           "second cmdline arg is a file of names to retrieve", 99 },
@@ -93,11 +89,8 @@ static void create_ssi_index(ESL_GETOPTS *go, ESL_SQFILE *sqfp);
 static void multifetch(ESL_GETOPTS *go, FILE *ofp, char *keyfile, ESL_SQFILE *sqfp);
 static void onefetch(ESL_GETOPTS *go, FILE *ofp, char *key, ESL_SQFILE *sqfp);
 static void multifetch_subseq(ESL_GETOPTS *go, FILE *ofp, char *keyfile, ESL_SQFILE *sqfp);
-static void multifetch_subseq_infernal(ESL_GETOPTS *go, FILE *ofp, char *tabfile, ESL_SQFILE *sqfp);
 static void onefetch_subseq(ESL_GETOPTS *go, FILE *ofp, ESL_SQFILE *sqfp, char *newname, 
 			    char *key, uint32_t given_start, uint32_t given_end);
-static int  parse_coord_string(const char *cstring, uint32_t *ret_start, uint32_t *ret_end);
-static void infernal_name_subseq(char **ret_name, const char *name, ...);
 
 int
 main(int argc, char **argv)
@@ -123,7 +116,7 @@ main(int argc, char **argv)
   seqfile = esl_opt_GetArg(go, 1);
   if (esl_opt_GetString(go, "--informat") != NULL) {
     infmt = esl_sqio_EncodeFormat(esl_opt_GetString(go, "--informat"));
-    if (infmt == eslSQFILE_UNKNOWN) esl_fatal("%s is not a valid input sequence file format for --informat"); 
+    if (infmt == eslSQFILE_UNKNOWN) esl_fatal("%s is not a valid input sequence file format for --informat", esl_opt_GetString(go, "--informat")); 
   }
   status = esl_sqfile_Open(seqfile, infmt, NULL, &sqfp);
   if      (status == eslENOTFOUND) cmdline_failure(argv[0], "Sequence file %s not found.\n",     seqfile);
@@ -168,11 +161,8 @@ main(int argc, char **argv)
 	  else if (status != eslOK)        cmdline_failure(argv[0], "Failed to open SSI index\n");
 	}
 
-      if (esl_opt_GetBoolean(go, "-C")) { 
-	if(esl_opt_GetBoolean(go, "--tabfile")) multifetch_subseq_infernal(go, ofp, esl_opt_GetArg(go, 2), sqfp);
-	else                            	multifetch_subseq         (go, ofp, esl_opt_GetArg(go, 2), sqfp);
-      }
-      else                        	        multifetch       (go, ofp, esl_opt_GetArg(go, 2), sqfp);
+      if (esl_opt_GetBoolean(go, "-C")) multifetch_subseq(go, ofp, esl_opt_GetArg(go, 2), sqfp);
+      else              	        multifetch       (go, ofp, esl_opt_GetArg(go, 2), sqfp);
     }
 
   /* Single sequence retrieval mode */
@@ -197,7 +187,10 @@ main(int argc, char **argv)
 	{
 	  uint32_t start, end;
 
-	  parse_coord_string(cstring, &start, &end);
+	  status = esl_regexp_ParseCoordString(cstring, &start, &end);
+	  if (status == eslESYNTAX) esl_fatal("-c takes arg of subseq coords <from>..<to>; %s not recognized", cstring);
+	  if (status == eslFAIL)    esl_fatal("Failed to find <from> or <to> coord in %s", cstring);
+
 	  onefetch_subseq(go, ofp, sqfp, newname, key, start, end);
 	  if (ofp != stdout) printf("\n\nRetrieved subsequence %s/%d-%d.\n",  key, start, end);
 	}
@@ -229,9 +222,9 @@ create_ssi_index(ESL_GETOPTS *go, ESL_SQFILE *sqfp)
 
   esl_strdup(sqfp->filename, -1, &ssifile);
   esl_strcat(&ssifile, -1, ".ssi", 4);
-  status = esl_newssi_Open(ssifile, FALSE, &ns);
+  status = esl_newssi_Open(ssifile, TRUE, &ns); /* TRUE is for allowing overwrite. */
   if      (status == eslENOTFOUND)   esl_fatal("failed to open SSI index %s", ssifile);
-  else if (status == eslEOVERWRITE)  esl_fatal("SSI index %s already exists; delete or rename it", ssifile);
+  else if (status == eslEOVERWRITE)  esl_fatal("SSI index %s already exists; delete or rename it", ssifile); /* won't happen, see TRUE above... */
   else if (status != eslOK)          esl_fatal("failed to create a new SSI index");
 
   if (esl_newssi_AddFile(ns, sqfp->filename, sqfp->format, &fh) != eslOK)
@@ -316,7 +309,7 @@ multifetch(ESL_GETOPTS *go, FILE *ofp, char *keyfile, ESL_SQFILE *sqfp)
       if (esl_fileparser_GetTokenOnLine(efp, &key, &keylen) != eslOK)
 	esl_fatal("Failed to read seq name on line %d of file %s\n", efp->linenumber, keyfile);
       
-      status = esl_key_Store(keys, key, &keyidx);
+      status = esl_keyhash_Store(keys, key, keylen, &keyidx);
       if (status == eslEDUP) esl_fatal("seq key %s occurs more than once in file %s\n", key, keyfile);
 	
       /* if we have an SSI index, just fetch them as we go. */
@@ -331,8 +324,8 @@ multifetch(ESL_GETOPTS *go, FILE *ofp, char *keyfile, ESL_SQFILE *sqfp)
 
       while ((status = esl_sqio_Read(sqfp, sq)) == eslOK)
 	{
-	  if ( (sq->name[0] != '\0' && esl_key_Lookup(keys, sq->name, NULL) == eslOK) ||
-	       (sq->acc[0]  != '\0' && esl_key_Lookup(keys, sq->acc,  NULL) == eslOK))
+	  if ( (sq->name[0] != '\0' && esl_keyhash_Lookup(keys, sq->name, -1, NULL) == eslOK) ||
+	       (sq->acc[0]  != '\0' && esl_keyhash_Lookup(keys, sq->acc,  -1, NULL) == eslOK))
 	    {
 	      if (esl_opt_GetBoolean(go, "-r") )
 		if (esl_sq_ReverseComplement(sq) != eslOK) 
@@ -440,12 +433,19 @@ multifetch_subseq(ESL_GETOPTS *go, FILE *ofp, char *gdffile, ESL_SQFILE *sqfp)
     {
       if (esl_fileparser_GetTokenOnLine(efp, &newname, &n1) != eslOK)
 	esl_fatal("Failed to read subseq name on line %d of file %s\n", efp->linenumber, gdffile);
+
       if (esl_fileparser_GetTokenOnLine(efp, &s, NULL) != eslOK)
 	esl_fatal("Failed to read start coord on line %d of file %s\n", efp->linenumber, gdffile);
       start = atoi(s);
+      if(start <= 0) 
+	esl_fatal("Read invalid start coord %d on line %d of file %s (must be positive integer)\n", start, efp->linenumber, gdffile);
+
       if (esl_fileparser_GetTokenOnLine(efp, &s, NULL) != eslOK)
 	esl_fatal("Failed to read end coord on line %d of file %s\n", efp->linenumber, gdffile);
       end   = atoi(s);
+      if(end < 0)
+	esl_fatal("Read invalid end coord %d on line %d of file %s (must be positive integer, or 0 for full length)\n", end, efp->linenumber, gdffile);
+
       if (esl_fileparser_GetTokenOnLine(efp, &source, &n2) != eslOK)
 	esl_fatal("Failed to read source seq name on line %d of file %s\n", efp->linenumber, gdffile);
 
@@ -487,201 +487,3 @@ onefetch_subseq(ESL_GETOPTS *go, FILE *ofp, ESL_SQFILE *sqfp, char *newname, cha
 }
 
 
-static int
-parse_coord_string(const char *cstring, uint32_t *ret_start, uint32_t *ret_end)
-{
-  ESL_REGEXP *re = esl_regexp_Create();
-  char        tok1[32];
-  char        tok2[32];
-
-  if (esl_regexp_Match(re, "^(\\d+)\\D+(\\d*)$", cstring) != eslOK) esl_fatal("-c takes arg of subseq coords <from>..<to>; %s not recognized", cstring);
-  if (esl_regexp_SubmatchCopy(re, 1, tok1, 32)            != eslOK) esl_fatal("Failed to find <from> coord in %s", cstring);
-  if (esl_regexp_SubmatchCopy(re, 2, tok2, 32)            != eslOK) esl_fatal("Failed to find <to> coord in %s",   cstring);
-  
-  *ret_start = atol(tok1);
-  *ret_end   = (tok2[0] == '\0') ? 0 : atol(tok2);
-  
-  esl_regexp_Destroy(re);
-  return eslOK;
-}
-
-static void
-multifetch_subseq_infernal(ESL_GETOPTS *go, FILE *ofp, char *tabfile, ESL_SQFILE *sqfp)
-{
-  int status;
-  ESL_FILEPARSER *efp    = NULL;
-  char           *s;
-  int             start, end, n;
-  char           *tname = NULL;
-  char           *mname = NULL;
-  char           *newname = NULL;
-  double          bit, E;
-  int             gc;
-  int             has_E = FALSE;
-  char           *tok1 = NULL;
-  char           *tok2 = NULL;
-  char           *tok3 = NULL;
-  char           *tok4 = NULL;
-  char           *tok5 = NULL;
-  char           *tok6 = NULL;
-  char           *tok7 = NULL;
-  char           *tok8 = NULL;
-  char           *tok9 = NULL;
-  float           Tmin = -eslINFINITY;
-  float           Emax = eslINFINITY;
-  int             Emax_is_on = FALSE;
-  int             has_model_name = FALSE;
-
-  if (esl_fileparser_Open(tabfile, NULL, &efp) != eslOK)  esl_fatal("Failed to open Infernal tab file %s\n", tabfile);
-  esl_fileparser_SetCommentChar(efp, '#');
-  
-  if (esl_opt_IsOn(go, "--Tmin")) { Tmin = esl_opt_GetReal(go, "--Tmin"); }
-  if (esl_opt_IsOn(go, "--Emax")) { Emax = esl_opt_GetReal(go, "--Emax"); Emax_is_on = TRUE; }
-
-  while (esl_fileparser_NextLine(efp) == eslOK)
-    {
-      /* infernal 1.01 introduced a new tab file format.
-       * This function recognizes both formats (version 1.0 and 1.01+)
-       *
-       * Example line from infernal 1.0:
-       *se-1-2                1          24      1     24     18.93      0.234   54
-       *<target (t) name>     <t start>  <t end> <q s> <q e>  <bit sc>   <E-val> <GC content>
-       *
-       * Example line from infernal 1.01+:
-       *SEED          se-1-2                1          24      1     24     18.93      0.234   54
-       *<model name>  <target (t) name>     <t start>  <t end> <q s> <q e>  <bit sc>   <E-val> <GC content>
-       */
-      has_E = FALSE;
-      has_model_name = FALSE;
-
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read first token on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok1) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 2 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok2) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 3 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok3) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 4 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok4) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 5 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok5) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 6 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok6) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 7 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok7) != eslOK) goto ERROR;
-      if (esl_fileparser_GetTokenOnLine(efp, &s, &n)  != eslOK) esl_fatal("Failed to read token 8 on line %d of Infernal tab file %s\n", efp->linenumber, tabfile);
-      if (esl_strdup(s, n, &tok8) != eslOK) goto ERROR;
-      /* if we're in an infernal 1.0 file, we should be at the end of the line, we can tell if this is the case if the next esl_fileparser_GetTokenOnLine() call returns eslEOL. */
-      if ((status = esl_fileparser_GetTokenOnLine(efp, &s, &n)) == eslEOL) { 
-	/* we're in an infernal 1.0 cmsearch tabfile, parse the line */
-	tname = tok1;
-	start = atoi(tok2);
-	end   = atoi(tok3);
-	/* tok4, query start is not used */
-	/* tok5, query end   is not used */
-	bit   = atof(tok6);
-	if(strcmp(tok7, "-") != 0) { has_E = TRUE; E = atof(tok7); } 
-	else                       { has_E = FALSE; }
-	gc = atoi(tok8);
-      }
-      else if (status == eslOK) { /* 9th token was read */
-	/* we're in an infernal 1.01+ cmsearch tabfile, we have the model name */
-	if (esl_strdup(s, n, &tok9) != eslOK) goto ERROR;
-	mname = tok1;
-	has_model_name = TRUE;
-	tname = tok2;
-	start = atoi(tok3);
-	end   = atoi(tok4);
-	/* tok5, query start is not used */
-	/* tok6, query end   is not used */
-	bit   = atof(tok7);
-	if(strcmp(tok8, "-") != 0) { has_E = TRUE; E = atof(tok8); } 
-	else                       { has_E = FALSE; }
-	gc = atoi(tok9);
-	/* ensure next token is end of line */
-	if (esl_fileparser_GetTokenOnLine(efp, &s, NULL) == eslOK) { esl_fatal("Read more than 9 tokens on line %d of Infernal tab file %s\n", efp->linenumber, tabfile); }
-      }
-      else { /* this should never happen, esl_fileparser_GetTokenOnLine returns only either eslOK or eslEOL */
-	esl_fatal("Unexpected error status %d, reading line %d of Infernal tab file %s\n", status, efp->linenumber, tabfile); 
-      }
-
-      if(! esl_opt_GetBoolean(go, "--shortname")) { 
-	if(has_model_name) { 
-	  if(has_E) infernal_name_subseq(&newname, "%s/%d-%d/%s/B%.2f/E%.2g/GC%d", tname, start, end, mname, bit, E, gc);
-	  else      infernal_name_subseq(&newname, "%s/%d-%d/%s/B%.2f/GC%d",       tname, start, end, mname, bit, gc);
-	}
-	else { /* we don't have model name (infernal 1.0 file) */
-	  if(has_E) infernal_name_subseq(&newname, "%s/%d-%d/B%.2f/E%.2g/GC%d", tname, start, end, bit, E, gc);
-	  else      infernal_name_subseq(&newname, "%s/%d-%d/B%.2f/GC%d",       tname, start, end, bit, gc);
-	}
-      }
-      /* else use default esl-sfetch name style, pass newname as NULL to onefetch_subseq (note: --modelname and --shortname are incompatible)*/
-
-      /* make sure that if Emax is enabled, we've read an E-value */
-      if(Emax_is_on && (!has_E)) { esl_fatal("--Emax enabled, but no E-value read from line %d of Infernal tab file %s\n", efp->linenumber, tabfile); }
-
-      /* check if the hit meets our minimum score criteria (these are -inf bit score and inf E-value unless --Tmin and/or --Emax enabled) */
-      if(((has_E && E <= Emax) || (! has_E)) && (bit >= Tmin)) { 
-	onefetch_subseq(go, ofp, sqfp, newname, tname, start, end);
-      }
-
-      if(newname != NULL) { free(newname); newname = NULL; }
-      if(tok1    != NULL) { free (tok1);   tok1    = NULL; }
-      if(tok2    != NULL) { free (tok2);   tok2    = NULL; }
-      if(tok3    != NULL) { free (tok3);   tok3    = NULL; }
-      if(tok4    != NULL) { free (tok4);   tok4    = NULL; }
-      if(tok5    != NULL) { free (tok5);   tok5    = NULL; }
-      if(tok6    != NULL) { free (tok6);   tok6    = NULL; }
-      if(tok7    != NULL) { free (tok7);   tok7    = NULL; }
-      if(tok8    != NULL) { free (tok8);   tok8    = NULL; }
-      if(tok9    != NULL) { free (tok9);   tok9    = NULL; }
-    }
-  esl_fileparser_Close(efp);
-  return;
-  
- ERROR:
-  if(newname != NULL) { free(newname); newname = NULL; }
-  if(tok1    != NULL) { free (tok1);   tok1    = NULL; }
-  if(tok2    != NULL) { free (tok2);   tok2    = NULL; }
-  if(tok3    != NULL) { free (tok3);   tok3    = NULL; }
-  if(tok4    != NULL) { free (tok4);   tok4    = NULL; }
-  if(tok5    != NULL) { free (tok5);   tok5    = NULL; }
-  if(tok6    != NULL) { free (tok6);   tok6    = NULL; }
-  if(tok7    != NULL) { free (tok7);   tok7    = NULL; }
-  if(tok8    != NULL) { free (tok8);   tok8    = NULL; }
-  if(tok9    != NULL) { free (tok9);   tok9    = NULL; }
-  if(efp != NULL) esl_fileparser_Close(efp);
-  esl_fatal("Error, status code %d, probably out of memory.", status);
-  return;
-}
-
-
-static void
-infernal_name_subseq(char **ret_name, const char *name, ...)
-{
-  va_list argp;
-  va_list argp2;
-  int   n;
-  void *tmp;
-  int   status;
-  char *newname;
-  int nalloc = 1;
-  ESL_ALLOC(newname, sizeof(char) * nalloc);
-  if (name == NULL) { newname[0] = '\0'; *ret_name = newname; return; }
-
-  va_start(argp, name);
-  va_copy(argp2, argp);
-  if ((n = vsnprintf(newname, nalloc, name, argp)) >= nalloc)
-    {
-      ESL_RALLOC(newname, tmp, sizeof(char) * (n+1)); 
-      nalloc = n+1;
-      vsnprintf(newname, nalloc, name, argp2);
-    }
-  va_end(argp);
-  va_end(argp2);
-  *ret_name = newname;
-  return;
-
- ERROR:
-  esl_fatal("Memory allocation error in infernal_name_subseq().\n");
-  return;
-}

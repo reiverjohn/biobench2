@@ -2,11 +2,9 @@
  * configuration of an application. Extends standard
  * UNIX/POSIX/GNU getopt().
  * 
- * SVN $Id: esl_getopts.h 323 2009-02-14 17:03:16Z eddys $
- * SRE, Thu Jan 13 08:38:28 2005 [St. Louis]
  */
-#ifndef ESL_GETOPTS_INCLUDED
-#define ESL_GETOPTS_INCLUDED
+#ifndef eslGETOPTS_INCLUDED
+#define eslGETOPTS_INCLUDED
 
 #include "easel.h"
 
@@ -98,6 +96,8 @@ extern int esl_opt_VerifyConfig      (ESL_GETOPTS *g);
 extern int esl_opt_ArgNumber   (const ESL_GETOPTS *g);
 extern int esl_opt_SpoofCmdline(const ESL_GETOPTS *g, char **ret_cmdline);
 
+extern int esl_opt_GetSetter(const ESL_GETOPTS *g, char *optname);
+
 extern int    esl_opt_IsDefault (const ESL_GETOPTS *g, char *optname);
 extern int    esl_opt_IsOn      (const ESL_GETOPTS *g, char *optname);
 extern int    esl_opt_IsUsed    (const ESL_GETOPTS *g, char *optname);
@@ -111,13 +111,17 @@ extern char  *esl_opt_GetArg    (const ESL_GETOPTS *g, int which);
 
 extern int esl_opt_DisplayHelp(FILE *ofp, ESL_GETOPTS *go, int docgroup, int indent, int textwidth);
 
-#endif /* ESL_GETOPTS_INCLUDED */
+#endif /*eslGETOPTS_INCLUDED*/
+
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD
  * license. See the LICENSE file for more details.
+ * 
+ * SVN $Id: esl_getopts.h 697 2011-06-15 20:14:56Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_getopts.h $
  *****************************************************************/

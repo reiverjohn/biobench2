@@ -1,12 +1,13 @@
 /* Finding roots of functions.
  * 
  * SRE, Fri Apr  6 10:01:43 2007 [Janelia]
- * SVN $Id: esl_rootfinder.h 231 2008-03-25 14:43:57Z eddys $
+ * SVN $Id: esl_rootfinder.h 664 2011-02-27 17:08:36Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_rootfinder.h $
  */
 #ifndef ESL_ROOTFINDER_INCLUDED
 #define ESL_ROOTFINDER_INCLUDED
 
-#include <esl_config.h>
+#include "esl_config.h"
 
 typedef struct {
   int   (*func)(double, void*, double*);
@@ -47,12 +48,11 @@ extern int esl_root_Bisection(ESL_ROOTFINDER *R, double xl, double xr, double *r
 extern int esl_root_NewtonRaphson(ESL_ROOTFINDER *R, double guess, double *ret_x);
 
 
-#endif /*ESL_ROOTFINDER_INCLUDED*/
-
+#endif /*eslROOTFINDER_INCLUDED*/
 /*****************************************************************
  * Easel - a library of C functions for biological sequence analysis
- * Version h3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * Easel is distributed under the Janelia Farm Software License, a BSD

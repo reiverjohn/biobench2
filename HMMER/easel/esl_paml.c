@@ -5,9 +5,6 @@
  *   http://abacus.gene.ucl.ac.uk/software/paml.html
  *   [Yang97]
  * 
- *           incept: SRE, Tue Jul 13 13:23:21 2004 [St. Louis]
- * upgrade to Easel: SRE, Thu Mar  8 13:29:04 2007 [Janelia]
- * SVN $Id: esl_paml.c 241 2008-04-01 19:01:52Z eddys $
  */
 #include "esl_config.h"
 
@@ -177,3 +174,17 @@ main(int argc, char **argv)
 }
 
 #endif /*eslPAML_UTILITY1*/
+
+/*****************************************************************
+ * Easel - a library of C functions for biological sequence analysis
+ * Version h3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
+ * Other copyrights also apply. See the COPYRIGHT file for a full list.
+ * 
+ * Easel is distributed under the Janelia Farm Software License, a BSD
+ * license. See the LICENSE file for more details.
+ *
+ * SVN $Id: esl_paml.c 685 2011-05-23 14:27:52Z eddys $
+ * SVN $URL: https://svn.janelia.org/eddylab/eddys/easel/branches/hmmer/3.1/esl_paml.c $
+ *****************************************************************/
+

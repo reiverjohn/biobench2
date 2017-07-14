@@ -10,7 +10,7 @@
  *   7. Copyright and license information
  * 
  * SRE, Fri Feb 29 12:48:46 2008 [Janelia]
- * SVN $Id: generic_optacc.c 2818 2009-06-03 12:31:02Z eddys $
+ * SVN $Id: generic_optacc.c 3788 2011-12-16 01:53:22Z eddys $
  */
 
 #include "p7_config.h"
@@ -265,7 +265,7 @@ select_m(const P7_PROFILE *gm, const P7_GMX *gx, int i, int k)
   int   state[4] = { p7T_M, p7T_I, p7T_D, p7T_B };
 
   path[0] = TSCDELTA(p7P_MM, k-1) * MMX(i-1,k-1);
-  path[1] = TSCDELTA(p7P_MM, k-1) * IMX(i-1,k-1);
+  path[1] = TSCDELTA(p7P_IM, k-1) * IMX(i-1,k-1);
   path[2] = TSCDELTA(p7P_DM, k-1) * DMX(i-1,k-1);
   path[3] = TSCDELTA(p7P_BM, k-1) * XMX(i-1,p7G_B);
   return state[esl_vec_FArgMax(path, 4)];
@@ -408,7 +408,7 @@ static char banner[] = "benchmark driver for optimal accuracy alignment, generic
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 1, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   ESL_STOPWATCH  *w       = esl_stopwatch_Create();
   ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
@@ -429,8 +429,8 @@ main(int argc, char **argv)
 
   p7_FLogsumInit();
 
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
 
   bg = p7_bg_Create(abc);
   p7_bg_SetLength(bg, L);
@@ -531,7 +531,7 @@ static char banner[] = "example of optimal accuracy alignment, generic implement
 int 
 main(int argc, char **argv)
 {
-  ESL_GETOPTS    *go      = esl_getopts_CreateDefaultApp(options, 2, argc, argv, banner, usage);
+  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
   char           *hmmfile = esl_opt_GetArg(go, 1);
   char           *seqfile = esl_opt_GetArg(go, 2);
   ESL_ALPHABET   *abc     = NULL;
@@ -551,8 +551,8 @@ main(int argc, char **argv)
   int             status;
 
   /* Read in one HMM */
-  if (p7_hmmfile_Open(hmmfile, NULL, &hfp) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)     != eslOK) p7_Fail("Failed to read HMM");
+  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
+  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
   p7_hmmfile_Close(hfp);
  
   /* Read in one sequence */
@@ -584,8 +584,8 @@ main(int argc, char **argv)
   p7_GOptimalAccuracy(gm, gx2, gx1, &accscore);	     /* <gx1> is now the OA matrix */
   p7_GOATrace(gm, gx2, gx1, tr);
 
-  if (esl_opt_GetBoolean(go, "-d")) p7_gmx_Dump(stdout, gx2);
-  if (esl_opt_GetBoolean(go, "-m")) p7_gmx_Dump(stdout, gx1);
+  if (esl_opt_GetBoolean(go, "-d")) p7_gmx_Dump(stdout, gx2, p7_DEFAULT);
+  if (esl_opt_GetBoolean(go, "-m")) p7_gmx_Dump(stdout, gx1, p7_DEFAULT);
 
   p7_trace_Dump(stdout, tr, gm, sq->dsq);
   if (p7_trace_Validate(tr, abc, sq->dsq, errbuf) != eslOK) p7_Die("trace fails validation:\n%s\n", errbuf);
@@ -625,8 +625,8 @@ main(int argc, char **argv)
 
 /*****************************************************************
  * HMMER - Biological sequence analysis with profile HMMs
- * Version 3.0; March 2010
- * Copyright (C) 2010 Howard Hughes Medical Institute.
+ * Version 3.1b2; February 2015
+ * Copyright (C) 2015 Howard Hughes Medical Institute.
  * Other copyrights also apply. See the COPYRIGHT file for a full list.
  * 
  * HMMER is distributed under the terms of the GNU General Public License

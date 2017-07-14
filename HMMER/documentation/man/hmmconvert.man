@@ -1,4 +1,4 @@
-.TH "hmmconvert" 1 "@HMMER_DATE@" "HMMER @HMMER_VERSION@" "HMMER Manual"
+.TH "hmmconvert" 1 "February 2015" "HMMER 3.1b2" "HMMER Manual"
 
 .SH NAME
 hmmconvert - convert profile file to a HMMER format
@@ -22,6 +22,13 @@ converts an input profile file to different HMMER formats.
 By default, the input profile can be in any HMMER format, including
 old/obsolete formats from HMMER2, ASCII or binary; the output profile
 is a current HMMER3 ASCII format.
+
+.PP
+.I <hmmfile> 
+may be '-' (dash), which
+means reading this input from
+.I stdin
+rather than a file.  
 
 
 .SH OPTIONS
@@ -50,10 +57,10 @@ HMMER2, for comparative studies.
 Output in a HMMER3 ASCII text format other then the most current one.
 Valid choices for 
 .I <s>
-are 3/b or 3/a.
-The current format is 3/b, and this is the default. There is a
-slightly different format 3/a that was used in some alpha test code.
-
+are 3/a through 3/f.
+The current format is 3/f, and this is the default. The format 3/b 
+was used in the official HMMER3 release, and the others were used in
+the various testing versions.
 
 
 .SH SEE ALSO 
@@ -66,21 +73,21 @@ for programs in the HMMER package.
 .PP
 For complete documentation, see the user guide that came with your
 HMMER distribution (Userguide.pdf); or see the HMMER web page
-(@HMMER_URL@).
+().
 
 
 
 .SH COPYRIGHT
 
 .nf
-@HMMER_COPYRIGHT@
-p@HMMER_LICENSE@
+Copyright (C) 2015 Howard Hughes Medical Institute.
+pFreely distributed under the GNU General Public License (GPLv3).
 .fi
 
 For additional information on copyright and licensing, see the file
 called COPYRIGHT in your HMMER source distribution, or see the HMMER
 web page 
-(@HMMER_URL@).
+().
 
 
 .SH AUTHOR
