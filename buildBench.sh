@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-##
-##
-##
+## Purpose:  Build applications for Biobench2
+## By:  John Johnston
+## Last Mod: 2017-07-14
 #
 echo
 echo "*** Beginning Bio-Benchmarking Build ***"
