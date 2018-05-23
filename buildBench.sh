@@ -51,6 +51,9 @@ make clean
 make
 make check
 make install
+cd input
+tar xvf inputData.tgz
+cd ..
 cd ..
 echo
 echo "Building MUMmer..."
@@ -59,6 +62,9 @@ cd MUMmer
 make clean
 make check
 make install
+cd input
+tar xvf inputData.tgz
+cd ..
 cd ..
 echo
 echo "Building Velvet..."
@@ -69,6 +75,8 @@ make
 cd input
 cat dmelRNA-reads-* > dmelRNA-reads.tgz
 tar xvf dmelRNA-reads.tgz
+cd ..
+cd ..
 echo
 echo "DONE!"
 echo

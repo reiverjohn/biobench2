@@ -1,6 +1,7 @@
 # biobench2 README File #
 
 Released: 2015-06-09
+Last Modified: 2018-05-23
 
 ### Contents ###
 
@@ -17,7 +18,7 @@ developed by Albayraktaroglu et al, 2005 "BioBench: A benchmark suite of bioinfo
 Scripts developed and packages assembled by John Johnston
 Michigan State University
 
-Last Modified: 2015
+Last Modified: 2018-05-23
 
 ***************************************
 
@@ -26,16 +27,10 @@ Last Modified: 2015
 After cloning the repo, perform the following steps:
 
 1.  cd <biobench2 sourcedir>
-2.  cd HMMER/input
-3.  tar xvf inputData.tgz
-4.  cd ../../MUMmer/input
-5.  tar xvf inputData.tgz
-6.  cd ../../QuEST/input
-7.  Follow directions in README.1st
-8.  cd ../../BLAST/input
-9.  Follow directions in README.1st
-10. cd ../../velvet/input
-11. Follow directions in README.1st
+2.  cd ../../QuEST/input
+3.  Follow directions in README.1st
+4.  cd ../../BLAST/input
+5.  Follow directions in README.1st
 12. cd ../../
 13. sh ./buildBench.sh
 14. perl ./runBench.pl
