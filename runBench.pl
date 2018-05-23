@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 ######################################################################
 #	Name:		benchRun.pl
 #	By:		John Johnston (johnj@msu.edu)
@@ -69,7 +69,7 @@ print MYFILE "host,test,replicate,runTime,cpuVendor,cpuFamily,cpuModel,procSpeed
 for ($i=1; $i <= $replicates; $i++) {
 
 ##
-##	BEDTools v. 2.13.0 
+##	BEDTools v. 2.25.0
 ##
 print "\nRunning BEDTools, replicate # $i...\n\n";
 system("sleep 5"); 
@@ -142,7 +142,7 @@ print "@timeResults\n";
 $totalTime = $userTime[1] + $sysTime[1];
 print MYFILE "$hostName,quest,$i,$totalTime,$hwInfo\n";
 ##
-##	VELVET v. 1.1.05
+##	VELVET v. 1.2.10
 ##
 print "\nRunning Velvet, replicate # $i...\n\n";
 system("sleep 5");

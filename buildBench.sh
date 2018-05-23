@@ -67,4 +67,4 @@ echo
 echo "DONE!"
 echo
 echo
-echo "Now Run ./runBench.sh to perform benchmarking"
+echo "Now Run ./runBench.pl to perform benchmarking"

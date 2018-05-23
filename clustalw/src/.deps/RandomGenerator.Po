@@ -1,5 +1,7 @@
-RandomGenerator.o: tree/RandomGenerator.cpp config.h \
- tree/RandomGenerator.h
+RandomGenerator.o: tree/RandomGenerator.cpp /usr/include/stdc-predef.h \
+ config.h tree/RandomGenerator.h
+
+/usr/include/stdc-predef.h:
 
 config.h:
 
