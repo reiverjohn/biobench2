@@ -63,6 +63,9 @@ sleep 3
 cd velvet
 make clean
 make
+cd input
+cat dmelRNA-reads-* > dmelRNA-reads.tgz
+tar xvf dmelRNA-reads.tgz
 echo
 echo "DONE!"
 echo
