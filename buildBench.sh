@@ -1,9 +1,12 @@
 #!/bin/bash
-#
-## Purpose:  Build applications for Biobench2
-## By:  John Johnston
-## Last Mod: 2017-07-14
-#
+######################################################################
+#	Name:		buildBench.sh
+#	By:		John Johnston (johnj@msu.edu)
+#	Created:	September 20, 2011
+#	Last Mod:	05/23/2018
+#	Purpose:	Build applications for Biobench2 and prep
+#			data sets.
+######################################################################
 echo
 echo "*** Beginning Bio-Benchmarking Build ***"
 echo
@@ -69,5 +72,6 @@ tar xvf dmelRNA-reads.tgz
 echo
 echo "DONE!"
 echo
+echo "NOTE: You will need to download the NCBI "nr" data set to BLAST/input for BLAST benchmarking!"
 echo
-echo "Now Run ./runBench.pl to perform benchmarking"
+echo "Now run ./runBench.pl to perform benchmarking"
