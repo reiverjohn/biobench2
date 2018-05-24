@@ -7,6 +7,7 @@
 #	Purpose:	Build applications for Biobench2 and prep
 #			data sets.
 ######################################################################
+basedir=`pwd`
 echo
 echo "*** Beginning Bio-Benchmarking Build ***"
 echo
@@ -40,43 +41,40 @@ sleep 3
 cd PHYLIP/src
 make clean
 make install
-cd ../../
+cd $basedir
 echo
 echo "Building HMMER..."
 sleep 3
 cd HMMER
-INSTALLDIR=.
+INSTALLDIR=$basedir/HMMER
 ./configure --prefix=$INSTALLDIR
 make clean
 make
 make check
 make install
-cd input
+cd $basedir/HMMER/input
 tar xvf inputData.tgz
-cd ..
-cd ..
+cd $basedir
 echo
 echo "Building MUMmer..."
-sleep3
+sleep 3
 cd MUMmer
 make clean
 make check
 make install
-cd input
+cd $basedir/MUMmer/input
 tar xvf inputData.tgz
-cd ..
-cd ..
+cd $basedir
 echo
 echo "Building Velvet..."
 sleep 3
 cd velvet
 make clean
 make
-cd input
+cd $basedir/velvet/input
 cat dmelRNA-reads-* > dmelRNA-reads.tgz
 tar xvf dmelRNA-reads.tgz
-cd ..
-cd ..
+cd $basedir
 echo
 echo "DONE!"
 echo
