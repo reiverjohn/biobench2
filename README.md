@@ -1,7 +1,6 @@
 # biobench2 README File #
 
 Released: 2015-06-09
-Last Modified: 2018-05-23
 
 ### Contents ###
 
@@ -18,7 +17,7 @@ developed by Albayraktaroglu et al, 2005 "BioBench: A benchmark suite of bioinfo
 Scripts developed and packages assembled by John Johnston
 Michigan State University
 
-Last Modified: 2018-05-23
+Last Modified: 2018-05-25
 
 ***************************************
 
@@ -27,13 +26,11 @@ Last Modified: 2018-05-23
 After cloning the repo, perform the following steps:
 
 1.  cd <biobench2 sourcedir>
-2.  cd ../../QuEST/input
-3.  Follow directions in README.1st
-4.  cd ../../BLAST/input
-5.  Follow directions in README.1st
-12. cd ../../
-13. sh ./buildBench.sh
-14. perl ./runBench.pl
+2. cd ../../BLAST/input
+3. Follow directions in README.1st
+4. cd ../../
+5. sh ./buildBench.sh
+6. perl ./runBench.pl
 
 ***************************************
 
@@ -52,3 +49,4 @@ host,test,replicate,runTime,cpuVendor,cpuFamily,cpuModel,procSpeed,cacheSize,num
 These are grouped by replicate number and can be imported into
 a spreadsheet program, or parsed using a script language.
 
+Tested on CentOS 6/7.
