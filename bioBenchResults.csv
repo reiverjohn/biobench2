@@ -1,9 +1,0 @@
-Run Start: Wed May 23 13:23:09 EDT 2018
-
-
-host,test,replicate,runTime,cpuVendor,cpuFamily,cpuModel,procSpeed,cacheSize,numCores,totalMem,compiler
-tiger.plantbiology.msu.edu,bedtools,1,0,GenuineIntel,6,45,Intel(R) Xeon(R) CPU E5-2430 0 @ 2.20GHz,MHz,1199.902KB,0,96485MB,gcc-4.8.5
-tiger.plantbiology.msu.edu,clustalw2,1,0,GenuineIntel,6,45,Intel(R) Xeon(R) CPU E5-2430 0 @ 2.20GHz,MHz,1199.902KB,0,96485MB,gcc-4.8.5
-tiger.plantbiology.msu.edu,blast,1,0,GenuineIntel,6,45,Intel(R) Xeon(R) CPU E5-2430 0 @ 2.20GHz,MHz,1199.902KB,0,96485MB,gcc-4.8.5
-tiger.plantbiology.msu.edu,hmmer,1,0,GenuineIntel,6,45,Intel(R) Xeon(R) CPU E5-2430 0 @ 2.20GHz,MHz,1199.902KB,0,96485MB,gcc-4.8.5
-tiger.plantbiology.msu.edu,mummer,1,0,GenuineIntel,6,45,Intel(R) Xeon(R) CPU E5-2430 0 @ 2.20GHz,MHz,1199.902KB,0,96485MB,gcc-4.8.5

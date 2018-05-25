@@ -16,7 +16,7 @@ echo "Building clustalw2..."
 cd clustalw
 ./configure 
 make
-cd ..
+cd $basedir
 echo
 echo "Building QuEST..."
 sleep 3
@@ -24,7 +24,13 @@ cd QuEST
 ./configure.pl
 make clean
 make
-cd ..
+cd $basedir/QuEST/input
+cat GABP.align_25.hg18* > GABP.align_25.hg18.gz
+gunzip GABP.align_25.hg18.gz
+cat Jurkat_RX_noIP.align_25.hg18* > Jurkat_RX_noIP.align_25.hg18.gz
+gunzip Jurkat_RX_noIP.align_25.hg18.gz
+gunzip genome_table.gz
+cd $basedir
 echo
 echo "Building BEDTools..."
 sleep 3

@@ -57,11 +57,14 @@ chomp($compilerInfo);
 @compiler = split /\s+/, $compilerParse[1];
 $modelLength = scalar(@modelName) - 1;
 @sliceModelName = @modelName[3..$modelLength];
-@speed = split /\s+/, $sysInfo[6];
-@cache = split /\s+/, $sysInfo[7];
-@cores = split /\s+/, $sysInfo[11];
+@speed = split /\@/, $sysInfo[4];
+@cache = split /\s+/, $sysInfo[8];
+@cores = split /\s+/, $sysInfo[12];
+$prettySpeed = trim($speed[1]);
+$prettyModelName = $sliceModelName[0] . " " . $sliceModelName[1] . " " . $sliceModelName[2] . " " . $sliceModelName[3];
+chomp($prettyModelName);
 chomp($hostName);
-$hwInfo =  "$vendorID[2],$cpuFamily[3],$model[2],@sliceModelName,$speed[3]MHz,$cache[3]KB,$cores[3],$totalMemory[1]MB,gcc-$compiler[1]";
+$hwInfo =  "$vendorID[2],$cpuFamily[3],$model[2],$prettyModelName,$prettySpeed,$cache[3]KB,$cores[3],$totalMemory[1]MB,gcc-$compiler[1]";
 print "\nBeginning Bio-Benchmarking:\n";
 print MYFILE "Run Start: $runStart\n\n";
 print MYFILE "host,test,replicate,runTime,cpuVendor,cpuFamily,cpuModel,procSpeed,cacheSize,numCores,totalMem,compiler\n";
@@ -73,7 +76,7 @@ for ($i=1; $i <= $replicates; $i++) {
 ##
 print "\nRunning BEDTools, replicate # $i...\n\n";
 system("sleep 5"); 
-@timeResults = `(time -p ./BEDTools/bin/windowBed -l 1000 -r 1000 -a ./BEDTools/input/reads.gff -b ./BEDTools/input/start.gff | ./BEDTools/bin/fastaFromBed -fi ./BEDTools/input/yeast.fasta -bed stdin -fo stdout 1> ./BEDTools/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './BEDTools/bin/windowBed -l 1000 -r 1000 -a ./BEDTools/input/reads.gff -b ./BEDTools/input/start.gff | ./BEDTools/bin/fastaFromBed -fi ./BEDTools/input/yeast.fasta -bed stdin -fo stdout 1> ./BEDTools/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -85,7 +88,7 @@ print MYFILE "$hostName,bedtools,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning Clustalw2, replicate # $i...\n\n";
 system("sleep 5");
-@timeResults = `(time -p ./clustalw/src/clustalw2 -INFILE=./clustalw/input/tufa420.seq -OUTPUT=PHYLIP 1> ./clustalw/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './clustalw/src/clustalw2 -INFILE=./clustalw/input/tufa420.seq -OUTPUT=PHYLIP 1> ./clustalw/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -97,7 +100,7 @@ print MYFILE "$hostName,clustalw2,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning BLAST, replicate # $i...\n\n";
 system("sleep 5");
-@timeResults = `(time -p ./BLAST/bin/blastall -p blastn -d ./BLAST/input/nt -i ./BLAST/input/batch2.fa  1> ./BLAST/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './BLAST/bin/blastall -p blastn -d ./BLAST/input/nt -i ./BLAST/input/batch2.fa  1> ./BLAST/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -109,7 +112,7 @@ print MYFILE "$hostName,blast,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning HMMER, replicate # $i...\n\n";
 system("sleep 5");
-@timeResults = `(time -p ./HMMER/bin/hmmsearch ./HMMER/input/tufa420.hmm ./HMMER/input/uniprot_sprot.fasta  1> ./HMMER/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './HMMER/bin/hmmsearch ./HMMER/input/tufa420.hmm ./HMMER/input/uniprot_sprot.fasta  1> ./HMMER/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -121,7 +124,7 @@ print MYFILE "$hostName,hmmer,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning MUMmer, replicate # $i...\n\n";
 system("sleep 5");
-@timeResults = `(time -p ./MUMmer/mummer -b -c  ./MUMmer/input/hs_chrY.fa ./MUMmer/input/hs_chr17.fa  1> ./QuEST/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './MUMmer/mummer -b -c  ./MUMmer/input/hs_chrY.fa ./MUMmer/input/hs_chr17.fa  1> ./QuEST/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -129,12 +132,24 @@ print "@timeResults\n";
 $totalTime = $userTime[1] + $sysTime[1];
 print MYFILE "$hostName,mummer,$i,$totalTime,$hwInfo\n";
 ##
+##	PHYLIP
+##
+print "\nRunning PHYLIP, replicate # $i...\n\n";
+system("sleep 5");
+@timeResults = `(time -p sh -c './PHYLIP/bin/protdist ./PHYLIP/input/tufa420.phy 1> ./PHYLIP/output/results.txt 2>> benchResults.txt') 2>&1`;
+chomp(@timeResults);
+print "@timeResults\n";
+@userTime = split /\s+/, $timeResults[1];
+@sysTime = split /\s+/, $timeResults[2];
+$totalTime = $userTime[1] + $sysTime[1];
+print MYFILE "$hostName,phylip,$i,$totalTime,$hwInfo\n";
+##
 ##	QuEST v. 2.4
 ##
 print "\nRunning QuEST, replicate # $i...\n\n";
 system("sleep 6");
 system("rm -Rf ./QuEST/input/QuEST_analysis");
-@timeResults = `(time -p ./QuEST/generate_QuEST_parameters.pl -solexa_align_ChIP ./QuEST/input/GABP.align_25.hg18 -solexa_align_RX_noIP ./QuEST/input/Jurkat_RX_noIP.align_25.hg18 -gt ./QuEST/input/genome_table -ap ./QuEST/input/QuEST_analysis -ChIP_name GABP_Jurkat < ./QuEST/input/progCMD 1> ./QuEST/output/results.txt 2>> benchResults.txt) 2>&1`;
+@timeResults = `(time -p sh -c './QuEST/generate_QuEST_parameters.pl -solexa_align_ChIP ./QuEST/input/GABP.align_25.hg18 -solexa_align_RX_noIP ./QuEST/input/Jurkat_RX_noIP.align_25.hg18 -gt ./QuEST/input/genome_table -ap ./QuEST/input/QuEST_analysis -ChIP_name GABP_Jurkat < ./QuEST/input/progCMD 1> ./QuEST/output/results.txt 2>> benchResults.txt') 2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -146,7 +161,8 @@ print MYFILE "$hostName,quest,$i,$totalTime,$hwInfo\n";
 ##
 print "\nRunning Velvet, replicate # $i...\n\n";
 system("sleep 5");
-@timeResults = `(time -p ((./velvet/velveth ./velvet/input/ASSEM 25 -shortPaired -fastq ./velvet/input/dmelRNA-reads.fastq 1> ./velvet/output/results.txt 2>> benchResults.txt) && (./velvet/velvetg ./velvet/input/ASSEM -exp_cov auto -cov_cutoff auto 1> ./velvet/output/results.txt 2>> benchResults.txt ))) 2>&1`;
+#@timeResults = `(time -p ((./velvet/velveth ./velvet/input/ASSEM 25 -shortPaired -fastq ./velvet/input/dmelRNA-reads.fastq 1> ./velvet/output/results.txt 2>> benchResults.txt) && (./velvet/velvetg ./velvet/input/ASSEM -exp_cov auto -cov_cutoff auto 1> ./velvet/output/results.txt 2>> benchResults.txt ))) 2>&1`;
+@timeResults = `(time -p sh -c './velvet/velveth ./velvet/input/ASSEM 25 -shortPaired -fastq ./velvet/input/dmelRNA-reads.fastq 1> ./velvet/output/results.txt 2>> benchResults.txt ; ./velvet/velvetg ./velvet/input/ASSEM -exp_cov auto -cov_cutoff auto 1> ./velvet/output/results.txt 2>> benchResults.txt')  2>&1`;
 chomp(@timeResults);
 print "@timeResults\n";
 @userTime = split /\s+/, $timeResults[1];
@@ -162,3 +178,11 @@ print "Extraneous run output dumped to: benchResults.txt\n";
 $runEnd = `date`;
 print MYFILE "Run End: $runEnd\n";
 close(MYFILE);
+
+sub trim($)
+{
+	my $string = shift;
+	$string =~ s/^\s+//;
+	$string =~ s/\s+$//;
+	return $string;
+}
