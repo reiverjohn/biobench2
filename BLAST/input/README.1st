@@ -3,3 +3,17 @@ download the "nt" BLAST database to this folder.
 
 See: ftp://ftp.ncbi.nlm.nih.gov/blast/db/
 
+The NCBI perl script "update_blastdb.pl" is 
+useful for this purpose.  This script can be
+found here:
+
+https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/lxr/source/src/app/blast/update_blastdb.pl
+
+Change permissions to make the script executable:
+
+chmod 755 update_blastdb.pl
+
+Then run (inside the BLAST/input directory):
+
+./update_blastdb.pl nt
+

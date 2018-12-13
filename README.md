@@ -17,7 +17,7 @@ developed by Albayraktaroglu et al, 2005 "BioBench: A benchmark suite of bioinfo
 Scripts developed and packages assembled by John Johnston
 Michigan State University
 
-Last Modified: 2018-05-25
+Last Modified: 2018-12-13
 
 ***************************************
 
@@ -26,7 +26,7 @@ Last Modified: 2018-05-25
 After cloning the repo, perform the following steps:
 
 1.  cd <biobench2 sourcedir>
-2. cd ../../BLAST/input
+2. cd ./BLAST/input
 3. Follow directions in README.1st
 4. cd ../../
 5. sh ./buildBench.sh
